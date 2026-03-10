@@ -1,0 +1,713 @@
+/**
+ * Direct Context Window Pipeline
+ * 
+ * Implements document loading and query execution using the full document
+ * context without RAG retrieval. Includes comprehensive metrics tracking,
+ * context window validation, and OWASP security standards compliance.
+ */
+
+import {
+  calculateCost,
+  getContextWindowSize,
+  getModelPricing
+} from '@/lib/constants/models';
+import { estimateTokens } from '@/lib/utils/token-estimator';
+import type { 
+  DocumentMetadata, 
+  DirectConfig,
+  DirectResult 
+} from '@/types/rag-comparison';
+
+/**
+ * Result from document loading operation
+ */
+export interface LoadResult {
+  /** Whether loading was successful */
+  success: boolean;
+  /** Document identifier */
+  documentId: string;
+  /** Total token count of the document */
+  tokenCount: number;
+  /** Time taken to load in milliseconds */
+  loadTime: number;
+  /** Whether document fits within context window */
+  withinLimit: boolean;
+  /** Warning messages about document size */
+  warnings: string[];
+  /** Error message if loading failed */
+  error?: string;
+}
+
+/**
+ * Context validation result
+ */
+export interface ContextCheck {
+  /** Whether context fits within model's limit */
+  valid: boolean;
+  /** Total tokens in context */
+  totalTokens: number;
+  /** Model's context window limit */
+  limit: number;
+  /** Percentage of context window used */
+  usage: number;
+  /** Warning messages */
+  warnings: string[];
+}
+
+/**
+ * Comprehensive metrics for direct queries
+ */
+export interface DirectMetrics {
+  /** Total time for generation in milliseconds */
+  totalTime: number;
+  /** Time taken for generation in milliseconds */
+  generationTime: number;
+  /** Total input tokens used */
+  inputTokens: number;
+  /** Total output tokens generated */
+  outputTokens: number;
+  /** Total tokens (input + output) */
+  totalTokens: number;
+  /** Total cost in USD */
+  cost: number;
+  /** Percentage of context window used */
+  contextWindowUsage: number;
+}
+
+/**
+ * System prompt for direct queries
+ */
+const DIRECT_SYSTEM_PROMPT = `You are a helpful AI assistant that answers questions based on the provided document.
+
+Instructions:
+- Read and understand the entire document provided below
+- Answer the question using ONLY the information from the document
+- If the document doesn't contain enough information to answer the question, say so clearly
+- Be thorough and accurate in your response
+- Cite specific parts of the document when relevant
+- Do not make up information or use knowledge outside the provided document`;
+
+/**
+ * Custom error class for direct pipeline errors
+ */
+export class DirectPipelineError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'DirectPipelineError';
+  }
+}
+
+/**
+ * Sanitizes input strings to prevent injection attacks
+ * 
+ * @param input - String to sanitize
+ * @returns Sanitized string
+ */
+function sanitizeInput(input: string): string {
+  if (!input || typeof input !== 'string') {
+    return '';
+  }
+  
+  // Remove null bytes and control characters
+  return input
+    .replace(/\0/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim();
+}
+
+/**
+ * Validates document ID format
+ * 
+ * @param documentId - Document ID to validate
+ * @throws {DirectPipelineError} If document ID is invalid
+ */
+function validateDocumentId(documentId: string): void {
+  if (!documentId || typeof documentId !== 'string') {
+    throw new DirectPipelineError(
+      'Document ID is required',
+      'INVALID_DOCUMENT_ID',
+      { documentId }
+    );
+  }
+
+  // Prevent path traversal and injection
+  if (documentId.includes('..') || documentId.includes('/') || documentId.includes('\\')) {
+    throw new DirectPipelineError(
+      'Document ID contains invalid characters',
+      'INVALID_DOCUMENT_ID',
+      { documentId }
+    );
+  }
+
+  // Limit length to prevent DoS
+  if (documentId.length > 255) {
+    throw new DirectPipelineError(
+      'Document ID exceeds maximum length',
+      'INVALID_DOCUMENT_ID',
+      { documentId, maxLength: 255 }
+    );
+  }
+}
+
+/**
+ * Validates query string
+ * 
+ * @param query - Query to validate
+ * @throws {DirectPipelineError} If query is invalid
+ */
+function validateQuery(query: string): void {
+  if (!query || typeof query !== 'string') {
+    throw new DirectPipelineError(
+      'Query is required',
+      'INVALID_QUERY',
+      { query }
+    );
+  }
+
+  const sanitized = sanitizeInput(query);
+  if (sanitized.length === 0) {
+    throw new DirectPipelineError(
+      'Query cannot be empty after sanitization',
+      'INVALID_QUERY',
+      { query }
+    );
+  }
+
+  // Limit query length to prevent DoS
+  if (sanitized.length > 10000) {
+    throw new DirectPipelineError(
+      'Query exceeds maximum length',
+      'INVALID_QUERY',
+      { query, maxLength: 10000 }
+    );
+  }
+}
+
+/**
+ * Validates document content
+ * 
+ * @param content - Document content to validate
+ * @throws {DirectPipelineError} If content is invalid
+ */
+function validateContent(content: string): void {
+  if (!content || typeof content !== 'string') {
+    throw new DirectPipelineError(
+      'Document content is required',
+      'INVALID_CONTENT',
+      { content }
+    );
+  }
+
+  const sanitized = sanitizeInput(content);
+  if (sanitized.length === 0) {
+    throw new DirectPipelineError(
+      'Document content cannot be empty after sanitization',
+      'INVALID_CONTENT',
+      { content }
+    );
+  }
+
+  // Limit content length to prevent DoS (100MB)
+  if (sanitized.length > 100 * 1024 * 1024) {
+    throw new DirectPipelineError(
+      'Document content exceeds maximum size',
+      'INVALID_CONTENT',
+      { contentLength: sanitized.length, maxLength: 100 * 1024 * 1024 }
+    );
+  }
+}
+
+/**
+ * Builds the system prompt for direct queries
+ * 
+ * @returns System prompt string
+ * 
+ * @example
+ * ```typescript
+ * const prompt = buildSystemPrompt();
+ * ```
+ */
+export function buildSystemPrompt(): string {
+  return DIRECT_SYSTEM_PROMPT;
+}
+
+/**
+ * Validates if token count is within context size limit
+ * 
+ * @param tokens - Number of tokens to validate
+ * @param limit - Context window limit
+ * @returns True if within limits, false otherwise
+ * 
+ * @example
+ * ```typescript
+ * const valid = validateContextSize(5000, 128000); // true
+ * ```
+ */
+export function validateContextSize(tokens: number, limit: number): boolean {
+  if (tokens < 0 || limit <= 0) {
+    return false;
+  }
+  return tokens <= limit;
+}
+
+/**
+ * Generates warning messages based on token count and context limit
+ * 
+ * @param tokenCount - Number of tokens in document
+ * @param contextLimit - Model's context window limit
+ * @returns Array of warning messages
+ * 
+ * @example
+ * ```typescript
+ * const warnings = generateWarnings(70000, 128000);
+ * // Returns: ["Document uses 54.69% of context window"]
+ * ```
+ */
+export function generateWarnings(tokenCount: number, contextLimit: number): string[] {
+  const warnings: string[] = [];
+  const percentage = (tokenCount / contextLimit) * 100;
+
+  if (percentage > 90) {
+    warnings.push(
+      `⚠️ CRITICAL: Document uses ${percentage.toFixed(2)}% of context window (>90%). ` +
+      `This leaves very little room for the query and response.`
+    );
+  } else if (percentage > 75) {
+    warnings.push(
+      `⚠️ WARNING: Document uses ${percentage.toFixed(2)}% of context window (>75%). ` +
+      `Consider using RAG for better performance.`
+    );
+  } else if (percentage > 50) {
+    warnings.push(
+      `⚠️ NOTICE: Document uses ${percentage.toFixed(2)}% of context window (>50%). ` +
+      `Monitor token usage carefully.`
+    );
+  }
+
+  return warnings;
+}
+
+/**
+ * Builds complete context for direct query
+ * 
+ * Assembles the full context including system prompt, document content,
+ * and user query in the proper format for the LLM.
+ * 
+ * @param content - Full document content
+ * @param query - User query
+ * @returns Complete context string
+ * 
+ * @example
+ * ```typescript
+ * const context = buildDirectContext(documentContent, "What is the main topic?");
+ * ```
+ */
+export function buildDirectContext(content: string, query: string): string {
+  const sanitizedContent = sanitizeInput(content);
+  const sanitizedQuery = sanitizeInput(query);
+  
+  return `${DIRECT_SYSTEM_PROMPT}
+
+=== DOCUMENT START ===
+
+${sanitizedContent}
+
+=== DOCUMENT END ===
+
+User Question: ${sanitizedQuery}
+
+Please provide a clear and accurate answer based on the document above.`;
+}
+
+/**
+ * Checks if context fits within model's context window limit
+ * 
+ * Validates the total context (system prompt + document + query) against
+ * the model's context window size and generates appropriate warnings.
+ * 
+ * @param content - Document content
+ * @param query - User query
+ * @param model - Model identifier
+ * @returns Context validation result
+ * 
+ * @example
+ * ```typescript
+ * const check = checkContextLimit(content, query, 'gpt-4-turbo');
+ * if (!check.valid) {
+ *   console.error('Context exceeds model limit!');
+ * }
+ * ```
+ */
+export function checkContextLimit(
+  content: string,
+  query: string,
+  model: string
+): ContextCheck {
+  const limit = getContextWindowSize(model);
+  
+  if (limit === 0) {
+    throw new DirectPipelineError(
+      `Unknown model: ${model}`,
+      'UNKNOWN_MODEL',
+      { model }
+    );
+  }
+
+  const fullContext = buildDirectContext(content, query);
+  const totalTokens = estimateTokens(fullContext);
+  const usage = (totalTokens / limit) * 100;
+  const valid = validateContextSize(totalTokens, limit);
+  const warnings = generateWarnings(totalTokens, limit);
+
+  return {
+    valid,
+    totalTokens,
+    limit,
+    usage,
+    warnings
+  };
+}
+
+/**
+ * Calculates context window usage percentage
+ * 
+ * @param totalTokens - Total tokens in context
+ * @param model - Model identifier
+ * @returns Percentage of context window used (0-100)
+ * 
+ * @example
+ * ```typescript
+ * const usage = calculateContextUsage(50000, 'gpt-4-turbo');
+ * console.log(`Using ${usage.toFixed(2)}% of context window`);
+ * ```
+ */
+export function calculateContextUsage(totalTokens: number, model: string): number {
+  const limit = getContextWindowSize(model);
+  
+  if (limit === 0) {
+    return 0;
+  }
+
+  const percentage = (totalTokens / limit) * 100;
+  return Math.min(percentage, 100); // Cap at 100%
+}
+
+/**
+ * Calculates comprehensive metrics for direct queries
+ * 
+ * @param generationTime - Time taken for generation in milliseconds
+ * @param inputTokens - Number of input tokens used
+ * @param outputTokens - Number of output tokens generated
+ * @param contextWindowSize - Model's context window size
+ * @param model - Model identifier for pricing
+ * @returns Direct metrics object
+ * 
+ * @example
+ * ```typescript
+ * const metrics = calculateMetrics(500, 50000, 1000, 128000, 'gpt-4-turbo');
+ * console.log(`Cost: $${metrics.cost.toFixed(4)}`);
+ * ```
+ */
+export function calculateMetrics(
+  generationTime: number,
+  inputTokens: number,
+  outputTokens: number,
+  _contextWindowSize: number,
+  model: string
+): DirectMetrics {
+  // Validate inputs
+  if (generationTime < 0) {
+    throw new DirectPipelineError(
+      'Generation time cannot be negative',
+      'INVALID_METRICS',
+      { generationTime }
+    );
+  }
+
+  if (inputTokens < 0 || outputTokens < 0) {
+    throw new DirectPipelineError(
+      'Token counts cannot be negative',
+      'INVALID_METRICS',
+      { inputTokens, outputTokens }
+    );
+  }
+
+  const totalTime = generationTime;
+  const totalTokens = inputTokens + outputTokens;
+  const cost = calculateCost(model, inputTokens, outputTokens);
+  const contextWindowUsage = calculateContextUsage(inputTokens, model);
+
+  return {
+    totalTime,
+    generationTime,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cost,
+    contextWindowUsage
+  };
+}
+
+/**
+ * Loads a document into memory for direct context window processing
+ * 
+ * Validates the document content, estimates token count, checks against
+ * context window limits, and generates appropriate warnings.
+ * 
+ * @param content - Full document content
+ * @param documentId - Unique identifier for the document
+ * @param metadata - Document metadata
+ * @returns Promise resolving to load result with timing and validation info
+ * 
+ * @example
+ * ```typescript
+ * const result = await loadDocument(content, 'doc-123', metadata);
+ * if (result.success && result.withinLimit) {
+ *   console.log(`Loaded ${result.tokenCount} tokens in ${result.loadTime}ms`);
+ * }
+ * ```
+ */
+export async function loadDocument(
+  content: string,
+  documentId: string,
+  _metadata: DocumentMetadata
+): Promise<LoadResult> {
+  const startTime = performance.now();
+
+  try {
+    // Validate inputs
+    validateDocumentId(documentId);
+    validateContent(content);
+
+    const sanitizedContent = sanitizeInput(content);
+
+    // Estimate total tokens
+    const tokenCount = estimateTokens(sanitizedContent);
+
+    // Get context window limit for a default model (we'll check per-model at query time)
+    // Using gpt-4-turbo as reference for warnings
+    const referenceLimit = getContextWindowSize('gpt-4-turbo');
+    
+    // Check if within reasonable limits
+    const withinLimit = tokenCount < referenceLimit * 0.9; // Leave 10% for query/response
+    
+    // Generate warnings
+    const warnings = generateWarnings(tokenCount, referenceLimit);
+
+    const endTime = performance.now();
+    const loadTime = Math.round(endTime - startTime);
+
+    return {
+      success: true,
+      documentId,
+      tokenCount,
+      loadTime,
+      withinLimit,
+      warnings
+    };
+
+  } catch (error) {
+    const endTime = performance.now();
+    const loadTime = Math.round(endTime - startTime);
+
+    if (error instanceof DirectPipelineError) {
+      return {
+        success: false,
+        documentId,
+        tokenCount: 0,
+        loadTime,
+        withinLimit: false,
+        warnings: [],
+        error: error.message
+      };
+    }
+
+    return {
+      success: false,
+      documentId,
+      tokenCount: 0,
+      loadTime,
+      withinLimit: false,
+      warnings: [],
+      error: error instanceof Error ? error.message : 'Unknown error during loading'
+    };
+  }
+}
+
+/**
+ * Executes a direct query using full document context
+ * 
+ * Builds complete context with the full document, validates against model's
+ * context window, calls LLM without retrieval, and tracks comprehensive metrics.
+ * 
+ * @param documentId - Document identifier
+ * @param content - Full document content
+ * @param query - User query string
+ * @param config - Direct query configuration
+ * @returns Promise resolving to direct result with answer and metrics
+ * @throws {DirectPipelineError} If query execution fails
+ * 
+ * @example
+ * ```typescript
+ * const result = await query('doc-123', content, 'What is the main topic?', {
+ *   model: 'gpt-4-turbo',
+ *   temperature: 0.7,
+ *   maxTokens: 1000
+ * });
+ * console.log('Answer:', result.answer);
+ * console.log('Cost:', result.metrics.cost);
+ * ```
+ */
+export async function query(
+  documentId: string,
+  content: string,
+  query: string,
+  config: DirectConfig
+): Promise<DirectResult> {
+  try {
+    // Validate inputs
+    validateDocumentId(documentId);
+    validateContent(content);
+    validateQuery(query);
+
+    if (!config || typeof config !== 'object') {
+      throw new DirectPipelineError(
+        'Direct configuration is required',
+        'INVALID_CONFIG',
+        { config }
+      );
+    }
+
+    // Validate model
+    const pricing = getModelPricing(config.model);
+    if (!pricing) {
+      throw new DirectPipelineError(
+        `Unsupported model: ${config.model}`,
+        'UNSUPPORTED_MODEL',
+        { model: config.model }
+      );
+    }
+
+    const sanitizedContent = sanitizeInput(content);
+    const sanitizedQuery = sanitizeInput(query);
+
+    // Validate total context doesn't exceed model's context window
+    const contextCheck = checkContextLimit(sanitizedContent, sanitizedQuery, config.model);
+    
+    if (!contextCheck.valid) {
+      throw new DirectPipelineError(
+        `Context exceeds model's limit: ${contextCheck.totalTokens} tokens > ${contextCheck.limit} tokens`,
+        'CONTEXT_LIMIT_EXCEEDED',
+        {
+          totalTokens: contextCheck.totalTokens,
+          limit: contextCheck.limit,
+          usage: contextCheck.usage
+        }
+      );
+    }
+
+    // Track generation time
+    const generationStartTime = performance.now();
+
+    // Call LLM with full context (no retrieval)
+    // Using OpenRAG client's chat method without retrieval
+    const response = await fetch(`${process.env.OPENRAG_URL}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: buildSystemPrompt()
+          },
+          {
+            role: 'user',
+            content: `Document:\n\n${sanitizedContent}\n\nQuestion: ${sanitizedQuery}`
+          }
+        ],
+        model: config.model,
+        temperature: config.temperature ?? 0.7,
+        max_tokens: config.maxTokens,
+        // Explicitly disable retrieval for direct context
+        use_retrieval: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new DirectPipelineError(
+        `Direct query failed: ${response.statusText}`,
+        'QUERY_ERROR',
+        { 
+          documentId,
+          query: sanitizedQuery,
+          status: response.status,
+          error: errorText
+        }
+      );
+    }
+
+    const responseData = await response.json();
+    const generationEndTime = performance.now();
+    const generationTime = Math.round(generationEndTime - generationStartTime);
+
+    // Extract answer
+    const answer = responseData.answer || responseData.response || responseData.content || '';
+
+    // Calculate token usage
+    // Input tokens = system prompt + full document + user query
+    const systemPrompt = buildSystemPrompt();
+    const inputTokens = estimateTokens(systemPrompt) + 
+                       estimateTokens(sanitizedContent) + 
+                       estimateTokens(sanitizedQuery);
+    
+    // Output tokens = generated response
+    const outputTokens = estimateTokens(answer);
+
+    // Get context window size for usage calculation
+    const contextWindowSize = getContextWindowSize(config.model);
+
+    // Calculate comprehensive metrics
+    const metrics = calculateMetrics(
+      generationTime,
+      inputTokens,
+      outputTokens,
+      contextWindowSize,
+      config.model
+    );
+
+    return {
+      answer,
+      metrics: {
+        generationTime: metrics.generationTime,
+        tokens: metrics.totalTokens,
+        cost: metrics.cost,
+        contextWindowUsage: metrics.contextWindowUsage
+      }
+    };
+
+  } catch (error) {
+    if (error instanceof DirectPipelineError) {
+      throw error;
+    }
+
+    throw new DirectPipelineError(
+      'Direct query execution failed',
+      'QUERY_EXECUTION_ERROR',
+      {
+        documentId,
+        query,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    );
+  }
+}
+
+// Made with Bob
