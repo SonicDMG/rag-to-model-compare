@@ -90,14 +90,20 @@ export default function Home() {
               chunkCount={uploadResult.ragChunks}
               tokenCount={uploadResult.ragTokens}
               indexTime={uploadResult.ragIndexTime}
+              processedText={uploadResult.ragProcessedText}
               error={uploadResult.ragError}
+              hasImages={uploadResult.hasImages}
+              imageCount={uploadResult.imageCount}
             />
             <DirectUploadResult
               status={uploadResult.directStatus}
               tokenCount={uploadResult.directTokens}
               loadTime={uploadResult.directLoadTime}
               warnings={uploadResult.directWarnings}
+              processedText={uploadResult.directProcessedText}
               error={uploadResult.directError}
+              hasImages={uploadResult.hasImages}
+              imageCount={uploadResult.imageCount}
             />
           </div>
         )}

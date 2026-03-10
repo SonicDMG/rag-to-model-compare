@@ -21,12 +21,16 @@ export interface UploadResultData {
   ragChunks?: number;
   ragTokens?: number;
   ragIndexTime?: number;
+  ragProcessedText?: string;
   ragError?: string;
   directStatus?: 'success' | 'error';
   directTokens?: number;
   directLoadTime?: number;
   directWarnings?: string[];
+  directProcessedText?: string;
   directError?: string;
+  hasImages?: boolean;
+  imageCount?: number;
 }
 
 interface DocumentUploadProps {
@@ -131,12 +135,16 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         ragChunks: result.data?.rag?.chunkCount,
         ragTokens: result.data?.rag?.tokenCount,
         ragIndexTime: result.data?.rag?.indexTime,
+        ragProcessedText: result.data?.rag?.processedText,
         ragError: result.data?.rag?.error,
         directStatus: result.data?.direct?.status,
         directTokens: result.data?.direct?.tokenCount,
         directLoadTime: result.data?.direct?.loadTime,
         directWarnings: result.data?.direct?.warnings,
+        directProcessedText: result.data?.direct?.processedText,
         directError: result.data?.direct?.error,
+        hasImages: result.data?.hasImages,
+        imageCount: result.data?.imageCount,
       };
 
       setUploadStatus({

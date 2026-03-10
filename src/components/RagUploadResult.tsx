@@ -1,14 +1,21 @@
 'use client';
 
+import { useState } from 'react';
+
 interface RagUploadResultProps {
   status?: 'success' | 'error';
   chunkCount?: number;
   tokenCount?: number;
   indexTime?: number;
+  processedText?: string;
   error?: string;
+  hasImages?: boolean;
+  imageCount?: number;
 }
 
-export function RagUploadResult({ status, chunkCount, tokenCount, indexTime, error }: RagUploadResultProps) {
+export function RagUploadResult({ status, chunkCount, tokenCount, indexTime, processedText, error, hasImages, imageCount }: RagUploadResultProps) {
+  const [showText, setShowText] = useState(false);
+
   if (!status) return null;
 
   return (
@@ -44,7 +51,45 @@ export function RagUploadResult({ status, chunkCount, tokenCount, indexTime, err
                 <span className="font-semibold">Upload Duration:</span> {indexTime}ms
               </p>
             )}
+            {hasImages && imageCount !== undefined && (
+              <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded">
+                <p className="text-sm text-green-800 flex items-center gap-2">
+                  <span className="text-base">🖼️</span>
+                  <span className="font-semibold">Contains {imageCount} image{imageCount !== 1 ? 's' : ''}</span>
+                </p>
+                <p className="text-xs text-green-700 mt-1 ml-6">
+                  Images are processed by RAG and contribute to the token count. This explains why RAG token counts may be higher than direct text extraction.
+                </p>
+              </div>
+            )}
           </div>
+          
+          {/* Collapsible processed text section */}
+          {processedText && (
+            <div className="mt-3 ml-7">
+              <button
+                onClick={() => setShowText(!showText)}
+                className="flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 transition-colors"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform ${showText ? 'rotate-90' : ''}`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                {showText ? 'Hide processed text' : 'Show processed text'}
+              </button>
+              
+              {showText && (
+                <div className="mt-2 p-3 bg-white border border-green-300 rounded max-h-96 overflow-auto">
+                  <pre className="text-xs font-mono text-gray-800 whitespace-pre-wrap break-words">
+                    {processedText}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

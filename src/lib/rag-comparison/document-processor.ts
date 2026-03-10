@@ -79,6 +79,10 @@ export interface ProcessedDocument {
     parsingRequired: boolean;
     /** Type of parsing used, if any */
     parsingMethod?: 'pdf-parse' | 'mammoth' | 'none';
+    /** Whether the document contains images */
+    hasImages?: boolean;
+    /** Number of images detected in the document */
+    imageCount?: number;
   };
 }
 
@@ -210,6 +214,8 @@ export async function parseDocument(file: File): Promise<{
   content: string;
   parsingRequired: boolean;
   parsingMethod: 'pdf-parse' | 'mammoth' | 'none';
+  hasImages?: boolean;
+  imageCount?: number;
 }> {
   try {
     const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
@@ -224,8 +230,30 @@ export async function parseDocument(file: File): Promise<{
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         
-        // Call pdf-parse function with buffer
-        const data = await pdfParse(buffer);
+        // Track image count
+        let imageCount = 0;
+        
+        // Custom page render function to count images
+        const options = {
+          pagerender: async (pageData: any) => {
+            // Get operator list to detect image operations
+            const ops = await pageData.getOperatorList();
+            
+            // Count image operations (opcodes 85 and 86 are image-related)
+            for (let i = 0; i < ops.fnArray.length; i++) {
+              if (ops.fnArray[i] === 85 || ops.fnArray[i] === 86) {
+                imageCount++;
+              }
+            }
+            
+            // Extract text content
+            const textContent = await pageData.getTextContent();
+            return textContent.items.map((item: any) => item.str).join(' ');
+          }
+        };
+        
+        // Call pdf-parse function with buffer and options
+        const data = await pdfParse(buffer, options);
         
         if (!data.text || data.text.trim().length === 0) {
           throw new DocumentProcessingError(
@@ -238,7 +266,9 @@ export async function parseDocument(file: File): Promise<{
         return {
           content: data.text,
           parsingRequired: true,
-          parsingMethod: 'pdf-parse'
+          parsingMethod: 'pdf-parse',
+          hasImages: imageCount > 0,
+          imageCount: imageCount > 0 ? imageCount : undefined
         };
       } catch (pdfError) {
         if (pdfError instanceof DocumentProcessingError) {
@@ -265,9 +295,22 @@ export async function parseDocument(file: File): Promise<{
         const mammoth = await import('mammoth');
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const result = await mammoth.extractRawText({ buffer });
         
-        if (!result.value || result.value.trim().length === 0) {
+        // Track image count
+        let imageCount = 0;
+        
+        // Convert to HTML with custom image handler to count images
+        await mammoth.convertToHtml({ buffer }, {
+          convertImage: mammoth.images.imgElement(async () => {
+            imageCount++;
+            return { src: '' }; // Return empty src since we only need the count
+          })
+        });
+        
+        // Also extract raw text for content
+        const textResult = await mammoth.extractRawText({ buffer });
+        
+        if (!textResult.value || textResult.value.trim().length === 0) {
           throw new DocumentProcessingError(
             'Word document contains no extractable text',
             'EMPTY_CONTENT',
@@ -276,9 +319,11 @@ export async function parseDocument(file: File): Promise<{
         }
         
         return {
-          content: result.value,
+          content: textResult.value,
           parsingRequired: true,
-          parsingMethod: 'mammoth'
+          parsingMethod: 'mammoth',
+          hasImages: imageCount > 0,
+          imageCount: imageCount > 0 ? imageCount : undefined
         };
       } catch (docError) {
         if (docError instanceof DocumentProcessingError) {
@@ -333,7 +378,9 @@ export async function parseDocument(file: File): Promise<{
     return {
       content: text,
       parsingRequired: false,
-      parsingMethod: 'none'
+      parsingMethod: 'none',
+      hasImages: false,
+      imageCount: undefined
     };
 
   } catch (error) {
@@ -736,6 +783,8 @@ export async function processDocument(
         processingTime,
         parsingRequired: parseResult.parsingRequired,
         parsingMethod: parseResult.parsingMethod,
+        hasImages: parseResult.hasImages,
+        imageCount: parseResult.imageCount,
       },
     };
 

@@ -41,11 +41,14 @@ interface UploadResponse {
   data?: {
     documentId: string;
     filename: string;
+    hasImages?: boolean;
+    imageCount?: number;
     rag: {
       status: 'success' | 'error';
       chunkCount?: number;
       tokenCount?: number;
       indexTime?: number;
+      processedText?: string;
       error?: string;
     };
     direct: {
@@ -54,6 +57,7 @@ interface UploadResponse {
       loadTime?: number;
       withinLimit?: boolean;
       warnings?: string[];
+      processedText?: string;
       error?: string;
     };
   };
@@ -220,6 +224,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
     // Track if at least one processing method succeeds
     let ragSuccess = false;
     let directSuccess = false;
+    
+    // Parse document content once for both pipelines
+    let parsedContent: string | null = null;
+    let hasImages: boolean | undefined = undefined;
+    let imageCount: number | undefined = undefined;
+    try {
+      const parseResult = await parseDocument(file);
+      parsedContent = parseResult.content;
+      hasImages = parseResult.hasImages;
+      imageCount = parseResult.imageCount;
+    } catch (parseError) {
+      console.error('[Parse] Failed to parse document:', parseError);
+      // Continue - RAG might still work with raw file
+    }
 
     // ============================================================
     // RAG PIPELINE PROCESSING (Independent with own error handling)
@@ -247,14 +265,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
         ragMetadata
       );
 
-      // Update response with RAG results
+      // Update response with RAG results and image data
       response.data!.rag = {
         status: ragResult.success ? 'success' : 'error',
         chunkCount: ragResult.chunkCount,
         tokenCount: ragResult.tokenCount,
         indexTime: ragResult.indexTime,
+        processedText: parsedContent || undefined,
         error: ragResult.error
       };
+      
+      // Add image data to response
+      if (hasImages !== undefined) {
+        response.data!.hasImages = hasImages;
+        response.data!.imageCount = imageCount;
+      }
 
       ragSuccess = ragResult.success;
       
@@ -286,28 +311,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
     try {
       console.log(`[Direct] Starting processing for document: ${documentId}`);
       
-      // Parse document content for Direct pipeline
-      // This is where PDF/DOCX parsing happens (only for Direct)
+      // Use already parsed content or parse again if needed
       let content: string;
-      try {
-        const parseResult = await parseDocument(file);
-        content = parseResult.content;
-      } catch (parseError) {
-        // If parsing fails, throw a more specific error
-        const errorMsg = parseError instanceof DocumentProcessingError
-          ? parseError.message
-          : parseError instanceof Error
+      if (parsedContent) {
+        content = parsedContent;
+      } else {
+        try {
+          const parseResult = await parseDocument(file);
+          content = parseResult.content;
+          parsedContent = content; // Store for potential reuse
+        } catch (parseError) {
+          // If parsing fails, throw a more specific error
+          const errorMsg = parseError instanceof DocumentProcessingError
             ? parseError.message
-            : 'Unknown parsing error';
-        
-        throw new DocumentProcessingError(
-          `Failed to parse document for Direct approach: ${errorMsg}`,
-          'PARSE_ERROR',
-          {
-            filename: file.name,
-            originalError: errorMsg
-          }
-        );
+            : parseError instanceof Error
+              ? parseError.message
+              : 'Unknown parsing error';
+          
+          throw new DocumentProcessingError(
+            `Failed to parse document for Direct approach: ${errorMsg}`,
+            'PARSE_ERROR',
+            {
+              filename: file.name,
+              originalError: errorMsg
+            }
+          );
+        }
       }
 
       // Create metadata for Direct pipeline
@@ -335,6 +364,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
         loadTime: directResult.loadTime,
         withinLimit: directResult.withinLimit,
         warnings: directResult.warnings,
+        processedText: content,
         error: directResult.error
       };
 
