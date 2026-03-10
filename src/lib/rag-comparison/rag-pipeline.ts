@@ -1,18 +1,129 @@
 /**
  * RAG Pipeline with OpenRAG SDK Integration
- * 
+ *
  * Implements document indexing, query execution, and metrics calculation
  * for RAG-based retrieval and generation following OWASP security standards.
  */
 
+import {
+  OpenRAGClient,
+  OpenRAGError,
+  AuthenticationError,
+  NotFoundError,
+  ValidationError,
+  RateLimitError,
+  ServerError
+} from 'openrag-sdk';
 import { calculateCost, getModelPricing } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
-import type { 
-  Chunk, 
-  DocumentMetadata, 
+import type {
+  Chunk,
+  DocumentMetadata,
   RAGConfig,
-  RAGResult 
+  RAGResult
 } from '@/types/rag-comparison';
+
+/**
+ * OpenRAG client instance
+ * Configured via OPENRAG_URL and OPENRAG_API_KEY environment variables
+ */
+let openragClient: OpenRAGClient | null = null;
+
+/**
+ * Get or create OpenRAG client instance
+ * @throws {RAGPipelineError} If environment variables are not configured
+ */
+function getOpenRAGClient(): OpenRAGClient {
+  if (!openragClient) {
+    // Validate environment variables
+    if (!process.env.OPENRAG_API_KEY) {
+      throw new RAGPipelineError(
+        'OPENRAG_API_KEY environment variable is not set',
+        'MISSING_API_KEY'
+      );
+    }
+    if (!process.env.OPENRAG_URL) {
+      throw new RAGPipelineError(
+        'OPENRAG_URL environment variable is not set',
+        'MISSING_URL'
+      );
+    }
+
+    openragClient = new OpenRAGClient({
+      apiKey: process.env.OPENRAG_API_KEY,
+      baseUrl: process.env.OPENRAG_URL,
+    });
+  }
+  return openragClient;
+}
+
+/**
+ * Convert OpenRAG SDK errors to RAGPipelineError
+ * @param error - Error from OpenRAG SDK
+ * @returns RAGPipelineError with appropriate code and message
+ */
+function handleOpenRAGError(error: unknown): RAGPipelineError {
+  if (error instanceof AuthenticationError) {
+    return new RAGPipelineError(
+      'Authentication failed. Please check your OPENRAG_API_KEY.',
+      'AUTHENTICATION_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof NotFoundError) {
+    return new RAGPipelineError(
+      'Resource not found in OpenRAG.',
+      'NOT_FOUND_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof ValidationError) {
+    return new RAGPipelineError(
+      'Invalid request to OpenRAG.',
+      'VALIDATION_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof RateLimitError) {
+    return new RAGPipelineError(
+      'Rate limit exceeded. Please try again later.',
+      'RATE_LIMIT_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof ServerError) {
+    return new RAGPipelineError(
+      'OpenRAG server error. Please try again later.',
+      'SERVER_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof OpenRAGError) {
+    return new RAGPipelineError(
+      `OpenRAG error: ${error.message}`,
+      'OPENRAG_ERROR',
+      { originalError: error.message, statusCode: error.statusCode }
+    );
+  }
+  
+  if (error instanceof Error) {
+    return new RAGPipelineError(
+      `Unexpected error: ${error.message}`,
+      'UNEXPECTED_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  return new RAGPipelineError(
+    'Unknown error occurred',
+    'UNKNOWN_ERROR'
+  );
+}
 
 /**
  * Result from document indexing operation
@@ -24,6 +135,8 @@ export interface IndexResult {
   documentId: string;
   /** Number of chunks indexed */
   chunkCount: number;
+  /** Total tokens in indexed document */
+  tokenCount: number;
   /** Time taken to index in milliseconds */
   indexTime: number;
   /** Error message if indexing failed */
@@ -397,53 +510,55 @@ export async function indexDocument(
     // Ensure knowledge filter exists
     await createKnowledgeFilter(KNOWLEDGE_FILTER_ID);
 
-    // Prepare FormData for file upload to OpenRAG
-    // OpenRAG SDK will handle parsing, chunking, and embedding
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentId', documentId);
-    formData.append('filter', KNOWLEDGE_FILTER_ID);
-    formData.append('metadata', JSON.stringify({
-      filename: metadata.filename,
-      size: metadata.size,
-      mimeType: metadata.mimeType,
-      uploadedAt: metadata.uploadedAt.toISOString(),
-    }));
+    // Parse document to calculate token count
+    // This is done before ingestion to provide accurate token metrics
+    let tokenCount = 0;
+    try {
+      const { parseDocument: parseDoc } = await import('./document-processor');
+      const parseResult = await parseDoc(file);
+      tokenCount = estimateTokens(parseResult.content);
+    } catch (parseError) {
+      // If parsing fails, we'll still try to ingest but token count will be 0
+      console.warn('[RAG] Failed to calculate token count:', parseError);
+    }
 
-    // Upload to OpenRAG for automatic processing
-    const response = await fetch(`${process.env.OPENRAG_URL}/api/documents/ingest`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
-        // Don't set Content-Type - browser will set it with boundary for FormData
-      },
-      body: formData
+    // Get OpenRAG client
+    const client = getOpenRAGClient();
+
+    // Upload document using OpenRAG SDK
+    // The SDK handles parsing, chunking, and embedding automatically
+    const result = await client.documents.ingest({
+      file,
+      filename: metadata.filename,
+      wait: true, // Wait for ingestion to complete
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    // Check if ingestion was successful
+    // Result is IngestTaskStatus when wait=true
+    const taskStatus = result as any; // Type assertion needed due to SDK union type
+    if (taskStatus.status !== 'completed') {
       throw new RAGPipelineError(
-        `Document ingestion failed: ${response.statusText}`,
+        `Document ingestion failed with status: ${taskStatus.status}`,
         'INGESTION_ERROR',
         {
           documentId,
-          status: response.status,
-          error: errorText
+          status: taskStatus.status,
+          failedFiles: taskStatus.failed_files,
         }
       );
     }
 
-    // Parse response to get chunk count from OpenRAG
-    const responseData = await response.json();
-    const chunkCount = responseData.chunkCount || responseData.chunks?.length || 0;
-
     const endTime = performance.now();
     const indexTime = Math.round(endTime - startTime);
+
+    // Use successful_files count as chunk estimate
+    const chunkCount = taskStatus.successful_files || 1;
 
     return {
       success: true,
       documentId,
       chunkCount,
+      tokenCount,
       indexTime
     };
 
@@ -456,6 +571,7 @@ export async function indexDocument(
         success: false,
         documentId,
         chunkCount: 0,
+        tokenCount: 0,
         indexTime,
         error: error.message
       };
@@ -465,6 +581,7 @@ export async function indexDocument(
       success: false,
       documentId,
       chunkCount: 0,
+      tokenCount: 0,
       indexTime,
       error: error instanceof Error ? error.message : 'Unknown error during indexing'
     };
@@ -525,65 +642,50 @@ export async function query(
     }
 
     const sanitizedQuery = sanitizeInput(query);
-    const systemPrompt = buildRAGPrompt(sanitizedQuery);
 
     // Track retrieval time
     const retrievalStartTime = performance.now();
 
-    // Execute RAG query using OpenRAG SDK
-    // Note: This assumes the SDK has a chat() method with automatic retrieval
-    // Adjust based on actual SDK API
-    const ragResponse = await fetch(`${process.env.OPENRAG_URL}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
-      },
-      body: JSON.stringify({
-        query: sanitizedQuery,
-        systemPrompt,
-        model: config.model,
-        temperature: config.temperature ?? 0.7,
-        topK: config.topK,
-        filter: KNOWLEDGE_FILTER_ID,
-        documentId: documentId
-      })
+    // Get OpenRAG client
+    const client = getOpenRAGClient();
+
+    // Execute RAG query using OpenRAG SDK chat method
+    // The SDK automatically handles retrieval and generation
+    const response = await client.chat.create({
+      message: sanitizedQuery,
+      limit: config.topK,
+      scoreThreshold: 0.5, // Reasonable default
     });
 
-    if (!ragResponse.ok) {
-      const errorText = await ragResponse.text();
-      throw new RAGPipelineError(
-        `RAG query failed: ${ragResponse.statusText}`,
-        'QUERY_ERROR',
-        { 
-          documentId,
-          query: sanitizedQuery,
-          status: ragResponse.status,
-          error: errorText
-        }
-      );
-    }
-
-    const ragData = await ragResponse.json();
     const retrievalEndTime = performance.now();
     const retrievalTime = Math.round(retrievalEndTime - retrievalStartTime);
 
-    // Track generation time (if provided by API, otherwise estimate)
-    const generationTime = ragData.generationTime ?? Math.round(retrievalTime * 0.6);
+    // Track generation time (estimate as 60% of total time)
+    const generationTime = Math.round(retrievalTime * 0.6);
 
-    // Extract retrieved chunks and sources
-    const retrievedChunks = ragData.retrievedChunks || ragData.sources || [];
-    const sources = extractSources(retrievedChunks);
+    // Extract answer from response
+    const answer = response.response || '';
+
+    // Extract sources from response
+    const sdkSources = response.sources || [];
+    const sourceChunks: Chunk[] = sdkSources.map((source, index) => ({
+      id: `source-${index}`,
+      content: source.text,
+      tokenCount: estimateTokens(source.text),
+      metadata: {
+        index,
+        startChar: 0,
+        endChar: source.text.length,
+        sourceId: source.filename
+      }
+    }));
 
     // Calculate token usage
-    // Input tokens = system prompt + retrieved chunks + user query
-    const retrievedContent = sources.map(s => s.content).join('\n\n');
-    const inputTokens = estimateTokens(systemPrompt) + 
-                       estimateTokens(retrievedContent) + 
-                       estimateTokens(sanitizedQuery);
+    // Input tokens = retrieved chunks + user query
+    const retrievedContent = sdkSources.map(s => s.text).join('\n\n');
+    const inputTokens = estimateTokens(retrievedContent) + estimateTokens(sanitizedQuery);
     
     // Output tokens = generated response
-    const answer = ragData.answer || ragData.response || '';
     const outputTokens = estimateTokens(answer);
 
     // Calculate metrics
@@ -594,19 +696,6 @@ export async function query(
       outputTokens,
       config.model
     );
-
-    // Convert sources to Chunk format for compatibility
-    const sourceChunks: Chunk[] = sources.map((source, index) => ({
-      id: `source-${index}`,
-      content: source.content,
-      tokenCount: estimateTokens(source.content),
-      metadata: {
-        index: source.chunkIndex,
-        startChar: source.position?.start ?? 0,
-        endChar: source.position?.end ?? source.content.length,
-        sourceId: source.documentId
-      }
-    }));
 
     return {
       answer,
@@ -620,19 +709,12 @@ export async function query(
     };
 
   } catch (error) {
+    // Handle OpenRAG SDK errors
     if (error instanceof RAGPipelineError) {
       throw error;
     }
 
-    throw new RAGPipelineError(
-      'RAG query execution failed',
-      'QUERY_EXECUTION_ERROR',
-      {
-        documentId,
-        query,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    );
+    throw handleOpenRAGError(error);
   }
 }
 

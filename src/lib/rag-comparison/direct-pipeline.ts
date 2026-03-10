@@ -1,21 +1,31 @@
 /**
  * Direct Context Window Pipeline
- * 
+ *
  * Implements document loading and query execution using the full document
  * context without RAG retrieval. Includes comprehensive metrics tracking,
  * context window validation, and OWASP security standards compliance.
  */
 
 import {
+  OpenRAGClient,
+  OpenRAGError,
+  AuthenticationError,
+  NotFoundError,
+  ValidationError,
+  RateLimitError,
+  ServerError,
+  ChatResponse
+} from 'openrag-sdk';
+import {
   calculateCost,
   getContextWindowSize,
   getModelPricing
 } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
-import type { 
-  DocumentMetadata, 
+import type {
+  DocumentMetadata,
   DirectConfig,
-  DirectResult 
+  DirectResult
 } from '@/types/rag-comparison';
 
 /**
@@ -99,6 +109,108 @@ export class DirectPipelineError extends Error {
     super(message);
     this.name = 'DirectPipelineError';
   }
+}
+
+/**
+ * OpenRAG client instance
+ * Configured via OPENRAG_URL and OPENRAG_API_KEY environment variables
+ */
+let openragClient: OpenRAGClient | null = null;
+
+/**
+ * Get or create OpenRAG client instance
+ * @throws {DirectPipelineError} If environment variables are not configured
+ */
+function getOpenRAGClient(): OpenRAGClient {
+  if (!openragClient) {
+    // Validate environment variables
+    if (!process.env.OPENRAG_API_KEY) {
+      throw new DirectPipelineError(
+        'OPENRAG_API_KEY environment variable is not set',
+        'MISSING_API_KEY'
+      );
+    }
+    if (!process.env.OPENRAG_URL) {
+      throw new DirectPipelineError(
+        'OPENRAG_URL environment variable is not set',
+        'MISSING_URL'
+      );
+    }
+
+    openragClient = new OpenRAGClient({
+      apiKey: process.env.OPENRAG_API_KEY,
+      baseUrl: process.env.OPENRAG_URL,
+    });
+  }
+  return openragClient;
+}
+
+/**
+ * Convert OpenRAG SDK errors to DirectPipelineError
+ * @param error - Error from OpenRAG SDK
+ * @returns DirectPipelineError with appropriate code and message
+ */
+function handleOpenRAGError(error: unknown): DirectPipelineError {
+  if (error instanceof AuthenticationError) {
+    return new DirectPipelineError(
+      'Authentication failed. Please check your OPENRAG_API_KEY.',
+      'AUTHENTICATION_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof NotFoundError) {
+    return new DirectPipelineError(
+      'Resource not found in OpenRAG.',
+      'NOT_FOUND_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof ValidationError) {
+    return new DirectPipelineError(
+      'Invalid request to OpenRAG.',
+      'VALIDATION_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof RateLimitError) {
+    return new DirectPipelineError(
+      'Rate limit exceeded. Please try again later.',
+      'RATE_LIMIT_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof ServerError) {
+    return new DirectPipelineError(
+      'OpenRAG server error. Please try again later.',
+      'SERVER_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  if (error instanceof OpenRAGError) {
+    return new DirectPipelineError(
+      `OpenRAG error: ${error.message}`,
+      'OPENRAG_ERROR',
+      { originalError: error.message, statusCode: error.statusCode }
+    );
+  }
+  
+  if (error instanceof Error) {
+    return new DirectPipelineError(
+      `Unexpected error: ${error.message}`,
+      'UNEXPECTED_ERROR',
+      { originalError: error.message }
+    );
+  }
+  
+  return new DirectPipelineError(
+    'Unknown error occurred',
+    'UNKNOWN_ERROR'
+  );
 }
 
 /**
@@ -613,53 +725,44 @@ export async function query(
     // Track generation time
     const generationStartTime = performance.now();
 
-    // Call LLM with full context (no retrieval)
-    // Using OpenRAG client's chat method without retrieval
-    const response = await fetch(`${process.env.OPENRAG_URL}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
-      },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: 'system',
-            content: buildSystemPrompt()
-          },
-          {
-            role: 'user',
-            content: `Document:\n\n${sanitizedContent}\n\nQuestion: ${sanitizedQuery}`
-          }
-        ],
-        model: config.model,
-        temperature: config.temperature ?? 0.7,
-        max_tokens: config.maxTokens,
-        // Explicitly disable retrieval for direct context
-        use_retrieval: false
-      })
-    });
+    // Get OpenRAG client
+    const client = getOpenRAGClient();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new DirectPipelineError(
-        `Direct query failed: ${response.statusText}`,
-        'QUERY_ERROR',
-        { 
-          documentId,
-          query: sanitizedQuery,
-          status: response.status,
-          error: errorText
-        }
-      );
+    // Build complete message with system prompt, document, and query
+    // Since SDK uses single message format, we combine everything
+    const fullMessage = `${buildSystemPrompt()}
+
+=== DOCUMENT START ===
+
+${sanitizedContent}
+
+=== DOCUMENT END ===
+
+User Question: ${sanitizedQuery}
+
+Please provide a clear and accurate answer based on the document above.`;
+
+    // Call LLM with full context using OpenRAG SDK
+    // Note: SDK doesn't support model/temperature/max_tokens parameters or disabling retrieval
+    // The model and settings are configured server-side in OpenRAG settings
+    let responseData: ChatResponse;
+    try {
+      responseData = await client.chat.create({
+        message: fullMessage,
+        // Set limit to 0 to minimize retrieval impact (SDK doesn't have use_retrieval parameter)
+        limit: 0,
+        // Set high score threshold to minimize retrieval results
+        scoreThreshold: 0.99
+      });
+    } catch (error) {
+      throw handleOpenRAGError(error);
     }
 
-    const responseData = await response.json();
     const generationEndTime = performance.now();
     const generationTime = Math.round(generationEndTime - generationStartTime);
 
-    // Extract answer
-    const answer = responseData.answer || responseData.response || responseData.content || '';
+    // Extract answer from SDK response
+    const answer = responseData.response || '';
 
     // Calculate token usage
     // Input tokens = system prompt + full document + user query

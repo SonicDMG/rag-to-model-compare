@@ -1,15 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { DocumentUpload } from '@/components/DocumentUpload';
+import { DocumentUpload, UploadResultData } from '@/components/DocumentUpload';
 import { RagSection } from '@/components/RagSection';
 import { DirectModelSection } from '@/components/DirectModelSection';
+import { RagUploadResult } from '@/components/RagUploadResult';
+import { DirectUploadResult } from '@/components/DirectUploadResult';
 
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
 
   const handleUploadComplete = (docId: string) => {
     setDocumentId(docId);
+  };
+
+  const handleUploadResult = (result: UploadResultData) => {
+    setUploadResult(result);
   };
 
   return (
@@ -31,10 +38,6 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Single Upload Section */}
-        <section className="mb-8">
-          <DocumentUpload onUploadComplete={handleUploadComplete} />
-        </section>
         {/* Introduction */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">How It Works</h2>
@@ -70,6 +73,34 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Single Upload Section */}
+        <section className="mb-8">
+          <DocumentUpload
+            onUploadComplete={handleUploadComplete}
+            onUploadResult={handleUploadResult}
+          />
+        </section>
+
+        {/* Upload Results - Side by Side */}
+        {uploadResult && (uploadResult.ragStatus || uploadResult.directStatus) && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+            <RagUploadResult
+              status={uploadResult.ragStatus}
+              chunkCount={uploadResult.ragChunks}
+              tokenCount={uploadResult.ragTokens}
+              indexTime={uploadResult.ragIndexTime}
+              error={uploadResult.ragError}
+            />
+            <DirectUploadResult
+              status={uploadResult.directStatus}
+              tokenCount={uploadResult.directTokens}
+              loadTime={uploadResult.directLoadTime}
+              warnings={uploadResult.directWarnings}
+              error={uploadResult.directError}
+            />
+          </div>
+        )}
 
         {/* Side-by-Side Comparison */}
         {documentId ? (

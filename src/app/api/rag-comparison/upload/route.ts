@@ -44,6 +44,7 @@ interface UploadResponse {
     rag: {
       status: 'success' | 'error';
       chunkCount?: number;
+      tokenCount?: number;
       indexTime?: number;
       error?: string;
     };
@@ -250,6 +251,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
       response.data!.rag = {
         status: ragResult.success ? 'success' : 'error',
         chunkCount: ragResult.chunkCount,
+        tokenCount: ragResult.tokenCount,
         indexTime: ragResult.indexTime,
         error: ragResult.error
       };

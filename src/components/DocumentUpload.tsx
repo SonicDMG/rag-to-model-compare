@@ -8,6 +8,7 @@ interface UploadStatus {
   message?: string;
   ragStatus?: 'success' | 'error';
   ragChunks?: number;
+  ragTokens?: number;
   ragError?: string;
   directStatus?: 'success' | 'error';
   directTokens?: number;
@@ -15,11 +16,25 @@ interface UploadStatus {
   directError?: string;
 }
 
-interface DocumentUploadProps {
-  onUploadComplete?: (documentId: string) => void;
+export interface UploadResultData {
+  ragStatus?: 'success' | 'error';
+  ragChunks?: number;
+  ragTokens?: number;
+  ragIndexTime?: number;
+  ragError?: string;
+  directStatus?: 'success' | 'error';
+  directTokens?: number;
+  directLoadTime?: number;
+  directWarnings?: string[];
+  directError?: string;
 }
 
-export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
+interface DocumentUploadProps {
+  onUploadComplete?: (documentId: string) => void;
+  onUploadResult?: (result: UploadResultData) => void;
+}
+
+export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
@@ -111,21 +126,33 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         message = 'Both processing approaches failed.';
       }
 
-      setUploadStatus({
-        status: overallStatus,
-        message,
+      const uploadResultData = {
         ragStatus: result.data?.rag?.status,
         ragChunks: result.data?.rag?.chunkCount,
+        ragTokens: result.data?.rag?.tokenCount,
+        ragIndexTime: result.data?.rag?.indexTime,
         ragError: result.data?.rag?.error,
         directStatus: result.data?.direct?.status,
         directTokens: result.data?.direct?.tokenCount,
+        directLoadTime: result.data?.direct?.loadTime,
         directWarnings: result.data?.direct?.warnings,
         directError: result.data?.direct?.error,
+      };
+
+      setUploadStatus({
+        status: overallStatus,
+        message,
+        ...uploadResultData,
       });
 
-      // Call onUploadComplete if at least one approach succeeded
-      if ((ragSuccess || directSuccess) && onUploadComplete) {
-        onUploadComplete(result.data.documentId);
+      // Call callbacks if at least one approach succeeded
+      if (ragSuccess || directSuccess) {
+        if (onUploadComplete) {
+          onUploadComplete(result.data.documentId);
+        }
+        if (onUploadResult) {
+          onUploadResult(uploadResultData);
+        }
       }
     } catch (error) {
       setUploadStatus({
@@ -140,7 +167,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
     .map(([id, config]) => ({ id, name: config.name }));
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold mb-4">Upload Document</h2>
         
@@ -272,62 +299,6 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
                 `}>
                   {uploadStatus.message}
                 </p>
-                
-                {/* Success: Show both approaches */}
-                {uploadStatus.status === 'success' && (
-                  <div className="mt-2 text-sm text-green-700 space-y-1">
-                    {uploadStatus.ragStatus === 'success' && (
-                      <p>✓ <strong>RAG Approach:</strong> {uploadStatus.ragChunks} chunks indexed</p>
-                    )}
-                    {uploadStatus.directStatus === 'success' && (
-                      <p>✓ <strong>Direct Approach:</strong> {uploadStatus.directTokens?.toLocaleString()} tokens loaded</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Partial Success: Show details for each approach */}
-                {uploadStatus.status === 'partial' && (
-                  <div className="mt-2 text-sm space-y-2">
-                    {/* RAG Status */}
-                    {uploadStatus.ragStatus === 'success' ? (
-                      <p className="text-green-700">
-                        ✓ <strong>RAG Approach:</strong> {uploadStatus.ragChunks} chunks indexed
-                      </p>
-                    ) : (
-                      <p className="text-red-700">
-                        ✗ <strong>RAG Approach:</strong> {uploadStatus.ragError || 'Failed'}
-                      </p>
-                    )}
-                    
-                    {/* Direct Status */}
-                    {uploadStatus.directStatus === 'success' ? (
-                      <div className="text-green-700">
-                        <p>✓ <strong>Direct Approach:</strong> {uploadStatus.directTokens?.toLocaleString()} tokens loaded</p>
-                        {uploadStatus.directWarnings && uploadStatus.directWarnings.length > 0 && (
-                          <div className="mt-1 ml-4 text-yellow-700">
-                            {uploadStatus.directWarnings.map((warning, idx) => (
-                              <p key={idx} className="text-xs">{warning}</p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-red-700">
-                        ✗ <strong>Direct Approach:</strong> {uploadStatus.directError || 'Failed'}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Show warnings even on full success */}
-                {uploadStatus.status === 'success' && uploadStatus.directWarnings && uploadStatus.directWarnings.length > 0 && (
-                  <div className="mt-2 text-sm text-yellow-700">
-                    <p className="font-medium">Warnings:</p>
-                    {uploadStatus.directWarnings.map((warning, idx) => (
-                      <p key={idx} className="text-xs ml-2">{warning}</p>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>
