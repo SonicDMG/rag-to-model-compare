@@ -217,11 +217,14 @@ export async function parseDocument(file: File): Promise<{
     // Handle PDF files - PARSING REQUIRED (models cannot handle binary)
     if (extension === '.pdf') {
       try {
-        // Dynamic import to avoid build-time issues
-        const pdfParseModule = await import('pdf-parse') as any;
-        const pdfParse = pdfParseModule.default || pdfParseModule;
+        // Use pdf-parse/lib/pdf-parse.js directly to bypass test code in index.js
+        // The main index.js has test code that runs when module.parent is null
+        const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+        
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
+        
+        // Call pdf-parse function with buffer
         const data = await pdfParse(buffer);
         
         if (!data.text || data.text.trim().length === 0) {
@@ -241,6 +244,9 @@ export async function parseDocument(file: File): Promise<{
         if (pdfError instanceof DocumentProcessingError) {
           throw pdfError;
         }
+        
+        console.error('[PDF Parse] Error:', pdfError);
+        
         throw new DocumentProcessingError(
           'Failed to parse PDF file',
           'PDF_PARSE_ERROR',

@@ -289,8 +289,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
       // Parse document content for Direct pipeline
       // This is where PDF/DOCX parsing happens (only for Direct)
       let content: string;
-      const parseResult = await parseDocument(file);
-      content = parseResult.content;
+      try {
+        const parseResult = await parseDocument(file);
+        content = parseResult.content;
+      } catch (parseError) {
+        // If parsing fails, throw a more specific error
+        const errorMsg = parseError instanceof DocumentProcessingError
+          ? parseError.message
+          : parseError instanceof Error
+            ? parseError.message
+            : 'Unknown parsing error';
+        
+        throw new DocumentProcessingError(
+          `Failed to parse document for Direct approach: ${errorMsg}`,
+          'PARSE_ERROR',
+          {
+            filename: file.name,
+            originalError: errorMsg
+          }
+        );
+      }
 
       // Create metadata for Direct pipeline
       const directMetadata: DocumentMetadata = {

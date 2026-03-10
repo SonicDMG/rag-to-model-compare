@@ -510,17 +510,10 @@ export async function indexDocument(
     // Ensure knowledge filter exists
     await createKnowledgeFilter(KNOWLEDGE_FILTER_ID);
 
-    // Parse document to calculate token count
-    // This is done before ingestion to provide accurate token metrics
-    let tokenCount = 0;
-    try {
-      const { parseDocument: parseDoc } = await import('./document-processor');
-      const parseResult = await parseDoc(file);
-      tokenCount = estimateTokens(parseResult.content);
-    } catch (parseError) {
-      // If parsing fails, we'll still try to ingest but token count will be 0
-      console.warn('[RAG] Failed to calculate token count:', parseError);
-    }
+    // Note: We don't parse the document here because OpenRAG SDK handles that internally
+    // Token count will be estimated from the file size as a rough approximation
+    // The actual token count will be determined by OpenRAG during ingestion
+    const tokenCount = Math.floor(file.size / 4); // Rough estimate: ~4 bytes per token
 
     // Get OpenRAG client
     const client = getOpenRAGClient();
