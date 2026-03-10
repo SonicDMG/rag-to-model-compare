@@ -4,11 +4,15 @@ import { useState, useRef, DragEvent } from 'react';
 import { SUPPORTED_MODELS } from '@/lib/constants/models';
 
 interface UploadStatus {
-  status: 'idle' | 'uploading' | 'processing' | 'success' | 'error';
+  status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
   message?: string;
+  ragStatus?: 'success' | 'error';
   ragChunks?: number;
-  ragTokens?: number;
+  ragError?: string;
+  directStatus?: 'success' | 'error';
   directTokens?: number;
+  directWarnings?: string[];
+  directError?: string;
 }
 
 interface DocumentUploadProps {
@@ -77,23 +81,51 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         body: formData,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+      const result = await response.json();
+
+      // Check if request completely failed
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Upload failed');
       }
 
-      const result = await response.json();
-      
+      // Determine overall status based on individual pipeline results
+      const ragSuccess = result.data?.rag?.status === 'success';
+      const directSuccess = result.data?.direct?.status === 'success';
+
+      let overallStatus: 'success' | 'partial' | 'error';
+      let message: string;
+
+      if (ragSuccess && directSuccess) {
+        overallStatus = 'success';
+        message = 'Document processed successfully for both RAG and Direct approaches!';
+      } else if (ragSuccess || directSuccess) {
+        overallStatus = 'partial';
+        message = 'Document partially processed. ';
+        if (ragSuccess) {
+          message += 'RAG approach succeeded, but Direct approach failed.';
+        } else {
+          message += 'Direct approach succeeded, but RAG approach failed.';
+        }
+      } else {
+        overallStatus = 'error';
+        message = 'Both processing approaches failed.';
+      }
+
       setUploadStatus({
-        status: 'success',
-        message: 'Document processed successfully!',
-        ragChunks: result.ragChunks,
-        ragTokens: result.ragTokens,
-        directTokens: result.directTokens,
+        status: overallStatus,
+        message,
+        ragStatus: result.data?.rag?.status,
+        ragChunks: result.data?.rag?.chunkCount,
+        ragError: result.data?.rag?.error,
+        directStatus: result.data?.direct?.status,
+        directTokens: result.data?.direct?.tokenCount,
+        directWarnings: result.data?.direct?.warnings,
+        directError: result.data?.direct?.error,
       });
 
-      if (onUploadComplete) {
-        onUploadComplete(result.documentId);
+      // Call onUploadComplete if at least one approach succeeded
+      if ((ragSuccess || directSuccess) && onUploadComplete) {
+        onUploadComplete(result.data.documentId);
       }
     } catch (error) {
       setUploadStatus({
@@ -204,6 +236,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
           <div className={`
             mt-4 p-4 rounded-lg
             ${uploadStatus.status === 'success' ? 'bg-green-50 border border-green-200' : ''}
+            ${uploadStatus.status === 'partial' ? 'bg-yellow-50 border border-yellow-200' : ''}
             ${uploadStatus.status === 'error' ? 'bg-red-50 border border-red-200' : ''}
             ${uploadStatus.status === 'uploading' || uploadStatus.status === 'processing' ? 'bg-blue-50 border border-blue-200' : ''}
           `}>
@@ -211,6 +244,11 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
               {uploadStatus.status === 'success' && (
                 <svg className="h-5 w-5 text-green-500 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              )}
+              {uploadStatus.status === 'partial' && (
+                <svg className="h-5 w-5 text-yellow-500 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
               )}
               {uploadStatus.status === 'error' && (
@@ -228,16 +266,66 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
               <div className="flex-1">
                 <p className={`text-sm font-medium
                   ${uploadStatus.status === 'success' ? 'text-green-800' : ''}
+                  ${uploadStatus.status === 'partial' ? 'text-yellow-800' : ''}
                   ${uploadStatus.status === 'error' ? 'text-red-800' : ''}
                   ${uploadStatus.status === 'uploading' || uploadStatus.status === 'processing' ? 'text-blue-800' : ''}
                 `}>
                   {uploadStatus.message}
                 </p>
                 
+                {/* Success: Show both approaches */}
                 {uploadStatus.status === 'success' && (
                   <div className="mt-2 text-sm text-green-700 space-y-1">
-                    <p><strong>RAG Approach:</strong> {uploadStatus.ragChunks} chunks, {uploadStatus.ragTokens?.toLocaleString()} tokens</p>
-                    <p><strong>Direct Approach:</strong> {uploadStatus.directTokens?.toLocaleString()} tokens</p>
+                    {uploadStatus.ragStatus === 'success' && (
+                      <p>✓ <strong>RAG Approach:</strong> {uploadStatus.ragChunks} chunks indexed</p>
+                    )}
+                    {uploadStatus.directStatus === 'success' && (
+                      <p>✓ <strong>Direct Approach:</strong> {uploadStatus.directTokens?.toLocaleString()} tokens loaded</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Partial Success: Show details for each approach */}
+                {uploadStatus.status === 'partial' && (
+                  <div className="mt-2 text-sm space-y-2">
+                    {/* RAG Status */}
+                    {uploadStatus.ragStatus === 'success' ? (
+                      <p className="text-green-700">
+                        ✓ <strong>RAG Approach:</strong> {uploadStatus.ragChunks} chunks indexed
+                      </p>
+                    ) : (
+                      <p className="text-red-700">
+                        ✗ <strong>RAG Approach:</strong> {uploadStatus.ragError || 'Failed'}
+                      </p>
+                    )}
+                    
+                    {/* Direct Status */}
+                    {uploadStatus.directStatus === 'success' ? (
+                      <div className="text-green-700">
+                        <p>✓ <strong>Direct Approach:</strong> {uploadStatus.directTokens?.toLocaleString()} tokens loaded</p>
+                        {uploadStatus.directWarnings && uploadStatus.directWarnings.length > 0 && (
+                          <div className="mt-1 ml-4 text-yellow-700">
+                            {uploadStatus.directWarnings.map((warning, idx) => (
+                              <p key={idx} className="text-xs">{warning}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-red-700">
+                        ✗ <strong>Direct Approach:</strong> {uploadStatus.directError || 'Failed'}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Show warnings even on full success */}
+                {uploadStatus.status === 'success' && uploadStatus.directWarnings && uploadStatus.directWarnings.length > 0 && (
+                  <div className="mt-2 text-sm text-yellow-700">
+                    <p className="font-medium">Warnings:</p>
+                    {uploadStatus.directWarnings.map((warning, idx) => (
+                      <p key={idx} className="text-xs ml-2">{warning}</p>
+                    ))}
                   </div>
                 )}
               </div>

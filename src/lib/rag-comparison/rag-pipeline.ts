@@ -346,27 +346,28 @@ export function calculateMetrics(
 }
 
 /**
- * Indexes a document with its chunks into the OpenRAG system
- * 
- * Uploads the document chunks to OpenRAG and associates them with
- * the "Compare" knowledge filter for scoped retrieval.
- * 
- * @param chunks - Array of document chunks to index
+ * Indexes a document into the OpenRAG system
+ *
+ * Sends the raw file to OpenRAG SDK which handles parsing, chunking,
+ * and embedding automatically. Associates document with the "Compare"
+ * knowledge filter for scoped retrieval.
+ *
+ * @param file - Raw file to index (PDF, DOCX, TXT, etc.)
  * @param documentId - Unique identifier for the document
  * @param metadata - Document metadata
  * @returns Promise resolving to index result with timing information
  * @throws {RAGPipelineError} If indexing fails
- * 
+ *
  * @example
  * ```typescript
- * const result = await indexDocument(chunks, 'doc-123', metadata);
+ * const result = await indexDocument(file, 'doc-123', metadata);
  * if (result.success) {
- *   console.log(`Indexed ${result.chunkCount} chunks in ${result.indexTime}ms`);
+ *   console.log(`Indexed document in ${result.indexTime}ms`);
  * }
  * ```
  */
 export async function indexDocument(
-  chunks: Chunk[],
+  file: File,
   documentId: string,
   metadata: DocumentMetadata
 ): Promise<IndexResult> {
@@ -376,63 +377,47 @@ export async function indexDocument(
     // Validate inputs
     validateDocumentId(documentId);
 
-    if (!Array.isArray(chunks) || chunks.length === 0) {
+    if (!file || !(file instanceof File)) {
       throw new RAGPipelineError(
-        'Chunks array is required and cannot be empty',
-        'INVALID_CHUNKS',
-        { documentId, chunkCount: chunks?.length }
+        'Valid file is required',
+        'INVALID_FILE',
+        { documentId, file: typeof file }
       );
     }
 
-    // Validate chunk count to prevent DoS
-    if (chunks.length > 10000) {
+    // Validate file size to prevent DoS
+    if (file.size > 100 * 1024 * 1024) { // 100MB limit
       throw new RAGPipelineError(
-        'Too many chunks (maximum 10,000)',
-        'TOO_MANY_CHUNKS',
-        { documentId, chunkCount: chunks.length }
+        'File size exceeds maximum (100MB)',
+        'FILE_TOO_LARGE',
+        { documentId, fileSize: file.size }
       );
     }
 
     // Ensure knowledge filter exists
     await createKnowledgeFilter(KNOWLEDGE_FILTER_ID);
 
-    // Prepare document data for ingestion
-    // Note: This implementation assumes the OpenRAG SDK has a documents.ingest() method
-    // The actual API may differ - adjust based on SDK documentation
-    const documentData = {
-      id: documentId,
-      content: chunks.map(chunk => chunk.content).join('\n\n'),
-      chunks: chunks.map(chunk => ({
-        id: chunk.id,
-        content: sanitizeInput(chunk.content),
-        metadata: {
-          ...chunk.metadata,
-          sourceId: metadata.filename,
-          documentId: documentId,
-          tokenCount: chunk.tokenCount
-        }
-      })),
-      metadata: {
-        filename: metadata.filename,
-        size: metadata.size,
-        mimeType: metadata.mimeType,
-        uploadedAt: metadata.uploadedAt.toISOString(),
-        chunkCount: metadata.chunkCount,
-        totalTokens: metadata.totalTokens,
-        strategy: metadata.strategy,
-        filter: KNOWLEDGE_FILTER_ID
-      }
-    };
+    // Prepare FormData for file upload to OpenRAG
+    // OpenRAG SDK will handle parsing, chunking, and embedding
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentId', documentId);
+    formData.append('filter', KNOWLEDGE_FILTER_ID);
+    formData.append('metadata', JSON.stringify({
+      filename: metadata.filename,
+      size: metadata.size,
+      mimeType: metadata.mimeType,
+      uploadedAt: metadata.uploadedAt.toISOString(),
+    }));
 
-    // Upload to OpenRAG
-    // This is a placeholder - actual SDK method may differ
+    // Upload to OpenRAG for automatic processing
     const response = await fetch(`${process.env.OPENRAG_URL}/api/documents/ingest`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
+        // Don't set Content-Type - browser will set it with boundary for FormData
       },
-      body: JSON.stringify(documentData)
+      body: formData
     });
 
     if (!response.ok) {
@@ -440,13 +425,17 @@ export async function indexDocument(
       throw new RAGPipelineError(
         `Document ingestion failed: ${response.statusText}`,
         'INGESTION_ERROR',
-        { 
-          documentId, 
+        {
+          documentId,
           status: response.status,
           error: errorText
         }
       );
     }
+
+    // Parse response to get chunk count from OpenRAG
+    const responseData = await response.json();
+    const chunkCount = responseData.chunkCount || responseData.chunks?.length || 0;
 
     const endTime = performance.now();
     const indexTime = Math.round(endTime - startTime);
@@ -454,7 +443,7 @@ export async function indexDocument(
     return {
       success: true,
       documentId,
-      chunkCount: chunks.length,
+      chunkCount,
       indexTime
     };
 
