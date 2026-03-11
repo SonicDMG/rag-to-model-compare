@@ -16,7 +16,6 @@ import {
 } from 'openrag-sdk';
 import { calculateCost, getModelPricing } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
-import { getDocument } from '@/lib/rag-comparison/document-storage';
 import {
   calculateTimingBreakdown,
   calculateTokenBreakdown,

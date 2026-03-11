@@ -37,11 +37,14 @@ export default function Home() {
   const handleQueryBoth = async (query: string, temperature: number, maxTokens: number) => {
     if (!documentId) return;
 
+    // Reset state for both pipelines
     setIsQuerying(true);
     setIsRagQuerying(true);
     setIsDirectQuerying(true);
     setRagError(null);
     setDirectError(null);
+    setRagResult(null);
+    setDirectResult(null);
 
     try {
       const response = await fetch('/api/rag-comparison/query', {
@@ -62,18 +65,81 @@ export default function Home() {
         throw new Error(errorData.error || 'Query failed');
       }
 
-      const result = await response.json();
-      
-      // Set results for both sections
-      setRagResult(result.data.rag);
-      setDirectResult(result.data.direct);
+      // Handle Server-Sent Events stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete messages (separated by \n\n)
+        const messages = buffer.split('\n\n');
+        buffer = messages.pop() || ''; // Keep incomplete message in buffer
+
+        for (const message of messages) {
+          if (!message.trim() || !message.startsWith('data: ')) {
+            continue;
+          }
+
+          try {
+            const data = JSON.parse(message.substring(6)); // Remove 'data: ' prefix
+
+            if (data.type === 'rag') {
+              if (data.success) {
+                console.log('✅ RAG result received and rendering');
+                setRagResult(data.data);
+                setIsRagQuerying(false);
+              } else {
+                console.error('❌ RAG error received:', data.error);
+                setRagError(data.error);
+                setIsRagQuerying(false);
+              }
+            } else if (data.type === 'direct') {
+              if (data.success) {
+                console.log('✅ Direct result received and rendering');
+                setDirectResult(data.data);
+                setIsDirectQuerying(false);
+              } else {
+                console.error('❌ Direct error received:', data.error);
+                setDirectError(data.error);
+                setIsDirectQuerying(false);
+              }
+            } else if (data.type === 'complete') {
+              console.log('✅ Stream complete');
+              setIsQuerying(false);
+            }
+          } catch (parseError) {
+            console.error('Failed to parse SSE message:', parseError, message);
+          }
+        }
+      }
+
+      // Ensure loading states are cleared
+      setIsQuerying(false);
+      setIsRagQuerying(false);
+      setIsDirectQuerying(false);
+
     } catch (err) {
+      console.error('Query error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      
+      // Set error for both if the request itself failed
       setRagError(errorMessage);
       setDirectError(errorMessage);
-      setRagResult(null);
-      setDirectResult(null);
-    } finally {
+      
       setIsQuerying(false);
       setIsRagQuerying(false);
       setIsDirectQuerying(false);

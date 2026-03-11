@@ -1,8 +1,8 @@
 /**
  * Query Execution API Route
- * 
+ *
  * Handles query execution against uploaded documents using both RAG and Direct
- * pipelines in parallel, then compares the results using metrics calculator.
+ * pipelines independently via Server-Sent Events streaming.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,11 +14,9 @@ import {
 import {
   query as directQuery
 } from '@/lib/rag-comparison/direct-pipeline';
-import { compare } from '@/lib/rag-comparison/metrics-calculator';
-import type { 
-  ComparisonResult,
+import type {
   RAGConfig,
-  DirectConfig 
+  DirectConfig
 } from '@/types/rag-comparison';
 
 /**
@@ -58,14 +56,6 @@ const QueryRequestSchema = z.object({
     .default(5),
 });
 
-/**
- * Query response structure
- */
-interface QueryResponse {
-  success: boolean;
-  data?: ComparisonResult;
-  error?: string;
-}
 
 /**
  * Sanitizes input strings to prevent injection attacks
@@ -104,9 +94,9 @@ function sanitizeInput(input: string): string {
  * 
  * Response: QueryResponse with ComparisonResult
  */
-export async function POST(request: NextRequest): Promise<NextResponse<QueryResponse>> {
+export async function POST(request: NextRequest): Promise<Response> {
   console.log('\n╔════════════════════════════════════════╗');
-  console.log('║     QUERY API ROUTE - START            ║');
+  console.log('║     QUERY API ROUTE - START (STREAMING)║');
   console.log('╚════════════════════════════════════════╝');
   console.log('Timestamp:', new Date().toISOString());
   
@@ -197,111 +187,87 @@ export async function POST(request: NextRequest): Promise<NextResponse<QueryResp
     };
     console.log('Direct config:', JSON.stringify(directConfig, null, 2));
 
-    // Execute both pipelines in parallel
-    // Each pipeline handles its own errors independently
-    console.log('\n========================================');
-    console.log('⚡ EXECUTING PIPELINES IN PARALLEL');
-    console.log('========================================\n');
-    
-    const [ragResult, directResult] = await Promise.allSettled([
-      // RAG pipeline - works independently, doesn't need stored document
-      ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig),
-      // Direct pipeline - needs stored document content
-      storedDoc
-        ? directQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, directConfig)
-        : Promise.reject(new Error('Document not found in storage for Direct pipeline')),
-    ]);
-    
-    console.log('\n========================================');
-    console.log('⚡ PIPELINE EXECUTION COMPLETE');
-    console.log('========================================');
-    console.log('🔵 RAG result status:', ragResult.status);
-    console.log('🟢 Direct result status:', directResult.status);
+    // Create a streaming response using Server-Sent Events
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        console.log('\n========================================');
+        console.log('⚡ EXECUTING PIPELINES INDEPENDENTLY');
+        console.log('========================================\n');
 
-    // Check if at least one pipeline succeeded
-    const ragSucceeded = ragResult.status === 'fulfilled';
-    const directSucceeded = directResult.status === 'fulfilled';
-    
-    console.log('🔵 RAG pipeline:', ragSucceeded ? '✅ Success' : '❌ Failed');
-    console.log('🟢 Direct pipeline:', directSucceeded ? '✅ Success' : '❌ Failed');
+        // Execute both pipelines independently - don't wait for each other
+        // RAG pipeline
+        ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig)
+          .then((ragResult) => {
+            console.log('🔵 RAG pipeline completed successfully');
+            const data = JSON.stringify({
+              type: 'rag',
+              success: true,
+              data: ragResult
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          })
+          .catch((error) => {
+            console.error('🔵 RAG pipeline failed:', error);
+            const data = JSON.stringify({
+              type: 'rag',
+              success: false,
+              error: error instanceof Error ? error.message : 'RAG pipeline failed'
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          });
 
-    // If both failed, return error
-    if (!ragSucceeded && !directSucceeded) {
-      const ragError = ragResult.status === 'rejected' ? ragResult.reason : null;
-      const directError = directResult.status === 'rejected' ? directResult.reason : null;
-      
-      console.error('❌ Both pipelines failed');
-      console.error('RAG error:', ragError);
-      console.error('Direct error:', directError);
-      
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Both RAG and Direct pipelines failed. Please check the logs for details.'
-        },
-        { status: 500 }
-      );
-    }
+        // Direct pipeline
+        const directPromise = storedDoc
+          ? directQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, directConfig)
+          : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
 
-    // At least one pipeline succeeded - proceed with comparison
-    // If one failed, we'll still compare what we have
-    console.log('Comparing results...');
-    let comparisonResult: ComparisonResult;
-    try {
-      // If RAG failed, create a placeholder result
-      const ragValue = ragSucceeded
-        ? ragResult.value
-        : {
-            answer: 'RAG pipeline failed',
-            sources: [],
-            metrics: { retrievalTime: 0, generationTime: 0, tokens: 0, cost: 0 }
-          };
-      
-      // If Direct failed, create a placeholder result
-      const directValue = directSucceeded
-        ? directResult.value
-        : {
-            answer: 'Direct pipeline failed',
-            metrics: { generationTime: 0, tokens: 0, cost: 0, contextWindowUsage: 0 }
-          };
-      
-      comparisonResult = compare(ragValue, directValue);
-      console.log('Comparison complete');
-      console.log('Comparison summary:', {
-        ragAnswerLength: comparisonResult.rag.answer.length,
-        directAnswerLength: comparisonResult.direct.answer.length,
-        recommendation: comparisonResult.summary.recommendation
-      });
-    } catch (error) {
-      console.error('Comparison error:', error);
-      
-      return NextResponse.json(
-        {
-          success: false,
-          error: error instanceof Error
-            ? `Comparison failed: ${error.message}`
-            : 'Comparison failed with unknown error'
-        },
-        { status: 500 }
-      );
-    }
+        directPromise
+          .then((directResult) => {
+            console.log('🟢 Direct pipeline completed successfully');
+            const data = JSON.stringify({
+              type: 'direct',
+              success: true,
+              data: directResult
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          })
+          .catch((error) => {
+            console.error('🟢 Direct pipeline failed:', error);
+            const data = JSON.stringify({
+              type: 'direct',
+              success: false,
+              error: error instanceof Error ? error.message : 'Direct pipeline failed'
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          });
 
-    // Return successful comparison
-    console.log('\n========================================');
-    console.log('✅ COMPARISON SUCCESSFUL');
-    console.log('========================================');
-    console.log('Recommendation:', comparisonResult.summary.recommendation);
-    console.log('╔════════════════════════════════════════╗');
-    console.log('║     QUERY API ROUTE - END              ║');
-    console.log('╚════════════════════════════════════════╝\n');
-    
-    return NextResponse.json(
-      {
-        success: true,
-        data: comparisonResult
+        // Wait for both to complete (or fail) before closing the stream
+        await Promise.allSettled([
+          ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig).catch(() => {}),
+          directPromise.catch(() => {})
+        ]);
+
+        console.log('\n========================================');
+        console.log('⚡ BOTH PIPELINES COMPLETE');
+        console.log('========================================');
+        console.log('╔════════════════════════════════════════╗');
+        console.log('║     QUERY API ROUTE - END              ║');
+        console.log('╚════════════════════════════════════════╝\n');
+
+        // Send completion event
+        controller.enqueue(encoder.encode('data: {"type":"complete"}\n\n'));
+        controller.close();
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       },
-      { status: 200 }
-    );
+    });
 
   } catch (error) {
     console.error('Query execution error:', error);
