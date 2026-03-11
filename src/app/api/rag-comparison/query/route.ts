@@ -195,9 +195,11 @@ export async function POST(request: NextRequest): Promise<Response> {
         console.log('⚡ EXECUTING PIPELINES INDEPENDENTLY');
         console.log('========================================\n');
 
-        // Execute both pipelines independently - don't wait for each other
+        // Execute both pipelines independently - store promises to avoid duplicate execution
         // RAG pipeline
-        ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig)
+        const ragPromise = ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig);
+        
+        ragPromise
           .then((ragResult) => {
             console.log('🔵 RAG pipeline completed successfully');
             const data = JSON.stringify({
@@ -243,8 +245,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           });
 
         // Wait for both to complete (or fail) before closing the stream
+        // Reuse the same promises to avoid duplicate execution
         await Promise.allSettled([
-          ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig).catch(() => {}),
+          ragPromise.catch(() => {}),
           directPromise.catch(() => {})
         ]);
 
