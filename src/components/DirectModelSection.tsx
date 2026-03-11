@@ -1,58 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { QueryForm } from '@/components/QueryForm';
 import { DirectResult } from '@/types/rag-comparison';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 
 interface DirectModelSectionProps {
-  documentId: string;
+  directResult: DirectResult | null;
+  isQuerying: boolean;
+  error: string | null;
 }
 
-export function DirectModelSection({ documentId }: DirectModelSectionProps) {
-  const [isQuerying, setIsQuerying] = useState(false);
-  const [directResult, setDirectResult] = useState<DirectResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleQuery = async (query: string, docId: string, temperature?: number, maxTokens?: number) => {
-    if (!docId) {
-      setError('Please upload a document first');
-      return;
-    }
-
-    setIsQuerying(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/rag-comparison/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query,
-          documentId: docId,
-          temperature,
-          maxTokens,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Query failed');
-      }
-
-      const result = await response.json();
-      // Extract only Direct result from comparison
-      setDirectResult(result.data.direct);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      setDirectResult(null);
-    } finally {
-      setIsQuerying(false);
-    }
-  };
+export function DirectModelSection({ directResult, isQuerying, error }: DirectModelSectionProps) {
 
   return (
     <div className="space-y-6">
@@ -65,15 +23,6 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
           Full document is provided directly in the context window without chunking or retrieval
         </p>
       </div>
-
-      {/* Query Section */}
-      <section>
-        <QueryForm
-          documentId={documentId}
-          onSubmit={handleQuery}
-          isLoading={isQuerying}
-        />
-      </section>
 
       {/* Error Display */}
       {error && (
@@ -142,31 +91,6 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
             
             <div className="prose prose-sm max-w-none">
               <ExpandableText text={directResult.answer} characterLimit={400} />
-            </div>
-
-            {/* Context Window Info */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                  Context Window Usage
-                </h4>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-600 transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(directResult.metrics.contextWindowUsage, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-lg font-bold text-blue-700">
-                    {directResult.metrics.contextWindowUsage.toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mt-2">
-                  Percentage of model's context window used by the full document
-                </p>
-              </div>
             </div>
           </div>
 

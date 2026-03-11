@@ -6,10 +6,25 @@ import { RagUploadResult } from '@/components/RagUploadResult';
 import { DirectUploadResult } from '@/components/DirectUploadResult';
 import { RagSection } from '@/components/RagSection';
 import { DirectModelSection } from '@/components/DirectModelSection';
+import { UnifiedQuerySection } from '@/components/UnifiedQuerySection';
+import { RAGResult, DirectResult } from '@/types/rag-comparison';
 
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
+  
+  // Query state
+  const [isQuerying, setIsQuerying] = useState(false);
+  
+  // RAG state
+  const [ragResult, setRagResult] = useState<RAGResult | null>(null);
+  const [ragError, setRagError] = useState<string | null>(null);
+  const [isRagQuerying, setIsRagQuerying] = useState(false);
+  
+  // Direct state
+  const [directResult, setDirectResult] = useState<DirectResult | null>(null);
+  const [directError, setDirectError] = useState<string | null>(null);
+  const [isDirectQuerying, setIsDirectQuerying] = useState(false);
 
   const handleUploadComplete = (docId: string) => {
     setDocumentId(docId);
@@ -17,6 +32,52 @@ export default function Home() {
 
   const handleUploadResult = (result: UploadResultData) => {
     setUploadResult(result);
+  };
+
+  const handleQueryBoth = async (query: string, temperature: number, maxTokens: number) => {
+    if (!documentId) return;
+
+    setIsQuerying(true);
+    setIsRagQuerying(true);
+    setIsDirectQuerying(true);
+    setRagError(null);
+    setDirectError(null);
+
+    try {
+      const response = await fetch('/api/rag-comparison/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          documentId,
+          temperature,
+          maxTokens,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Query failed');
+      }
+
+      const result = await response.json();
+      
+      // Set results for both sections
+      setRagResult(result.data.rag);
+      setDirectResult(result.data.direct);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setRagError(errorMessage);
+      setDirectError(errorMessage);
+      setRagResult(null);
+      setDirectResult(null);
+    } finally {
+      setIsQuerying(false);
+      setIsRagQuerying(false);
+      setIsDirectQuerying(false);
+    }
   };
 
   return (
@@ -108,11 +169,30 @@ export default function Home() {
           </div>
         )}
 
-        {/* Side-by-Side Query Sections */}
+        {/* Unified Query Section */}
         {documentId && (
+          <section className="mb-8">
+            <UnifiedQuerySection
+              documentId={documentId}
+              onQueryBoth={handleQueryBoth}
+              isLoading={isQuerying}
+            />
+          </section>
+        )}
+
+        {/* Side-by-Side Answer Sections */}
+        {documentId && (ragResult || directResult || isRagQuerying || isDirectQuerying) && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
-            <RagSection documentId={documentId} />
-            <DirectModelSection documentId={documentId} />
+            <RagSection
+              ragResult={ragResult}
+              isQuerying={isRagQuerying}
+              error={ragError}
+            />
+            <DirectModelSection
+              directResult={directResult}
+              isQuerying={isDirectQuerying}
+              error={directError}
+            />
           </div>
         )}
 

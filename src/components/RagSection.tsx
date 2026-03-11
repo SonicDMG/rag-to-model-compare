@@ -1,58 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { QueryForm } from '@/components/QueryForm';
 import { RAGResult } from '@/types/rag-comparison';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 
 interface RagSectionProps {
-  documentId: string;
+  ragResult: RAGResult | null;
+  isQuerying: boolean;
+  error: string | null;
 }
 
-export function RagSection({ documentId }: RagSectionProps) {
-  const [isQuerying, setIsQuerying] = useState(false);
-  const [ragResult, setRagResult] = useState<RAGResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleQuery = async (query: string, docId: string, temperature?: number, maxTokens?: number) => {
-    if (!docId) {
-      setError('Please upload a document first');
-      return;
-    }
-
-    setIsQuerying(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/rag-comparison/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query,
-          documentId: docId,
-          temperature,
-          maxTokens,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Query failed');
-      }
-
-      const result = await response.json();
-      // Extract only RAG result from comparison
-      setRagResult(result.data.rag);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      setRagResult(null);
-    } finally {
-      setIsQuerying(false);
-    }
-  };
+export function RagSection({ ragResult, isQuerying, error }: RagSectionProps) {
 
   return (
     <div className="space-y-6">
@@ -65,15 +23,6 @@ export function RagSection({ documentId }: RagSectionProps) {
           Retrieval-Augmented Generation: Document is chunked and relevant pieces are retrieved for context
         </p>
       </div>
-
-      {/* Query Section */}
-      <section>
-        <QueryForm
-          documentId={documentId}
-          onSubmit={handleQuery}
-          isLoading={isQuerying}
-        />
-      </section>
 
       {/* Error Display */}
       {error && (
