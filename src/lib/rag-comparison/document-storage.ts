@@ -26,8 +26,22 @@ export interface StoredDocument {
 /**
  * In-memory document store
  * Maps document ID to stored document
+ *
+ * Using globalThis to persist across Next.js hot reloads in development
  */
-const documentStore = new Map<string, StoredDocument>();
+const getDocumentStore = (): Map<string, StoredDocument> => {
+  if (!globalThis.__documentStore) {
+    globalThis.__documentStore = new Map<string, StoredDocument>();
+  }
+  return globalThis.__documentStore;
+};
+
+// Type augmentation for globalThis
+declare global {
+  var __documentStore: Map<string, StoredDocument> | undefined;
+}
+
+const documentStore = getDocumentStore();
 
 /**
  * Stores a document in memory
@@ -60,8 +74,9 @@ export function storeDocument(
     throw new Error('Document ID is required and must be a string');
   }
 
-  if (!content || typeof content !== 'string') {
-    throw new Error('Document content is required and must be a string');
+  // Allow empty string content (for cases where RAG handles the file directly)
+  if (typeof content !== 'string') {
+    throw new Error('Document content must be a string (can be empty)');
   }
 
   if (!metadata || typeof metadata !== 'object') {

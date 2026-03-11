@@ -20,13 +20,14 @@ import {
 import {
   loadDocument as directLoadDocument
 } from '@/lib/rag-comparison/direct-pipeline';
-import { storeDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
+import { storeDocument, getDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
 import type { DocumentMetadata } from '@/types/rag-comparison';
 
 /**
- * Maximum file size (10MB)
+ * Maximum file size (100MB)
+ * Increased limit for comprehensive RAG comparison testing with larger documents
  */
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 /**
  * Allowed file extensions
@@ -427,8 +428,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
         console.error(`[Direct] ❌ Processing failed: ${directResult.error}`);
       }
 
-      // Store parsed content for later retrieval (only if Direct succeeded)
-      // IMPORTANT: Only store if RAG didn't already store it (to preserve filter ID)
+      // Direct pipeline doesn't need to store separately - RAG already stored with filter ID
+      // The stored document contains both the content (for Direct) and filter ID (for RAG)
+      // If RAG failed but Direct succeeded, we need to update the storage with Direct's content
       if (directSuccess && !ragSuccess) {
         try {
           const storageMetadata: DocumentMetadata = {
@@ -441,7 +443,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
             strategy: 'fixed'
           };
 
-          // Store document (no filter ID since RAG didn't succeed)
+          // Store document with Direct content (no filter ID since RAG didn't succeed)
           storeDocument(documentId, content, storageMetadata);
           console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
         } catch (error) {
@@ -449,7 +451,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
           // Don't fail the entire request if storage fails
         }
       } else if (directSuccess && ragSuccess) {
-        console.log(`[Direct] ℹ️  Skipping storage (already stored by RAG with filter ID)`);
+        // Both succeeded - RAG already stored the document with filter ID
+        // We need to update it with Direct's parsed content if RAG stored empty content
+        try {
+          const existingDoc = getDocument(documentId);
+          if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
+            // Update with Direct's parsed content while preserving filter ID
+            const updatedMetadata: DocumentMetadata = {
+              ...existingDoc.metadata,
+              totalTokens: directResult.tokenCount // Update with Direct's token count
+            };
+            storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
+            console.log(`[Direct] ✅ Updated storage with parsed content (preserving RAG filter ID)`);
+          } else {
+            console.log(`[Direct] ℹ️  Storage already has content from RAG`);
+          }
+        } catch (error) {
+          console.error('[Direct] ❌ Failed to update document storage:', error);
+        }
       }
       
       console.log('========================================');

@@ -715,38 +715,27 @@ export async function query(
     const sanitizedQuery = sanitizeInput(query);
     console.log('Sanitized query:', sanitizedQuery);
 
-    // Retrieve document metadata to get the filter ID
-    // This is needed to scope OpenRAG retrieval to the specific document
-    console.log('Retrieving document metadata for filtering...');
-    const storedDoc = getDocument(documentId);
+    // Get the "Compare" knowledge filter ID from OpenRAG
+    // RAG pipeline is independent - it doesn't need local storage
+    console.log('Retrieving "Compare" knowledge filter from OpenRAG...');
+    const client = getOpenRAGClient();
     
-    if (!storedDoc) {
+    const existingFilters = await client.knowledgeFilters.search(KNOWLEDGE_FILTER_ID, 1);
+    
+    if (!existingFilters || existingFilters.length === 0) {
       throw new RAGPipelineError(
-        `Document not found: ${documentId}. Please ensure the document was uploaded successfully.`,
-        'DOCUMENT_NOT_FOUND',
-        { documentId }
+        `Knowledge filter "${KNOWLEDGE_FILTER_ID}" not found. Please ensure the document was uploaded successfully.`,
+        'FILTER_NOT_FOUND',
+        { documentId, filterName: KNOWLEDGE_FILTER_ID }
       );
     }
     
-    const filterId = storedDoc.filterId;
-    const filename = storedDoc.metadata.filename;
-    
-    if (!filterId) {
-      throw new RAGPipelineError(
-        `Knowledge filter ID not found for document: ${documentId}. The document may not have been properly indexed.`,
-        'FILTER_ID_NOT_FOUND',
-        { documentId, filename }
-      );
-    }
-    
+    const filterId = existingFilters[0].id;
     console.log('Using knowledge filter ID:', filterId);
-    console.log('Document filename:', filename);
+    console.log('Filter data sources:', existingFilters[0].queryData?.filters?.data_sources);
 
     // Track retrieval time
     const retrievalStartTime = performance.now();
-
-    // Get OpenRAG client
-    const client = getOpenRAGClient();
     console.log('OpenRAG client obtained');
     console.log('[DEBUG] Client config:', {
       hasApiKey: !!process.env.OPENRAG_API_KEY,
