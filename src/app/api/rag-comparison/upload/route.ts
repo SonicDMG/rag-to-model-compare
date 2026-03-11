@@ -243,8 +243,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
     // RAG PIPELINE PROCESSING (Independent with own error handling)
     // OpenRAG SDK handles all parsing, chunking, and embedding
     // ============================================================
+    console.log('\n========================================');
+    console.log('🔵 RAG PIPELINE - START');
+    console.log('========================================');
     try {
-      console.log(`[RAG] Starting processing for document: ${documentId}`);
+      console.log(`[RAG] Document ID: ${documentId}`);
+      console.log(`[RAG] Filename: ${file.name}`);
+      console.log(`[RAG] Starting OpenRAG ingestion...`);
       
       // Create metadata for RAG
       const ragMetadata: DocumentMetadata = {
@@ -265,6 +270,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
         ragMetadata
       );
 
+      // Store the filter ID for later use in queries
+      let filterIdForStorage: string | undefined = undefined;
+      if (ragResult.success && ragResult.filterId) {
+        filterIdForStorage = ragResult.filterId;
+      }
+
       // Update response with RAG results and image data
       response.data!.rag = {
         status: ragResult.success ? 'success' : 'error',
@@ -284,10 +295,37 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
       ragSuccess = ragResult.success;
       
       if (ragSuccess) {
-        console.log(`[RAG] Successfully indexed document in ${ragResult.indexTime}ms`);
+        console.log(`[RAG] ✅ Successfully indexed document in ${ragResult.indexTime}ms`);
+        console.log(`[RAG] Chunks: ${ragResult.chunkCount}, Tokens: ${ragResult.tokenCount}`);
+        
+        // RAG PIPELINE: Store document metadata with filter ID for queries
+        // This is independent of Direct pipeline
+        try {
+          const ragStorageMetadata: DocumentMetadata = {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type || 'text/plain',
+            uploadedAt: new Date(),
+            chunkCount: ragResult.chunkCount,
+            totalTokens: ragResult.tokenCount,
+            strategy: 'fixed'
+          };
+
+          // Store with parsed content if available, otherwise empty string
+          const contentToStore = parsedContent || '';
+          storeDocument(documentId, contentToStore, ragStorageMetadata, filterIdForStorage);
+          console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
+        } catch (storageError) {
+          console.error('[RAG] ❌ Failed to store document:', storageError);
+          // Don't fail RAG processing if storage fails
+        }
       } else {
-        console.error(`[RAG] Indexing failed: ${ragResult.error}`);
+        console.error(`[RAG] ❌ Indexing failed: ${ragResult.error}`);
       }
+      
+      console.log('========================================');
+      console.log('🔵 RAG PIPELINE - END');
+      console.log('========================================\n');
 
     } catch (error) {
       // RAG processing failed, but we continue with Direct processing
@@ -295,7 +333,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
         ? error.message
         : 'Unknown error during RAG processing';
       
-      console.error('[RAG] Processing error:', errorMessage);
+      console.error('[RAG] ❌ Processing error:', errorMessage);
+      console.log('========================================');
+      console.log('🔵 RAG PIPELINE - END (ERROR)');
+      console.log('========================================\n');
       
       response.data!.rag = {
         status: 'error',
@@ -308,8 +349,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
     // DIRECT PIPELINE PROCESSING (Independent with own error handling)
     // Direct approach needs parsed text content
     // ============================================================
+    console.log('\n========================================');
+    console.log('🟢 DIRECT PIPELINE - START');
+    console.log('========================================');
     try {
-      console.log(`[Direct] Starting processing for document: ${documentId}`);
+      console.log(`[Direct] Document ID: ${documentId}`);
+      console.log(`[Direct] Filename: ${file.name}`);
+      console.log(`[Direct] Starting direct context loading...`);
       
       // Use already parsed content or parse again if needed
       let content: string;
@@ -371,16 +417,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
       directSuccess = directResult.success;
       
       if (directSuccess) {
-        console.log(`[Direct] Successfully loaded ${directResult.tokenCount} tokens in ${directResult.loadTime}ms`);
+        console.log(`[Direct] ✅ Successfully loaded ${directResult.tokenCount} tokens in ${directResult.loadTime}ms`);
         if (directResult.warnings.length > 0) {
-          console.warn(`[Direct] Warnings:`, directResult.warnings);
+          console.warn(`[Direct] ⚠️  Warnings:`, directResult.warnings);
         }
       } else {
-        console.error(`[Direct] Processing failed: ${directResult.error}`);
+        console.error(`[Direct] ❌ Processing failed: ${directResult.error}`);
       }
 
       // Store parsed content for later retrieval (only if Direct succeeded)
-      if (directSuccess) {
+      // IMPORTANT: Only store if RAG didn't already store it (to preserve filter ID)
+      if (directSuccess && !ragSuccess) {
         try {
           const storageMetadata: DocumentMetadata = {
             filename: file.name,
@@ -392,13 +439,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
             strategy: 'fixed'
           };
 
+          // Store document (no filter ID since RAG didn't succeed)
           storeDocument(documentId, content, storageMetadata);
-          console.log(`[Storage] Document stored successfully: ${documentId}`);
+          console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
         } catch (error) {
-          console.error('[Storage] Failed to store document:', error);
+          console.error('[Direct] ❌ Failed to store document:', error);
           // Don't fail the entire request if storage fails
         }
+      } else if (directSuccess && ragSuccess) {
+        console.log(`[Direct] ℹ️  Skipping storage (already stored by RAG with filter ID)`);
       }
+      
+      console.log('========================================');
+      console.log('🟢 DIRECT PIPELINE - END');
+      console.log('========================================\n');
 
     } catch (error) {
       // Direct processing failed, but RAG might have succeeded
@@ -408,7 +462,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
           ? error.message
           : 'Unknown error during Direct processing';
       
-      console.error('[Direct] Processing error:', errorMessage);
+      console.error('[Direct] ❌ Processing error:', errorMessage);
+      console.log('========================================');
+      console.log('🟢 DIRECT PIPELINE - END (ERROR)');
+      console.log('========================================\n');
       
       response.data!.direct = {
         status: 'error',

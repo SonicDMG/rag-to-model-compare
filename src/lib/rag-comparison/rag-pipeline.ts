@@ -16,6 +16,7 @@ import {
 } from 'openrag-sdk';
 import { calculateCost, getModelPricing } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
+import { getDocument } from '@/lib/rag-comparison/document-storage';
 import type {
   Chunk,
   DocumentMetadata,
@@ -133,6 +134,8 @@ export interface IndexResult {
   success: boolean;
   /** Document identifier in the RAG system */
   documentId: string;
+  /** Knowledge filter ID for scoped retrieval */
+  filterId?: string;
   /** Number of chunks indexed */
   chunkCount: number;
   /** Total tokens in indexed document */
@@ -300,40 +303,101 @@ function validateQuery(query: string): void {
 }
 
 /**
- * Creates or updates the "Compare" knowledge filter for scoping retrieval
- * 
- * This filter ensures that RAG queries only retrieve from documents
- * uploaded for comparison purposes.
- * 
- * @param filterId - Filter identifier (default: "Compare")
- * @returns Promise that resolves when filter is created/updated
- * @throws {RAGPipelineError} If filter creation fails
- * 
+ * Creates or updates the "Compare" knowledge filter for a specific document
+ *
+ * This filter ensures that RAG queries can retrieve from documents uploaded
+ * for comparison by filtering on data_sources (which includes document filenames).
+ *
+ * The filter is always named "Compare". If it already exists, the new filename
+ * is added to the existing data_sources list.
+ *
+ * @param documentId - Document identifier (for logging/error handling)
+ * @param filename - Document filename to add to data source filter
+ * @returns Promise resolving to the filter ID
+ * @throws {RAGPipelineError} If filter creation/update fails
+ *
  * @example
  * ```typescript
- * await createKnowledgeFilter('Compare');
+ * const filterId = await createKnowledgeFilter('doc-123', 'example.pdf');
  * ```
  */
 export async function createKnowledgeFilter(
-  filterId: string = KNOWLEDGE_FILTER_ID
-): Promise<void> {
+  documentId: string,
+  filename: string
+): Promise<string> {
   try {
-    // Validate filter ID
-    if (!filterId || typeof filterId !== 'string') {
+    // Validate inputs
+    if (!documentId || typeof documentId !== 'string') {
       throw new RAGPipelineError(
-        'Filter ID is required',
-        'INVALID_FILTER_ID',
-        { filterId }
+        'Document ID is required',
+        'INVALID_DOCUMENT_ID',
+        { documentId }
       );
     }
 
-    // Note: This is a placeholder implementation
-    // The actual OpenRAG SDK API for creating filters may differ
-    // This should be updated based on the SDK documentation
+    if (!filename || typeof filename !== 'string') {
+      throw new RAGPipelineError(
+        'Filename is required',
+        'INVALID_FILENAME',
+        { filename }
+      );
+    }
+
+    const client = getOpenRAGClient();
     
-    // For now, we'll assume the filter is created automatically
-    // when documents are indexed with the filter tag
-    console.log(`Knowledge filter "${filterId}" will be used for retrieval scoping`);
+    // Use the constant "Compare" as the filter name
+    const filterName = KNOWLEDGE_FILTER_ID;
+    
+    // Check if "Compare" filter already exists
+    const existingFilters = await client.knowledgeFilters.search(filterName, 1);
+    
+    if (existingFilters && existingFilters.length > 0) {
+      const existingFilter = existingFilters[0];
+      console.log(`Knowledge filter "${filterName}" already exists with ID: ${existingFilter.id}`);
+      
+      // Get current data sources
+      const currentDataSources = existingFilter.queryData?.filters?.data_sources || [];
+      
+      // Add new filename if not already present
+      if (!currentDataSources.includes(filename)) {
+        console.log(`Adding filename "${filename}" to existing filter`);
+        await client.knowledgeFilters.update(existingFilter.id, {
+          queryData: {
+            filters: {
+              data_sources: [...currentDataSources, filename]
+            }
+          }
+        });
+        console.log(`Updated filter with new filename`);
+      } else {
+        console.log(`Filename "${filename}" already in filter`);
+      }
+      
+      return existingFilter.id;
+    }
+    
+    // Create new "Compare" knowledge filter with this document's filename
+    console.log(`Creating new "${filterName}" filter with filename: ${filename}`);
+    const result = await client.knowledgeFilters.create({
+      name: filterName,
+      description: `Filter for document comparison`,
+      queryData: {
+        filters: {
+          data_sources: [filename] // Start with this document's filename
+        }
+      }
+    });
+    
+    if (!result.success || !result.id) {
+      throw new RAGPipelineError(
+        'Failed to create knowledge filter',
+        'FILTER_CREATION_ERROR',
+        { filterName, result }
+      );
+    }
+    
+    console.log(`Created knowledge filter "${filterName}" with ID: ${result.id}`);
+    return result.id;
     
   } catch (error) {
     if (error instanceof RAGPipelineError) {
@@ -341,10 +405,11 @@ export async function createKnowledgeFilter(
     }
     
     throw new RAGPipelineError(
-      'Failed to create knowledge filter',
-      'FILTER_CREATION_ERROR',
+      'Failed to create/update knowledge filter',
+      'FILTER_OPERATION_ERROR',
       {
-        filterId,
+        documentId,
+        filename,
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     );
@@ -507,9 +572,6 @@ export async function indexDocument(
       );
     }
 
-    // Ensure knowledge filter exists
-    await createKnowledgeFilter(KNOWLEDGE_FILTER_ID);
-
     // Note: We don't parse the document here because OpenRAG SDK handles that internally
     // Token count will be estimated from the file size as a rough approximation
     // The actual token count will be determined by OpenRAG during ingestion
@@ -541,6 +603,10 @@ export async function indexDocument(
       );
     }
 
+    // Create knowledge filter for this document after successful ingestion
+    // This filter will scope retrieval to only this document
+    const filterId = await createKnowledgeFilter(documentId, metadata.filename);
+
     const endTime = performance.now();
     const indexTime = Math.round(endTime - startTime);
 
@@ -550,6 +616,7 @@ export async function indexDocument(
     return {
       success: true,
       documentId,
+      filterId,
       chunkCount,
       tokenCount,
       indexTime
@@ -611,6 +678,11 @@ export async function query(
   query: string,
   config: RAGConfig
 ): Promise<RAGResult> {
+  console.log('=== RAG Pipeline Query Start ===');
+  console.log('Document ID:', documentId);
+  console.log('Query:', query);
+  console.log('Config:', JSON.stringify(config, null, 2));
+  
   try {
     // Validate inputs
     validateDocumentId(documentId);
@@ -635,32 +707,80 @@ export async function query(
     }
 
     const sanitizedQuery = sanitizeInput(query);
+    console.log('Sanitized query:', sanitizedQuery);
+
+    // Retrieve document metadata to get the filter ID
+    // This is needed to scope OpenRAG retrieval to the specific document
+    console.log('Retrieving document metadata for filtering...');
+    const storedDoc = getDocument(documentId);
+    
+    if (!storedDoc) {
+      throw new RAGPipelineError(
+        `Document not found: ${documentId}. Please ensure the document was uploaded successfully.`,
+        'DOCUMENT_NOT_FOUND',
+        { documentId }
+      );
+    }
+    
+    const filterId = storedDoc.filterId;
+    const filename = storedDoc.metadata.filename;
+    
+    if (!filterId) {
+      throw new RAGPipelineError(
+        `Knowledge filter ID not found for document: ${documentId}. The document may not have been properly indexed.`,
+        'FILTER_ID_NOT_FOUND',
+        { documentId, filename }
+      );
+    }
+    
+    console.log('Using knowledge filter ID:', filterId);
+    console.log('Document filename:', filename);
 
     // Track retrieval time
     const retrievalStartTime = performance.now();
 
     // Get OpenRAG client
     const client = getOpenRAGClient();
+    console.log('OpenRAG client obtained');
 
     // Execute RAG query using OpenRAG SDK chat method
     // The SDK automatically handles retrieval and generation
-    const response = await client.chat.create({
+    // IMPORTANT: Set stream: false to get complete response instead of streaming
+    // IMPORTANT: Use filterId to scope retrieval to the specific document via knowledge filter
+    const chatRequest = {
       message: sanitizedQuery,
       limit: config.topK,
       scoreThreshold: 0.5, // Reasonable default
-    });
+      stream: false as const, // Disable streaming to get complete response (literal type)
+      filterId: filterId, // Use knowledge filter to scope retrieval to this document
+    };
+    console.log('Chat request:', JSON.stringify(chatRequest, null, 2));
+    console.log('Calling client.chat.create() with knowledge filter...');
+    
+    const response = await client.chat.create(chatRequest);
+    
+    console.log('Response received from OpenRAG');
+    console.log('Response type:', typeof response);
+    console.log('Response keys:', response ? Object.keys(response) : 'null');
+    console.log('Response.response:', response?.response ? `${response.response.substring(0, 100)}...` : 'undefined');
+    console.log('Response.sources count:', response?.sources?.length || 0);
 
     const retrievalEndTime = performance.now();
     const retrievalTime = Math.round(retrievalEndTime - retrievalStartTime);
+    console.log('Retrieval time:', retrievalTime, 'ms');
 
     // Track generation time (estimate as 60% of total time)
     const generationTime = Math.round(retrievalTime * 0.6);
+    console.log('Generation time (estimated):', generationTime, 'ms');
 
     // Extract answer from response
     const answer = response.response || '';
+    console.log('Answer extracted, length:', answer.length);
 
     // Extract sources from response
     const sdkSources = response.sources || [];
+    console.log('SDK sources count:', sdkSources.length);
+    
     const sourceChunks: Chunk[] = sdkSources.map((source, index) => ({
       id: `source-${index}`,
       content: source.text,
@@ -672,14 +792,17 @@ export async function query(
         sourceId: source.filename
       }
     }));
+    console.log('Source chunks created:', sourceChunks.length);
 
     // Calculate token usage
     // Input tokens = retrieved chunks + user query
     const retrievedContent = sdkSources.map(s => s.text).join('\n\n');
     const inputTokens = estimateTokens(retrievedContent) + estimateTokens(sanitizedQuery);
+    console.log('Input tokens:', inputTokens);
     
     // Output tokens = generated response
     const outputTokens = estimateTokens(answer);
+    console.log('Output tokens:', outputTokens);
 
     // Calculate metrics
     const metrics = calculateMetrics(
@@ -689,8 +812,9 @@ export async function query(
       outputTokens,
       config.model
     );
+    console.log('Metrics calculated:', JSON.stringify(metrics, null, 2));
 
-    return {
+    const result = {
       answer,
       sources: sourceChunks,
       metrics: {
@@ -700,6 +824,16 @@ export async function query(
         cost: metrics.cost
       }
     };
+    
+    console.log('=== RAG Pipeline Query Complete ===');
+    console.log('Result summary:', {
+      answerLength: result.answer.length,
+      sourcesCount: result.sources.length,
+      totalTokens: result.metrics.tokens,
+      cost: result.metrics.cost
+    });
+    
+    return result;
 
   } catch (error) {
     // Handle OpenRAG SDK errors

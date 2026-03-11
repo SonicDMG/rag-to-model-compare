@@ -8,13 +8,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getDocument } from '@/lib/rag-comparison/document-storage';
-import { 
-  query as ragQuery,
-  RAGPipelineError 
+import {
+  query as ragQuery
 } from '@/lib/rag-comparison/rag-pipeline';
-import { 
-  query as directQuery,
-  DirectPipelineError 
+import {
+  query as directQuery
 } from '@/lib/rag-comparison/direct-pipeline';
 import { compare } from '@/lib/rag-comparison/metrics-calculator';
 import type { 
@@ -107,14 +105,23 @@ function sanitizeInput(input: string): string {
  * Response: QueryResponse with ComparisonResult
  */
 export async function POST(request: NextRequest): Promise<NextResponse<QueryResponse>> {
+  console.log('\n╔════════════════════════════════════════╗');
+  console.log('║     QUERY API ROUTE - START            ║');
+  console.log('╚════════════════════════════════════════╝');
+  console.log('Timestamp:', new Date().toISOString());
+  
   try {
     // Parse and validate request body
     const body = await request.json();
+    console.log('Request body:', JSON.stringify(body, null, 2));
     
     let validatedData;
     try {
       validatedData = QueryRequestSchema.parse(body);
+      console.log('Validation successful');
+      console.log('Validated data:', JSON.stringify(validatedData, null, 2));
     } catch (error) {
+      console.error('Validation error:', error);
       if (error instanceof z.ZodError) {
         const errorMessages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
         return NextResponse.json(
@@ -141,29 +148,43 @@ export async function POST(request: NextRequest): Promise<NextResponse<QueryResp
     const sanitizedDocumentId = sanitizeInput(documentId);
     const sanitizedQuery = sanitizeInput(query);
     const sanitizedModel = sanitizeInput(model);
+    
+    console.log('Sanitized inputs:', {
+      documentId: sanitizedDocumentId,
+      query: sanitizedQuery.substring(0, 100) + '...',
+      model: sanitizedModel,
+      temperature,
+      maxTokens,
+      topK
+    });
 
-    // Retrieve document from storage
+    // Retrieve document from storage (needed for Direct pipeline)
+    console.log('Retrieving document from storage...');
     const storedDoc = getDocument(sanitizedDocumentId);
     
     if (!storedDoc) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Document not found: ${sanitizedDocumentId}. Please upload the document first.`
-        },
-        { status: 404 }
-      );
+      console.warn('⚠️  Document not found in storage:', sanitizedDocumentId);
+      console.log('This may affect Direct pipeline, but RAG can still work if document was indexed.');
+    } else {
+      console.log('✅ Document found:', {
+        filename: storedDoc.metadata.filename,
+        hasFilterId: !!storedDoc.filterId,
+        filterId: storedDoc.filterId,
+        chunkCount: storedDoc.metadata.chunkCount,
+        contentLength: storedDoc.content.length
+      });
     }
 
     // Build RAG configuration
     const ragConfig: RAGConfig = {
-      chunkStrategy: storedDoc.metadata.strategy,
-      chunkSize: 512, // Use default or could be stored in metadata
+      chunkStrategy: storedDoc?.metadata.strategy || 'fixed',
+      chunkSize: 512,
       chunkOverlap: 50,
       topK,
       model: sanitizedModel,
       temperature,
     };
+    console.log('RAG config:', JSON.stringify(ragConfig, null, 2));
 
     // Build Direct configuration
     const directConfig: DirectConfig = {
@@ -171,56 +192,90 @@ export async function POST(request: NextRequest): Promise<NextResponse<QueryResp
       temperature,
       maxTokens,
     };
+    console.log('Direct config:', JSON.stringify(directConfig, null, 2));
 
     // Execute both pipelines in parallel
+    // Each pipeline handles its own errors independently
+    console.log('\n========================================');
+    console.log('⚡ EXECUTING PIPELINES IN PARALLEL');
+    console.log('========================================\n');
+    
     const [ragResult, directResult] = await Promise.allSettled([
+      // RAG pipeline - works independently, doesn't need stored document
       ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig),
-      directQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, directConfig),
+      // Direct pipeline - needs stored document content
+      storedDoc
+        ? directQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, directConfig)
+        : Promise.reject(new Error('Document not found in storage for Direct pipeline')),
     ]);
+    
+    console.log('\n========================================');
+    console.log('⚡ PIPELINE EXECUTION COMPLETE');
+    console.log('========================================');
+    console.log('🔵 RAG result status:', ragResult.status);
+    console.log('🟢 Direct result status:', directResult.status);
 
-    // Handle RAG pipeline errors
-    if (ragResult.status === 'rejected') {
-      const error = ragResult.reason;
-      console.error('RAG pipeline error:', error);
+    // Check if at least one pipeline succeeded
+    const ragSucceeded = ragResult.status === 'fulfilled';
+    const directSucceeded = directResult.status === 'fulfilled';
+    
+    console.log('🔵 RAG pipeline:', ragSucceeded ? '✅ Success' : '❌ Failed');
+    console.log('🟢 Direct pipeline:', directSucceeded ? '✅ Success' : '❌ Failed');
+
+    // If both failed, return error
+    if (!ragSucceeded && !directSucceeded) {
+      const ragError = ragResult.status === 'rejected' ? ragResult.reason : null;
+      const directError = directResult.status === 'rejected' ? directResult.reason : null;
+      
+      console.error('❌ Both pipelines failed');
+      console.error('RAG error:', ragError);
+      console.error('Direct error:', directError);
       
       return NextResponse.json(
         {
           success: false,
-          error: error instanceof RAGPipelineError 
-            ? `RAG query failed: ${error.message}`
-            : 'RAG query failed with unknown error'
+          error: 'Both RAG and Direct pipelines failed. Please check the logs for details.'
         },
         { status: 500 }
       );
     }
 
-    // Handle Direct pipeline errors
-    if (directResult.status === 'rejected') {
-      const error = directResult.reason;
-      console.error('Direct pipeline error:', error);
-      
-      return NextResponse.json(
-        {
-          success: false,
-          error: error instanceof DirectPipelineError
-            ? `Direct query failed: ${error.message}`
-            : 'Direct query failed with unknown error'
-        },
-        { status: 500 }
-      );
-    }
-
-    // Both pipelines succeeded, compare results
+    // At least one pipeline succeeded - proceed with comparison
+    // If one failed, we'll still compare what we have
+    console.log('Comparing results...');
     let comparisonResult: ComparisonResult;
     try {
-      comparisonResult = compare(ragResult.value, directResult.value);
+      // If RAG failed, create a placeholder result
+      const ragValue = ragSucceeded
+        ? ragResult.value
+        : {
+            answer: 'RAG pipeline failed',
+            sources: [],
+            metrics: { retrievalTime: 0, generationTime: 0, tokens: 0, cost: 0 }
+          };
+      
+      // If Direct failed, create a placeholder result
+      const directValue = directSucceeded
+        ? directResult.value
+        : {
+            answer: 'Direct pipeline failed',
+            metrics: { generationTime: 0, tokens: 0, cost: 0, contextWindowUsage: 0 }
+          };
+      
+      comparisonResult = compare(ragValue, directValue);
+      console.log('Comparison complete');
+      console.log('Comparison summary:', {
+        ragAnswerLength: comparisonResult.rag.answer.length,
+        directAnswerLength: comparisonResult.direct.answer.length,
+        recommendation: comparisonResult.summary.recommendation
+      });
     } catch (error) {
       console.error('Comparison error:', error);
       
       return NextResponse.json(
         {
           success: false,
-          error: error instanceof Error 
+          error: error instanceof Error
             ? `Comparison failed: ${error.message}`
             : 'Comparison failed with unknown error'
         },
@@ -229,6 +284,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<QueryResp
     }
 
     // Return successful comparison
+    console.log('\n========================================');
+    console.log('✅ COMPARISON SUCCESSFUL');
+    console.log('========================================');
+    console.log('Recommendation:', comparisonResult.summary.recommendation);
+    console.log('╔════════════════════════════════════════╗');
+    console.log('║     QUERY API ROUTE - END              ║');
+    console.log('╚════════════════════════════════════════╝\n');
+    
     return NextResponse.json(
       {
         success: true,

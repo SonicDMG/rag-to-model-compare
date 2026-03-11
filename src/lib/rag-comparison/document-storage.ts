@@ -19,6 +19,8 @@ export interface StoredDocument {
   content: string;
   /** Document metadata */
   metadata: DocumentMetadata;
+  /** Knowledge filter ID for RAG queries */
+  filterId?: string;
 }
 
 /**
@@ -29,11 +31,12 @@ const documentStore = new Map<string, StoredDocument>();
 
 /**
  * Stores a document in memory
- * 
+ *
  * @param id - Unique document identifier
  * @param content - Full document content
  * @param metadata - Document metadata
- * 
+ * @param filterId - Optional knowledge filter ID for RAG queries
+ *
  * @example
  * ```typescript
  * storeDocument('doc-123', content, {
@@ -44,13 +47,14 @@ const documentStore = new Map<string, StoredDocument>();
  *   chunkCount: 10,
  *   totalTokens: 500,
  *   strategy: 'fixed'
- * });
+ * }, 'filter-123');
  * ```
  */
 export function storeDocument(
   id: string,
   content: string,
-  metadata: DocumentMetadata
+  metadata: DocumentMetadata,
+  filterId?: string
 ): void {
   if (!id || typeof id !== 'string') {
     throw new Error('Document ID is required and must be a string');
@@ -81,7 +85,7 @@ export function storeDocument(
     }
   }
 
-  documentStore.set(id, { content, metadata });
+  documentStore.set(id, { content, metadata, filterId });
 }
 
 /**
