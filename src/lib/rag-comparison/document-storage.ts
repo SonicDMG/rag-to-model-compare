@@ -198,4 +198,25 @@ export function getAllDocumentIds(): string[] {
   return Array.from(documentStore.keys());
 }
 
+/**
+ * Debug function to log current storage state
+ *
+ * @example
+ * ```typescript
+ * debugStorage();
+ * ```
+ */
+export function debugStorage(): void {
+  console.log('[Storage Debug] Current document count:', documentStore.size);
+  console.log('[Storage Debug] Document IDs:', Array.from(documentStore.keys()));
+  for (const [id, doc] of documentStore.entries()) {
+    console.log(`[Storage Debug] ${id}:`, {
+      filename: doc.metadata.filename,
+      hasContent: doc.content.length > 0,
+      contentLength: doc.content.length,
+      filterId: doc.filterId
+    });
+  }
+}
+
 // Made with Bob

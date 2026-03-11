@@ -75,6 +75,107 @@ export interface PerformanceMetrics {
 }
 
 /**
+ * Timing breakdown for detailed metrics
+ */
+export interface TimingBreakdown {
+  /** Retrieval time in milliseconds (RAG only) */
+  retrievalTime?: number;
+  /** Retrieval time as percentage of total (RAG only) */
+  retrievalPercent?: number;
+  /** Generation time in milliseconds */
+  generationTime: number;
+  /** Generation time as percentage of total */
+  generationPercent: number;
+  /** Total time in milliseconds */
+  totalTime: number;
+}
+
+/**
+ * Token breakdown by component
+ */
+export interface TokenBreakdown {
+  /** System prompt tokens */
+  systemPrompt: number;
+  /** User query tokens */
+  query: number;
+  /** Context/document tokens */
+  context: number;
+  /** Per-source token breakdown (RAG only) */
+  perSource?: Array<{
+    /** Source chunk ID */
+    sourceId: string;
+    /** Tokens in this source */
+    tokens: number;
+  }>;
+  /** Output/completion tokens */
+  output: number;
+  /** Total input tokens (system + query + context) */
+  totalInput: number;
+  /** Total tokens (input + output) */
+  total: number;
+}
+
+/**
+ * Cost breakdown by component
+ */
+export interface CostBreakdown {
+  /** Input cost in USD */
+  inputCost: number;
+  /** Output cost in USD */
+  outputCost: number;
+  /** Embedding cost in USD (RAG only, estimated) */
+  embeddingCost?: number;
+  /** Total cost in USD */
+  totalCost: number;
+}
+
+/**
+ * Context window usage breakdown
+ */
+export interface ContextWindowBreakdown {
+  /** Total context window size in tokens */
+  contextWindowSize: number;
+  /** Tokens used */
+  tokensUsed: number;
+  /** Percentage of context window used */
+  percentageUsed: number;
+  /** Remaining tokens available */
+  tokensRemaining: number;
+}
+
+/**
+ * Metadata about the breakdown calculation
+ */
+export interface BreakdownMetadata {
+  /** Model used for the query */
+  model: string;
+  /** Timestamp of the calculation */
+  timestamp: Date;
+  /** Whether generation time is estimated (RAG only) */
+  generationTimeEstimated?: boolean;
+  /** Whether embedding cost is estimated */
+  embeddingCostEstimated?: boolean;
+  /** Additional notes or limitations */
+  notes?: string[];
+}
+
+/**
+ * Detailed metrics breakdown
+ */
+export interface DetailedMetricsBreakdown {
+  /** Timing breakdown */
+  timing: TimingBreakdown;
+  /** Token breakdown */
+  tokens: TokenBreakdown;
+  /** Cost breakdown */
+  cost: CostBreakdown;
+  /** Context window breakdown */
+  contextWindow: ContextWindowBreakdown;
+  /** Metadata about the breakdown */
+  metadata: BreakdownMetadata;
+}
+
+/**
  * Result from RAG-based query processing
  */
 export interface RAGResult {
@@ -92,6 +193,8 @@ export interface RAGResult {
     tokens: number;
     /** Total cost in USD */
     cost: number;
+    /** Detailed metrics breakdown (optional) */
+    breakdown?: DetailedMetricsBreakdown;
   };
 }
 
@@ -111,6 +214,8 @@ export interface DirectResult {
     cost: number;
     /** Percentage of context window used */
     contextWindowUsage: number;
+    /** Detailed metrics breakdown (optional) */
+    breakdown?: DetailedMetricsBreakdown;
   };
 }
 

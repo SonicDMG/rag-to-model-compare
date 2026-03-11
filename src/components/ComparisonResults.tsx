@@ -163,7 +163,11 @@ export function ComparisonResults({ result }: ComparisonResultsProps) {
       </div>
 
       {/* Metrics Display */}
-      <MetricsDisplay metrics={result.comparison} />
+      <MetricsDisplay
+        metrics={result.comparison}
+        ragResult={result.rag}
+        directResult={result.direct}
+      />
     </div>
   );
 }

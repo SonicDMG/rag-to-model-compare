@@ -1,10 +1,13 @@
 'use client';
 
-import { ComparisonMetrics } from '@/types/rag-comparison';
+import { ComparisonMetrics, RAGResult, DirectResult } from '@/types/rag-comparison';
 import { formatCost, formatTokens, formatTime, formatPercentage } from '@/lib/utils/formatters';
+import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 
 interface MetricsDisplayProps {
   metrics: ComparisonMetrics;
+  ragResult?: RAGResult;
+  directResult?: DirectResult;
 }
 
 interface MetricCardProps {
@@ -113,7 +116,7 @@ function ContextWindowBar({
   );
 }
 
-export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
+export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisplayProps) {
   const ragContextWins = metrics.contextWindow.ragUsage < metrics.contextWindow.directUsage;
   const directContextWins = metrics.contextWindow.directUsage < metrics.contextWindow.ragUsage;
   const contextTie = Math.abs(metrics.contextWindow.difference) < 5;
@@ -205,6 +208,21 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
           </div>
         )}
       </div>
+
+      {/* Detailed Breakdown Panels */}
+      {ragResult?.metrics.breakdown && (
+        <MetricsBreakdownPanel
+          breakdown={ragResult.metrics.breakdown}
+          pipelineType="rag"
+        />
+      )}
+
+      {directResult?.metrics.breakdown && (
+        <MetricsBreakdownPanel
+          breakdown={directResult.metrics.breakdown}
+          pipelineType="direct"
+        />
+      )}
     </div>
   );
 }

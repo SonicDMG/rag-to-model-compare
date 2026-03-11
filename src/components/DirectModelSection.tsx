@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { QueryForm } from '@/components/QueryForm';
 import { DirectResult } from '@/types/rag-comparison';
 import { ExpandableText } from './ExpandableText';
+import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 
 interface DirectModelSectionProps {
   documentId: string;
@@ -44,7 +45,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
 
       const result = await response.json();
       // Extract only Direct result from comparison
-      setDirectResult(result.direct);
+      setDirectResult(result.data.direct);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setDirectResult(null);
@@ -56,7 +57,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border-2 border-blue-200">
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border-2 border-blue-200 h-[140px] flex flex-col justify-center">
         <h2 className="text-2xl font-bold text-blue-900 mb-2">
           Direct Context Approach
         </h2>
@@ -208,6 +209,14 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
               </div>
             </div>
           </div>
+
+          {/* Detailed Metrics Breakdown */}
+          {directResult.metrics.breakdown && (
+            <MetricsBreakdownPanel
+              breakdown={directResult.metrics.breakdown}
+              pipelineType="direct"
+            />
+          )}
         </section>
       )}
 

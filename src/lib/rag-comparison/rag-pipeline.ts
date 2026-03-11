@@ -17,6 +17,12 @@ import {
 import { calculateCost, getModelPricing } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import { getDocument } from '@/lib/rag-comparison/document-storage';
+import {
+  calculateTimingBreakdown,
+  calculateTokenBreakdown,
+  calculateCostBreakdown,
+  calculateContextWindowBreakdown
+} from '@/lib/rag-comparison/metrics-calculator';
 import type {
   Chunk,
   DocumentMetadata,
@@ -742,6 +748,12 @@ export async function query(
     // Get OpenRAG client
     const client = getOpenRAGClient();
     console.log('OpenRAG client obtained');
+    console.log('[DEBUG] Client config:', {
+      hasApiKey: !!process.env.OPENRAG_API_KEY,
+      hasUrl: !!process.env.OPENRAG_URL,
+      url: process.env.OPENRAG_URL,
+      apiKeyLength: process.env.OPENRAG_API_KEY?.length
+    });
 
     // Execute RAG query using OpenRAG SDK chat method
     // The SDK automatically handles retrieval and generation
@@ -795,14 +807,26 @@ export async function query(
     console.log('Source chunks created:', sourceChunks.length);
 
     // Calculate token usage
-    // Input tokens = retrieved chunks + user query
+    // Input tokens = system prompt + query + retrieved chunks
+    const systemPromptTokens = estimateTokens(RAG_SYSTEM_PROMPT);
+    const queryTokens = estimateTokens(sanitizedQuery);
     const retrievedContent = sdkSources.map(s => s.text).join('\n\n');
-    const inputTokens = estimateTokens(retrievedContent) + estimateTokens(sanitizedQuery);
+    const contextTokens = estimateTokens(retrievedContent);
+    const inputTokens = systemPromptTokens + queryTokens + contextTokens;
     console.log('Input tokens:', inputTokens);
+    console.log('  - System prompt:', systemPromptTokens);
+    console.log('  - Query:', queryTokens);
+    console.log('  - Context:', contextTokens);
     
     // Output tokens = generated response
     const outputTokens = estimateTokens(answer);
     console.log('Output tokens:', outputTokens);
+
+    // Calculate per-source token breakdown
+    const perSourceTokens = sourceChunks.map(chunk => ({
+      sourceId: chunk.id,
+      tokens: chunk.tokenCount
+    }));
 
     // Calculate metrics
     const metrics = calculateMetrics(
@@ -814,6 +838,43 @@ export async function query(
     );
     console.log('Metrics calculated:', JSON.stringify(metrics, null, 2));
 
+    // Calculate detailed breakdown
+    const timingBreakdown = calculateTimingBreakdown(retrievalTime, generationTime);
+    const tokenBreakdown = calculateTokenBreakdown(
+      systemPromptTokens,
+      queryTokens,
+      contextTokens,
+      outputTokens,
+      perSourceTokens
+    );
+    const costBreakdown = calculateCostBreakdown(
+      config.model,
+      inputTokens,
+      outputTokens,
+      true // Include embedding cost estimate for RAG
+    );
+    const contextWindowBreakdown = calculateContextWindowBreakdown(
+      config.model,
+      inputTokens + outputTokens
+    );
+
+    const breakdown = {
+      timing: timingBreakdown,
+      tokens: tokenBreakdown,
+      cost: costBreakdown,
+      contextWindow: contextWindowBreakdown,
+      metadata: {
+        model: config.model,
+        timestamp: new Date(),
+        generationTimeEstimated: true,
+        embeddingCostEstimated: true,
+        notes: [
+          'Generation time is estimated as a portion of total time',
+          'Embedding costs are estimated and may vary by provider'
+        ]
+      }
+    };
+
     const result = {
       answer,
       sources: sourceChunks,
@@ -821,7 +882,8 @@ export async function query(
         retrievalTime: metrics.retrievalTime,
         generationTime: metrics.generationTime,
         tokens: metrics.totalTokens,
-        cost: metrics.cost
+        cost: metrics.cost,
+        breakdown
       }
     };
     

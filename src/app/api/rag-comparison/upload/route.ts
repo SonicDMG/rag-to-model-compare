@@ -20,7 +20,7 @@ import {
 import {
   loadDocument as directLoadDocument
 } from '@/lib/rag-comparison/direct-pipeline';
-import { storeDocument } from '@/lib/rag-comparison/document-storage';
+import { storeDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
 import type { DocumentMetadata } from '@/types/rag-comparison';
 
 /**
@@ -315,6 +315,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
           const contentToStore = parsedContent || '';
           storeDocument(documentId, contentToStore, ragStorageMetadata, filterIdForStorage);
           console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
+          console.log('[DEBUG] Storage state after RAG storage:');
+          debugStorage();
         } catch (storageError) {
           console.error('[RAG] ❌ Failed to store document:', storageError);
           // Don't fail RAG processing if storage fails

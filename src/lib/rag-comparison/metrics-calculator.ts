@@ -1,6 +1,6 @@
 /**
  * Metrics calculator for comparing RAG and Direct query approaches
- * 
+ *
  * This module provides comprehensive comparison functionality between RAG-based
  * and direct model query approaches, analyzing performance across multiple dimensions
  * including speed, token usage, cost, context window efficiency, and quality.
@@ -13,6 +13,7 @@ import type {
   ComparisonMetrics,
 } from '@/types/rag-comparison';
 import { formatCost, formatTime, formatTokens, formatPercentage } from '@/lib/utils/formatters';
+import { getModelPricing, getContextWindowSize } from '@/lib/constants/models';
 
 /**
  * Tie thresholds for determining winners
@@ -661,6 +662,180 @@ export function compare(
       insights,
       timestamp: new Date(),
     },
+  };
+}
+
+/**
+ * Calculate timing breakdown with percentages
+ *
+ * @param retrievalTime - Time taken for retrieval in milliseconds (optional, RAG only)
+ * @param generationTime - Time taken for generation in milliseconds
+ * @returns Timing breakdown with percentages
+ *
+ * @example
+ * ```typescript
+ * // For RAG
+ * const timing = calculateTimingBreakdown(500, 1500);
+ * console.log(timing.retrievalPercent); // 25
+ * console.log(timing.generationPercent); // 75
+ *
+ * // For Direct
+ * const timing = calculateTimingBreakdown(undefined, 1500);
+ * console.log(timing.generationPercent); // 100
+ * ```
+ */
+export function calculateTimingBreakdown(
+  retrievalTime: number | undefined,
+  generationTime: number
+): import('@/types/rag-comparison').TimingBreakdown {
+  const totalTime = (retrievalTime || 0) + generationTime;
+  
+  // Avoid division by zero
+  if (totalTime === 0) {
+    return {
+      retrievalTime,
+      retrievalPercent: retrievalTime ? 0 : undefined,
+      generationTime,
+      generationPercent: 0,
+      totalTime: 0,
+    };
+  }
+  
+  return {
+    retrievalTime,
+    retrievalPercent: retrievalTime ? (retrievalTime / totalTime) * 100 : undefined,
+    generationTime,
+    generationPercent: (generationTime / totalTime) * 100,
+    totalTime,
+  };
+}
+
+/**
+ * Calculate token breakdown by component
+ *
+ * @param systemPromptTokens - Tokens in system prompt
+ * @param queryTokens - Tokens in user query
+ * @param contextTokens - Tokens in context/document
+ * @param outputTokens - Tokens in output/completion
+ * @param perSourceTokens - Per-source token breakdown (optional, RAG only)
+ * @returns Token breakdown with totals
+ *
+ * @example
+ * ```typescript
+ * const tokens = calculateTokenBreakdown(100, 50, 2000, 300);
+ * console.log(tokens.totalInput); // 2150
+ * console.log(tokens.total); // 2450
+ * ```
+ */
+export function calculateTokenBreakdown(
+  systemPromptTokens: number,
+  queryTokens: number,
+  contextTokens: number,
+  outputTokens: number,
+  perSourceTokens?: Array<{ sourceId: string; tokens: number }>
+): import('@/types/rag-comparison').TokenBreakdown {
+  const totalInput = systemPromptTokens + queryTokens + contextTokens;
+  const total = totalInput + outputTokens;
+  
+  return {
+    systemPrompt: systemPromptTokens,
+    query: queryTokens,
+    context: contextTokens,
+    perSource: perSourceTokens,
+    output: outputTokens,
+    totalInput,
+    total,
+  };
+}
+
+/**
+ * Calculate cost breakdown by component
+ *
+ * @param modelId - Model identifier for pricing lookup
+ * @param inputTokens - Number of input tokens
+ * @param outputTokens - Number of output tokens
+ * @param includeEmbedding - Whether to include embedding cost estimate (RAG only)
+ * @returns Cost breakdown with component costs
+ *
+ * @example
+ * ```typescript
+ * const cost = calculateCostBreakdown('gpt-4-turbo', 2000, 500, false);
+ * console.log(cost.inputCost); // 0.02
+ * console.log(cost.outputCost); // 0.015
+ * console.log(cost.totalCost); // 0.035
+ * ```
+ */
+export function calculateCostBreakdown(
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  includeEmbedding: boolean = false
+): import('@/types/rag-comparison').CostBreakdown {
+  const pricing = getModelPricing(modelId);
+  
+  if (!pricing) {
+    return {
+      inputCost: 0,
+      outputCost: 0,
+      embeddingCost: includeEmbedding ? 0 : undefined,
+      totalCost: 0,
+    };
+  }
+  
+  const inputCost = (inputTokens / 1000) * pricing.input;
+  const outputCost = (outputTokens / 1000) * pricing.output;
+  
+  // Embedding cost is a placeholder estimate
+  // Actual embedding costs vary by provider and model
+  const embeddingCost = includeEmbedding ? 0.0001 : undefined;
+  
+  const totalCost = inputCost + outputCost + (embeddingCost || 0);
+  
+  return {
+    inputCost,
+    outputCost,
+    embeddingCost,
+    totalCost,
+  };
+}
+
+/**
+ * Calculate context window usage breakdown
+ *
+ * @param modelId - Model identifier for context window size lookup
+ * @param tokensUsed - Number of tokens used
+ * @returns Context window breakdown with usage percentage
+ *
+ * @example
+ * ```typescript
+ * const context = calculateContextWindowBreakdown('gpt-4-turbo', 50000);
+ * console.log(context.percentageUsed); // 39.06 (50000/128000)
+ * console.log(context.tokensRemaining); // 78000
+ * ```
+ */
+export function calculateContextWindowBreakdown(
+  modelId: string,
+  tokensUsed: number
+): import('@/types/rag-comparison').ContextWindowBreakdown {
+  const contextWindowSize = getContextWindowSize(modelId);
+  
+  if (contextWindowSize === 0) {
+    return {
+      contextWindowSize: 0,
+      tokensUsed,
+      percentageUsed: 0,
+      tokensRemaining: 0,
+    };
+  }
+  
+  const percentageUsed = (tokensUsed / contextWindowSize) * 100;
+  const tokensRemaining = Math.max(0, contextWindowSize - tokensUsed);
+  
+  return {
+    contextWindowSize,
+    tokensUsed,
+    percentageUsed: Math.min(percentageUsed, 100), // Cap at 100%
+    tokensRemaining,
   };
 }
 

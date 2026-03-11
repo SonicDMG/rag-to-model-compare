@@ -22,6 +22,12 @@ import {
   getModelPricing
 } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
+import {
+  calculateTimingBreakdown,
+  calculateTokenBreakdown,
+  calculateCostBreakdown,
+  calculateContextWindowBreakdown
+} from '@/lib/rag-comparison/metrics-calculator';
 import type {
   DocumentMetadata,
   DirectConfig,
@@ -764,12 +770,13 @@ Please provide a clear and accurate answer based on the document above.`;
     // Extract answer from SDK response
     const answer = responseData.response || '';
 
-    // Calculate token usage
+    // Calculate token usage breakdown
     // Input tokens = system prompt + full document + user query
     const systemPrompt = buildSystemPrompt();
-    const inputTokens = estimateTokens(systemPrompt) + 
-                       estimateTokens(sanitizedContent) + 
-                       estimateTokens(sanitizedQuery);
+    const systemPromptTokens = estimateTokens(systemPrompt);
+    const queryTokens = estimateTokens(sanitizedQuery);
+    const documentTokens = estimateTokens(sanitizedContent);
+    const inputTokens = systemPromptTokens + documentTokens + queryTokens;
     
     // Output tokens = generated response
     const outputTokens = estimateTokens(answer);
@@ -786,13 +793,47 @@ Please provide a clear and accurate answer based on the document above.`;
       config.model
     );
 
+    // Calculate detailed breakdown
+    const timingBreakdown = calculateTimingBreakdown(undefined, generationTime);
+    const tokenBreakdown = calculateTokenBreakdown(
+      systemPromptTokens,
+      queryTokens,
+      documentTokens,
+      outputTokens
+    );
+    const costBreakdown = calculateCostBreakdown(
+      config.model,
+      inputTokens,
+      outputTokens,
+      false // No embedding cost for direct queries
+    );
+    const contextWindowBreakdown = calculateContextWindowBreakdown(
+      config.model,
+      inputTokens + outputTokens
+    );
+
+    const breakdown = {
+      timing: timingBreakdown,
+      tokens: tokenBreakdown,
+      cost: costBreakdown,
+      contextWindow: contextWindowBreakdown,
+      metadata: {
+        model: config.model,
+        timestamp: new Date(),
+        notes: [
+          'Direct query uses full document context without retrieval'
+        ]
+      }
+    };
+
     return {
       answer,
       metrics: {
         generationTime: metrics.generationTime,
         tokens: metrics.totalTokens,
         cost: metrics.cost,
-        contextWindowUsage: metrics.contextWindowUsage
+        contextWindowUsage: metrics.contextWindowUsage,
+        breakdown
       }
     };
 

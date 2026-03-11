@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { QueryForm } from '@/components/QueryForm';
 import { RAGResult } from '@/types/rag-comparison';
 import { ExpandableText } from './ExpandableText';
+import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 
 interface RagSectionProps {
   documentId: string;
@@ -44,7 +45,7 @@ export function RagSection({ documentId }: RagSectionProps) {
 
       const result = await response.json();
       // Extract only RAG result from comparison
-      setRagResult(result.rag);
+      setRagResult(result.data.rag);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setRagResult(null);
@@ -56,7 +57,7 @@ export function RagSection({ documentId }: RagSectionProps) {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 border-2 border-green-200">
+      <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 border-2 border-green-200 h-[140px] flex flex-col justify-center">
         <h2 className="text-2xl font-bold text-green-900 mb-2">
           RAG Approach
         </h2>
@@ -216,6 +217,14 @@ export function RagSection({ documentId }: RagSectionProps) {
               </div>
             </div>
           </div>
+
+          {/* Detailed Metrics Breakdown */}
+          {ragResult.metrics.breakdown && (
+            <MetricsBreakdownPanel
+              breakdown={ragResult.metrics.breakdown}
+              pipelineType="rag"
+            />
+          )}
         </section>
       )}
 

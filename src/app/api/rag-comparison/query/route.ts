@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getDocument } from '@/lib/rag-comparison/document-storage';
+import { getDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
 import {
   query as ragQuery
 } from '@/lib/rag-comparison/rag-pipeline';
@@ -160,6 +160,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<QueryResp
 
     // Retrieve document from storage (needed for Direct pipeline)
     console.log('Retrieving document from storage...');
+    console.log('[DEBUG] Storage state before retrieval:');
+    debugStorage();
+    console.log('[DEBUG] Looking for document ID:', sanitizedDocumentId);
     const storedDoc = getDocument(sanitizedDocumentId);
     
     if (!storedDoc) {
