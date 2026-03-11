@@ -2,6 +2,7 @@
 
 import { ComparisonResult } from '@/types/rag-comparison';
 import { MetricsDisplay } from './MetricsDisplay';
+import { ExpandableText } from './ExpandableText';
 
 interface ComparisonResultsProps {
   result: ComparisonResult;
@@ -31,9 +32,7 @@ function AnswerCard({
       <h3 className="text-lg font-bold text-gray-900 mb-4">{title}</h3>
       
       <div className="prose prose-sm max-w-none">
-        <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-          {answer}
-        </div>
+        <ExpandableText text={answer} characterLimit={400} />
       </div>
 
       {sources && sources.length > 0 && (

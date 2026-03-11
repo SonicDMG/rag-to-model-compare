@@ -3,12 +3,12 @@
 import { useState } from 'react';
 
 interface QueryFormProps {
-  onSubmit: (query: string, temperature?: number, maxTokens?: number) => Promise<void>;
+  documentId: string | null;
+  onSubmit: (query: string, documentId: string, temperature?: number, maxTokens?: number) => Promise<void>;
   isLoading?: boolean;
-  disabled?: boolean;
 }
 
-export function QueryForm({ onSubmit, isLoading = false, disabled = false }: QueryFormProps) {
+export function QueryForm({ documentId, onSubmit, isLoading = false }: QueryFormProps) {
   const [query, setQuery] = useState('');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(1000);
@@ -17,15 +17,17 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!query.trim()) return;
+    if (!query.trim() || !documentId) return;
 
-    await onSubmit(query.trim(), temperature, maxTokens);
+    await onSubmit(query.trim(), documentId, temperature, maxTokens);
   };
 
+  const isDisabled = !documentId || isLoading;
+
   return (
-    <div className="w-full max-w-4xl">
+    <div className="w-full max-w-4xl mx-auto">
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-4">Query Document</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-900">Query Document</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -37,9 +39,9 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about your document..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-400"
               rows={4}
-              disabled={isLoading || disabled}
+              disabled={isDisabled}
               required
               aria-label="Query input"
             />
@@ -53,7 +55,7 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-            disabled={isLoading || disabled}
+            disabled={isDisabled}
           >
             <svg
               className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
@@ -82,7 +84,7 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
                   max={1}
                   step={0.1}
                   className="w-full"
-                  disabled={isLoading || disabled}
+                  disabled={isDisabled}
                   aria-label="Temperature slider"
                 />
                 <p className="mt-1 text-xs text-gray-500">
@@ -102,8 +104,8 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
                   min={100}
                   max={4000}
                   step={100}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isLoading || disabled}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                  disabled={isDisabled}
                   aria-label="Max tokens input"
                 />
                 <p className="mt-1 text-xs text-gray-500">
@@ -116,7 +118,7 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || disabled || !query.trim()}
+            disabled={isDisabled || !query.trim()}
             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
           >
             {isLoading ? (
@@ -127,7 +129,7 @@ export function QueryForm({ onSubmit, isLoading = false, disabled = false }: Que
                 </svg>
                 Processing Query...
               </>
-            ) : disabled ? (
+            ) : !documentId ? (
               'Upload a document first'
             ) : (
               'Compare Approaches'

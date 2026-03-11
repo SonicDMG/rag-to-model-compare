@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { QueryForm } from '@/components/QueryForm';
 import { DirectResult } from '@/types/rag-comparison';
+import { ExpandableText } from './ExpandableText';
 
 interface DirectModelSectionProps {
   documentId: string;
@@ -13,8 +14,8 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
   const [directResult, setDirectResult] = useState<DirectResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleQuery = async (query: string, temperature?: number, maxTokens?: number) => {
-    if (!documentId) {
+  const handleQuery = async (query: string, docId: string, temperature?: number, maxTokens?: number) => {
+    if (!docId) {
       setError('Please upload a document first');
       return;
     }
@@ -30,7 +31,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
         },
         body: JSON.stringify({
           query,
-          documentId,
+          documentId: docId,
           temperature,
           maxTokens,
         }),
@@ -67,9 +68,9 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
       {/* Query Section */}
       <section>
         <QueryForm
+          documentId={documentId}
           onSubmit={handleQuery}
           isLoading={isQuerying}
-          disabled={!documentId}
         />
       </section>
 
@@ -139,9 +140,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
             <h3 className="text-xl font-bold text-gray-900 mb-4">Answer</h3>
             
             <div className="prose prose-sm max-w-none">
-              <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                {directResult.answer}
-              </div>
+              <ExpandableText text={directResult.answer} characterLimit={400} />
             </div>
 
             {/* Context Window Info */}
@@ -174,7 +173,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Performance Metrics</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Generation Time */}
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <h4 className="text-sm font-medium text-gray-600 mb-2">Generation Time</h4>
@@ -198,7 +197,7 @@ export function DirectModelSection({ documentId }: DirectModelSectionProps) {
               </div>
 
               {/* Cost */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 md:col-span-2">
                 <h4 className="text-sm font-medium text-gray-600 mb-2">Cost</h4>
                 <p className="text-2xl font-bold text-blue-700">
                   ${directResult.metrics.cost.toFixed(4)}
