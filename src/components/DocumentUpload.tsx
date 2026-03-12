@@ -185,7 +185,11 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   };
 
   // Upload a single file and return the result
-  const uploadSingleFile = async (file: File, index: number): Promise<any> => {
+  const uploadSingleFile = async (
+    file: File,
+    index: number,
+    sharedDocumentId?: string
+  ): Promise<any> => {
     // Mark as processing
     setFileStatuses(prev => {
       const updated = [...prev];
@@ -196,6 +200,11 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     const formData = new FormData();
     formData.append('files', file);  // Single file
     formData.append('model', model);
+    
+    // If this is part of a multi-file upload, include the shared document ID
+    if (sharedDocumentId) {
+      formData.append('sharedDocumentId', sharedDocumentId);
+    }
 
     const response = await fetch('/api/rag-comparison/upload', {
       method: 'POST',
@@ -275,38 +284,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     });
   };
 
-  // Upload all files in a single request for multi-file uploads
-  const uploadAllFiles = async (files: File[]) => {
-    // Mark all files as processing
-    files.forEach((_, index) => {
-      setFileStatuses(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], status: 'processing' };
-        return updated;
-      });
-    });
-
-    const formData = new FormData();
-    
-    // Append all files to the same FormData
-    files.forEach(file => {
-      formData.append('files', file);
-    });
-    formData.append('model', model);
-
-    const response = await fetch('/api/rag-comparison/upload', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result;
-  };
-
   // Upload files in parallel with concurrency limit
   const uploadFilesInParallel = async (files: File[], concurrency: number = 4) => {
     const results: any[] = [];
@@ -316,99 +293,71 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     let firstSuccessfulDocumentId: string | null = null;
     let firstSuccessfulResult: any = null;
 
-    // For multi-file uploads, send all files in a single request
-    if (files.length > 1) {
-      try {
-        const result = await uploadAllFiles(files);
-        
-        // Handle multi-file response
-        if ('results' in result && Array.isArray(result.results)) {
-          results.push(...result.results);
+    // For multi-file uploads, generate a shared document ID for Direct pipeline
+    const sharedDocumentId = files.length > 1
+      ? `batch-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      : undefined;
+
+    // Process files in batches of 'concurrency'
+    for (let i = 0; i < files.length; i += concurrency) {
+      const batch = files.slice(i, i + concurrency);
+
+      // Upload batch in parallel, passing shared document ID for multi-file uploads
+      const batchPromises = batch.map((file, batchIndex) =>
+        uploadSingleFile(file, i + batchIndex, sharedDocumentId)
+      );
+
+      const batchResults = await Promise.allSettled(batchPromises);
+
+      // Process results
+      batchResults.forEach((result, batchIndex) => {
+        const fileIndex = i + batchIndex;
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+          updateFileStatus(fileIndex, 'success', result.value);
           
-          // Update file statuses based on results
-          result.results.forEach((fileResult: any, index: number) => {
-            const ragSuccess = fileResult.rag?.status === 'success';
-            const directSuccess = fileResult.direct?.status === 'success';
-            
-            if (ragSuccess && directSuccess) {
-              successCount++;
-              updateFileStatus(index, 'success', fileResult);
-            } else if (ragSuccess || directSuccess) {
-              partialCount++;
-              updateFileStatus(index, 'partial', fileResult);
-            } else {
-              errorCount++;
-              updateFileStatus(index, 'error', fileResult);
+          // Count success types
+          const ragSuccess = result.value.rag?.status === 'success';
+          const directSuccess = result.value.direct?.status === 'success';
+          
+          if (ragSuccess && directSuccess) {
+            successCount++;
+            // Store first successful upload for callbacks
+            if (!firstSuccessfulDocumentId) {
+              firstSuccessfulDocumentId = result.value.documentId;
+              firstSuccessfulResult = result.value;
             }
-            
-            // Store the shared documentId from the first result
-            if (!firstSuccessfulDocumentId && fileResult.documentId) {
-              firstSuccessfulDocumentId = fileResult.documentId;
-              firstSuccessfulResult = fileResult;
-            }
-          });
-        }
-      } catch (error) {
-        // Mark all files as error
-        files.forEach((_, index) => {
-          updateFileStatus(index, 'error', {
-            error: error instanceof Error ? error.message : 'Upload failed'
-          });
-          errorCount++;
-        });
-      }
-    } else {
-      // Single file upload - use original logic
-      // Process files in batches of 'concurrency'
-      for (let i = 0; i < files.length; i += concurrency) {
-        const batch = files.slice(i, i + concurrency);
-
-        // Upload batch in parallel
-        const batchPromises = batch.map((file, batchIndex) =>
-          uploadSingleFile(file, i + batchIndex)
-        );
-
-        const batchResults = await Promise.allSettled(batchPromises);
-
-        // Process results
-        batchResults.forEach((result, batchIndex) => {
-          const fileIndex = i + batchIndex;
-          if (result.status === 'fulfilled') {
-            results.push(result.value);
-            updateFileStatus(fileIndex, 'success', result.value);
-            
-            // Count success types
-            const ragSuccess = result.value.rag?.status === 'success';
-            const directSuccess = result.value.direct?.status === 'success';
-            
-            if (ragSuccess && directSuccess) {
-              successCount++;
-              // Store first successful upload for callbacks
-              if (!firstSuccessfulDocumentId) {
-                firstSuccessfulDocumentId = result.value.documentId;
-                firstSuccessfulResult = result.value;
-              }
-            } else if (ragSuccess || directSuccess) {
-              partialCount++;
-              // Store first partial success for callbacks if no full success yet
-              if (!firstSuccessfulDocumentId) {
-                firstSuccessfulDocumentId = result.value.documentId;
-                firstSuccessfulResult = result.value;
-              }
-            } else {
-              errorCount++;
+          } else if (ragSuccess || directSuccess) {
+            partialCount++;
+            // Store first partial success for callbacks if no full success yet
+            if (!firstSuccessfulDocumentId) {
+              firstSuccessfulDocumentId = result.value.documentId;
+              firstSuccessfulResult = result.value;
             }
           } else {
             errorCount++;
-            updateFileStatus(fileIndex, 'error', { error: result.reason.message });
           }
-        });
-      }
+        } else {
+          errorCount++;
+          updateFileStatus(fileIndex, 'error', { error: result.reason.message });
+        }
+      });
     }
 
     // Aggregate results for multi-file uploads
     let aggregatedResult = null;
     if (results.length > 0) {
+      // Combine processed text from all files with separators
+      const ragProcessedTexts = results
+        .filter(r => r.rag?.processedText)
+        .map(r => `=== ${r.filename} ===\n${r.rag?.processedText}`)
+        .join('\n\n');
+      
+      const directProcessedTexts = results
+        .filter(r => r.direct?.processedText)
+        .map(r => `=== ${r.filename} ===\n${r.direct?.processedText}`)
+        .join('\n\n');
+
       aggregatedResult = {
         documentId: firstSuccessfulDocumentId,
         filename: `${files.length} files`,
@@ -419,8 +368,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           chunkCount: results.reduce((sum, r) => sum + (r.rag?.chunkCount || 0), 0),
           tokenCount: results.reduce((sum, r) => sum + (r.rag?.tokenCount || 0), 0),
           indexTime: results.reduce((sum, r) => sum + (r.rag?.indexTime || 0), 0),
-          // processedText not available in multi-file uploads from backend
-          processedText: undefined,
+          processedText: ragProcessedTexts || undefined,
           error: results.filter(r => r.rag?.error).map(r => r.rag?.error).join('; ') || undefined
         },
         direct: {
@@ -429,8 +377,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           loadTime: results.reduce((sum, r) => sum + (r.direct?.loadTime || 0), 0),
           withinLimit: results.every(r => r.direct?.withinLimit !== false),
           warnings: results.flatMap(r => r.direct?.warnings || []),
-          // processedText not available in multi-file uploads from backend
-          processedText: undefined,
+          processedText: directProcessedTexts || undefined,
           error: results.filter(r => r.direct?.error).map(r => r.direct?.error).join('; ') || undefined
         }
       };

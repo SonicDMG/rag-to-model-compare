@@ -391,6 +391,8 @@ export interface FileUploadResult {
     tokenCount?: number;
     /** Time taken to index (ms) */
     indexTime?: number;
+    /** Processed text content */
+    processedText?: string;
     /** Error message if failed */
     error?: string;
   };
@@ -406,6 +408,8 @@ export interface FileUploadResult {
     withinLimit?: boolean;
     /** Warning messages */
     warnings?: string[];
+    /** Processed text content */
+    processedText?: string;
     /** Error message if failed */
     error?: string;
   };

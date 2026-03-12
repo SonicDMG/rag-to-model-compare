@@ -304,6 +304,7 @@ async function processSingleFile(
       chunkCount: ragResult.chunkCount,
       tokenCount: ragResult.tokenCount,
       indexTime: ragResult.indexTime,
+      processedText: parsedContent || undefined,
       error: ragResult.error
     };
 
@@ -397,6 +398,7 @@ async function processSingleFile(
       loadTime: directResult.loadTime,
       withinLimit: directResult.withinLimit,
       warnings: directResult.warnings,
+      processedText: parsedContent || undefined,
       error: directResult.error
     };
 
@@ -540,8 +542,19 @@ export async function POST(
         );
       }
 
-      // Generate unique document ID
-      const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      // Check if this is part of a multi-file upload (shared document ID provided)
+      const sharedDocumentId = formData.get('sharedDocumentId') as string | null;
+      const isPartOfBatch = !!sharedDocumentId;
+      
+      // Generate unique document ID for RAG, or use provided shared ID
+      const ragDocumentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const directDocumentId = sharedDocumentId || ragDocumentId;
+      
+      // Extract folder metadata if this is part of a batch
+      const folderMetadata = isPartOfBatch ? extractFolderMetadata(file, sharedDocumentId) : undefined;
+      
+      // Use the appropriate document ID based on whether this is part of a batch
+      const documentId = ragDocumentId;
 
       // Initialize response structure
       const response: UploadResponse = {
@@ -734,14 +747,17 @@ export async function POST(
           uploadedAt: new Date(),
           chunkCount: 0, // Direct doesn't use chunks
           totalTokens: 0, // Will be calculated by loadDocument
-          strategy: 'fixed' // Not used by Direct
+          strategy: 'fixed', // Not used by Direct
+          folderContext: folderMetadata
         };
 
         // Load document for Direct pipeline (validates and stores)
         const directResult = await directLoadDocument(
           content,
-          documentId,
-          directMetadata
+          directDocumentId,
+          directMetadata,
+          isPartOfBatch,
+          file.name
         );
 
         // Update response with Direct results
@@ -766,47 +782,51 @@ export async function POST(
           console.error(`[Direct] ❌ Processing failed: ${directResult.error}`);
         }
 
-        // Direct pipeline doesn't need to store separately - RAG already stored with filter ID
-        // The stored document contains both the content (for Direct) and filter ID (for RAG)
-        // If RAG failed but Direct succeeded, we need to update the storage with Direct's content
-        if (directSuccess && !ragSuccess) {
-          try {
-            const storageMetadata: DocumentMetadata = {
-              filename: file.name,
-              size: file.size,
-              mimeType: file.type || 'text/plain',
-              uploadedAt: new Date(),
-              chunkCount: 0,
-              totalTokens: directResult.tokenCount,
-              strategy: 'fixed'
-            };
-
-            // Store document with Direct content (no filter ID since RAG didn't succeed)
-            storeDocument(documentId, content, storageMetadata);
-            console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
-          } catch (error) {
-            console.error('[Direct] ❌ Failed to store document:', error);
-            // Don't fail the entire request if storage fails
-          }
-        } else if (directSuccess && ragSuccess) {
-          // Both succeeded - RAG already stored the document with filter ID
-          // We need to update it with Direct's parsed content if RAG stored empty content
-          try {
-            const existingDoc = getDocument(documentId);
-            if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
-              // Update with Direct's parsed content while preserving filter ID
-              const updatedMetadata: DocumentMetadata = {
-                ...existingDoc.metadata,
-                totalTokens: directResult.tokenCount // Update with Direct's token count
+        // Handle storage based on whether this is part of a batch
+        if (!isPartOfBatch) {
+          // Single file upload - handle storage as before
+          if (directSuccess && !ragSuccess) {
+            try {
+              const storageMetadata: DocumentMetadata = {
+                filename: file.name,
+                size: file.size,
+                mimeType: file.type || 'text/plain',
+                uploadedAt: new Date(),
+                chunkCount: 0,
+                totalTokens: directResult.tokenCount,
+                strategy: 'fixed'
               };
-              storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
-              console.log(`[Direct] ✅ Updated storage with parsed content (preserving RAG filter ID)`);
-            } else {
-              console.log(`[Direct] ℹ️  Storage already has content from RAG`);
+
+              // Store document with Direct content (no filter ID since RAG didn't succeed)
+              storeDocument(directDocumentId, content, storageMetadata);
+              console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
+            } catch (error) {
+              console.error('[Direct] ❌ Failed to store document:', error);
+              // Don't fail the entire request if storage fails
             }
-          } catch (error) {
-            console.error('[Direct] ❌ Failed to update document storage:', error);
+          } else if (directSuccess && ragSuccess) {
+            // Both succeeded - RAG already stored the document with filter ID
+            // We need to update it with Direct's parsed content if RAG stored empty content
+            try {
+              const existingDoc = getDocument(documentId);
+              if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
+                // Update with Direct's parsed content while preserving filter ID
+                const updatedMetadata: DocumentMetadata = {
+                  ...existingDoc.metadata,
+                  totalTokens: directResult.tokenCount // Update with Direct's token count
+                };
+                storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
+                console.log(`[Direct] ✅ Updated storage with parsed content (preserving RAG filter ID)`);
+              } else {
+                console.log(`[Direct] ℹ️  Storage already has content from RAG`);
+              }
+            } catch (error) {
+              console.error('[Direct] ❌ Failed to update document storage:', error);
+            }
           }
+        } else {
+          // Part of batch - storage is handled by loadDocument via appendToDocument
+          console.log(`[Direct] ℹ️  Batch upload - storage handled by loadDocument`);
         }
         
         console.log('========================================');
@@ -854,6 +874,9 @@ export async function POST(
         console.warn(`[Upload] Partial success - RAG: ${ragSuccess}, Direct: ${directSuccess}`);
       }
 
+      // Return the direct document ID (shared ID for batch uploads)
+      response.data!.documentId = directDocumentId;
+      
       return NextResponse.json(response, { status: statusCode });
     }
 
