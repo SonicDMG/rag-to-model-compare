@@ -38,12 +38,7 @@ export function RagUploadResult({ status, chunkCount, tokenCount, indexTime, pro
           <div className="ml-7 space-y-1">
             {tokenCount !== undefined && (
               <p className="text-sm text-unkey-gray-300">
-                <span className="font-semibold text-unkey-gray-200">Tokens:</span> {tokenCount.toLocaleString()} uploaded
-              </p>
-            )}
-            {chunkCount !== undefined && (
-              <p className="text-sm text-unkey-gray-300">
-                <span className="font-semibold text-unkey-gray-200">Chunks:</span> {chunkCount} indexed
+                <span className="font-semibold text-unkey-gray-200">Token Count:</span> {tokenCount.toLocaleString()} tokens loaded into context
               </p>
             )}
             {indexTime !== undefined && (
