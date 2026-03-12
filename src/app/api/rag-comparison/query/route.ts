@@ -166,6 +166,26 @@ export async function POST(request: NextRequest): Promise<Response> {
         chunkCount: storedDoc.metadata.chunkCount,
         contentLength: storedDoc.content.length
       });
+      
+      // Enhanced logging for multi-file uploads
+      console.log('[Direct Query Debug] Document ID:', sanitizedDocumentId);
+      console.log('[Direct Query Debug] Content length:', storedDoc.content.length);
+      console.log('[Direct Query Debug] Content preview (first 500 chars):',
+        storedDoc.content.substring(0, 500));
+      
+      // Count document separators to verify all files are included
+      const separatorPattern = /=== DOCUMENT:/g;
+      const separatorMatches = storedDoc.content.match(separatorPattern);
+      const documentCount = separatorMatches ? separatorMatches.length : 0;
+      console.log('[Direct Query Debug] Number of documents in accumulated content:', documentCount);
+      
+      if (documentCount > 1) {
+        console.log('[Direct Query Debug] ✅ Multi-file content detected with', documentCount, 'documents');
+      } else if (documentCount === 1) {
+        console.log('[Direct Query Debug] ℹ️  Single document detected');
+      } else {
+        console.log('[Direct Query Debug] ⚠️  No document separators found - may be single file or legacy format');
+      }
     }
 
     // Build RAG configuration

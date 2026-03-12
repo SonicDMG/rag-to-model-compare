@@ -28,6 +28,7 @@ import {
   calculateCostBreakdown,
   calculateContextWindowBreakdown
 } from '@/lib/rag-comparison/metrics-calculator';
+import { appendToDocument, getDocument } from '@/lib/rag-comparison/document-storage';
 import type {
   DocumentMetadata,
   DirectConfig,
@@ -572,15 +573,17 @@ export function calculateMetrics(
 
 /**
  * Loads a document into memory for direct context window processing
- * 
+ *
  * Validates the document content, estimates token count, checks against
  * context window limits, and generates appropriate warnings.
- * 
+ *
  * @param content - Full document content
  * @param documentId - Unique identifier for the document
  * @param metadata - Document metadata
+ * @param isMultiFile - Whether this is part of a multi-file upload (default: false)
+ * @param filename - Filename for separator in multi-file uploads
  * @returns Promise resolving to load result with timing and validation info
- * 
+ *
  * @example
  * ```typescript
  * const result = await loadDocument(content, 'doc-123', metadata);
@@ -592,7 +595,9 @@ export function calculateMetrics(
 export async function loadDocument(
   content: string,
   documentId: string,
-  _metadata: DocumentMetadata
+  metadata: DocumentMetadata,
+  isMultiFile: boolean = false,
+  filename?: string
 ): Promise<LoadResult> {
   const startTime = performance.now();
 
@@ -603,9 +608,60 @@ export async function loadDocument(
 
     const sanitizedContent = sanitizeInput(content);
 
-    // Estimate total tokens
+    // Estimate total tokens for this document
     const tokenCount = estimateTokens(sanitizedContent);
 
+    // Handle multi-file uploads - append to existing document
+    if (isMultiFile) {
+      const separator = filename
+        ? `\n\n=== DOCUMENT: ${filename} ===\n\n`
+        : '\n\n=== NEXT DOCUMENT ===\n\n';
+      
+      // Check if document already exists
+      const existingDoc = getDocument(documentId);
+      
+      if (existingDoc) {
+        // Append to existing document
+        appendToDocument(documentId, sanitizedContent, metadata, undefined, separator);
+        console.log(`[Direct] Appended ${filename || 'document'} to batch ${documentId}`);
+      } else {
+        // First document in the batch - create with separator prefix
+        const contentWithHeader = filename
+          ? `=== DOCUMENT: ${filename} ===\n\n${sanitizedContent}`
+          : sanitizedContent;
+        appendToDocument(documentId, contentWithHeader, metadata);
+        console.log(`[Direct] Created batch ${documentId} with ${filename || 'document'}`);
+      }
+      
+      // Get the accumulated document to calculate total tokens
+      const accumulatedDoc = getDocument(documentId);
+      const totalTokenCount = accumulatedDoc
+        ? estimateTokens(accumulatedDoc.content)
+        : tokenCount;
+      
+      // Get context window limit for a default model
+      const referenceLimit = getContextWindowSize('gpt-4-turbo');
+      
+      // Check if accumulated content is within limits
+      const withinLimit = totalTokenCount < referenceLimit * 0.9;
+      
+      // Generate warnings based on accumulated content
+      const warnings = generateWarnings(totalTokenCount, referenceLimit);
+
+      const endTime = performance.now();
+      const loadTime = Math.round(endTime - startTime);
+
+      return {
+        success: true,
+        documentId,
+        tokenCount: totalTokenCount, // Return accumulated token count
+        loadTime,
+        withinLimit,
+        warnings
+      };
+    }
+
+    // Single file upload - original behavior
     // Get context window limit for a default model (we'll check per-model at query time)
     // Using gpt-4-turbo as reference for warnings
     const referenceLimit = getContextWindowSize('gpt-4-turbo');
@@ -712,6 +768,34 @@ export async function query(
 
     const sanitizedContent = sanitizeInput(content);
     const sanitizedQuery = sanitizeInput(query);
+    
+    // Enhanced logging for debugging multi-file content
+    console.log('\n[Direct Pipeline Query] Starting query execution');
+    console.log('[Direct Pipeline Query] Document ID:', documentId);
+    console.log('[Direct Pipeline Query] Content length received:', content.length);
+    console.log('[Direct Pipeline Query] Content preview (first 500 chars):',
+      content.substring(0, 500));
+    
+    // Count document separators to verify all files are included
+    const separatorPattern = /=== DOCUMENT:/g;
+    const separatorMatches = content.match(separatorPattern);
+    const documentCount = separatorMatches ? separatorMatches.length : 0;
+    console.log('[Direct Pipeline Query] Number of documents in content:', documentCount);
+    
+    if (documentCount > 1) {
+      console.log('[Direct Pipeline Query] ✅ Processing multi-file content with', documentCount, 'documents');
+      // Log each document header found
+      const headerPattern = /=== DOCUMENT: ([^\n]+) ===/g;
+      const headers = [...content.matchAll(headerPattern)];
+      console.log('[Direct Pipeline Query] Document files included:');
+      headers.forEach((match, idx) => {
+        console.log(`  ${idx + 1}. ${match[1]}`);
+      });
+    } else if (documentCount === 1) {
+      console.log('[Direct Pipeline Query] ℹ️  Processing single document');
+    } else {
+      console.log('[Direct Pipeline Query] ⚠️  No document separators found - legacy format or single file');
+    }
 
     // Validate total context doesn't exceed model's context window
     const contextCheck = checkContextLimit(sanitizedContent, sanitizedQuery, config.model);
@@ -748,6 +832,12 @@ User Question: ${sanitizedQuery}
 
 Please provide a clear and accurate answer based on the document above.`;
 
+    // Log the full message being sent to LLM
+    console.log('[Direct Pipeline Query] Full message length:', fullMessage.length);
+    console.log('[Direct Pipeline Query] Full message preview (first 1000 chars):',
+      fullMessage.substring(0, 1000));
+    console.log('[Direct Pipeline Query] Sending to LLM with model:', config.model);
+
     // Call LLM with full context using OpenRAG SDK
     // Note: SDK doesn't support model/temperature/max_tokens parameters or disabling retrieval
     // The model and settings are configured server-side in OpenRAG settings
@@ -760,7 +850,9 @@ Please provide a clear and accurate answer based on the document above.`;
         // Set high score threshold to minimize retrieval results
         scoreThreshold: 0.99
       });
+      console.log('[Direct Pipeline Query] ✅ LLM response received');
     } catch (error) {
+      console.error('[Direct Pipeline Query] ❌ LLM call failed:', error);
       throw handleOpenRAGError(error);
     }
 

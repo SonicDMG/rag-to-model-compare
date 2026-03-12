@@ -106,6 +106,88 @@ export function storeDocument(
 }
 
 /**
+ * Appends content to an existing document or creates a new one if it doesn't exist
+ *
+ * Used for multi-file uploads where multiple documents should be accumulated
+ * into a single context for the Direct pipeline.
+ *
+ * @param id - Document identifier
+ * @param additionalContent - Content to append
+ * @param metadata - Document metadata (used if creating new document)
+ * @param filterId - Optional knowledge filter ID for RAG queries
+ * @param separator - Separator to use between documents (default includes filename)
+ *
+ * @example
+ * ```typescript
+ * // First file
+ * appendToDocument('batch-123', content1, metadata1, undefined, '\n\n=== file1.txt ===\n\n');
+ * // Second file - appends to existing
+ * appendToDocument('batch-123', content2, metadata2, undefined, '\n\n=== file2.txt ===\n\n');
+ * ```
+ */
+export function appendToDocument(
+  id: string,
+  additionalContent: string,
+  metadata: DocumentMetadata,
+  filterId?: string,
+  separator: string = '\n\n=== NEXT DOCUMENT ===\n\n'
+): void {
+  if (!id || typeof id !== 'string') {
+    throw new Error('Document ID is required and must be a string');
+  }
+
+  if (typeof additionalContent !== 'string') {
+    throw new Error('Additional content must be a string');
+  }
+
+  if (!metadata || typeof metadata !== 'object') {
+    throw new Error('Document metadata is required and must be an object');
+  }
+
+  const store = getDocumentStore();
+  const existing = store.get(id);
+  
+  if (existing) {
+    // Append to existing document
+    const previousLength = existing.content.length;
+    existing.content += separator + additionalContent;
+    const newLength = existing.content.length;
+    
+    console.log(`[Storage] Appending to document ${id}:`);
+    console.log(`[Storage]   Previous content length: ${previousLength}`);
+    console.log(`[Storage]   Additional content length: ${additionalContent.length}`);
+    console.log(`[Storage]   Separator length: ${separator.length}`);
+    console.log(`[Storage]   New total length: ${newLength}`);
+    console.log(`[Storage]   Filename: ${metadata.filename}`);
+    
+    // Update metadata - accumulate token counts and chunk counts
+    existing.metadata.totalTokens += metadata.totalTokens;
+    existing.metadata.chunkCount += metadata.chunkCount;
+    existing.metadata.size += metadata.size;
+    
+    // Keep the filter ID if it exists (for RAG queries)
+    if (filterId && !existing.filterId) {
+      existing.filterId = filterId;
+    }
+    
+    store.set(id, existing);
+    console.log(`[Storage] ✅ Document ${id} updated successfully`);
+  } else {
+    // Create new document if it doesn't exist
+    console.log(`[Storage] Creating new document ${id}:`);
+    console.log(`[Storage]   Initial content length: ${additionalContent.length}`);
+    console.log(`[Storage]   Filename: ${metadata.filename}`);
+    
+    store.set(id, {
+      content: additionalContent,
+      metadata,
+      filterId
+    });
+    console.log(`[Storage] ✅ Document ${id} created successfully`);
+  }
+}
+
+/**
  * Retrieves a document from storage
  * 
  * @param id - Document identifier

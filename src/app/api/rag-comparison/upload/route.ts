@@ -233,12 +233,17 @@ function extractFolderMetadata(file: File, uploadBatchId: string): FolderMetadat
 async function processSingleFile(
   file: File,
   documentId: string,
-  folderMetadata?: FolderMetadata
+  folderMetadata?: FolderMetadata,
+  isMultiFile: boolean = false,
+  sharedDirectDocumentId?: string
 ): Promise<FileUploadResult> {
+  // Use shared document ID for Direct pipeline in multi-file uploads
+  const directDocId = isMultiFile && sharedDirectDocumentId ? sharedDirectDocumentId : documentId;
+  
   const result: FileUploadResult = {
     filename: file.name,
     relativePath: folderMetadata?.relativePath,
-    documentId,
+    documentId: directDocId, // Use shared ID for result
     hasImages: false,
     imageCount: 0,
     rag: {
@@ -378,7 +383,13 @@ async function processSingleFile(
       folderContext: folderMetadata
     };
 
-    const directResult = await directLoadDocument(content, documentId, directMetadata);
+    const directResult = await directLoadDocument(
+      content,
+      directDocId,
+      directMetadata,
+      isMultiFile,
+      file.name
+    );
 
     result.direct = {
       status: directResult.success ? 'success' : 'error',
@@ -394,39 +405,45 @@ async function processSingleFile(
     if (directSuccess) {
       console.log(`[Direct] ✅ ${file.name} loaded successfully`);
       
-      if (directSuccess && !ragSuccess) {
-        try {
-          const storageMetadata: DocumentMetadata = {
-            filename: file.name,
-            size: file.size,
-            mimeType: file.type || 'text/plain',
-            uploadedAt: new Date(),
-            chunkCount: 0,
-            totalTokens: directResult.tokenCount,
-            strategy: 'fixed',
-            folderContext: folderMetadata
-          };
-
-          storeDocument(documentId, content, storageMetadata);
-          console.log(`[Direct] ✅ ${file.name} stored (Direct-only)`);
-        } catch (error) {
-          console.error(`[Direct] ❌ Failed to store ${file.name}:`, error);
-        }
-      } else if (directSuccess && ragSuccess) {
-        try {
-          const existingDoc = getDocument(documentId);
-          if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
-            const updatedMetadata: DocumentMetadata = {
-              ...existingDoc.metadata,
+      // For multi-file uploads, storage is handled by loadDocument via appendToDocument
+      // For single-file uploads, we still need to store if RAG failed
+      if (!isMultiFile) {
+        if (directSuccess && !ragSuccess) {
+          try {
+            const storageMetadata: DocumentMetadata = {
+              filename: file.name,
+              size: file.size,
+              mimeType: file.type || 'text/plain',
+              uploadedAt: new Date(),
+              chunkCount: 0,
               totalTokens: directResult.tokenCount,
+              strategy: 'fixed',
               folderContext: folderMetadata
             };
-            storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
-            console.log(`[Direct] ✅ ${file.name} storage updated with content`);
+
+            storeDocument(directDocId, content, storageMetadata);
+            console.log(`[Direct] ✅ ${file.name} stored (Direct-only)`);
+          } catch (error) {
+            console.error(`[Direct] ❌ Failed to store ${file.name}:`, error);
           }
-        } catch (error) {
-          console.error(`[Direct] ❌ Failed to update ${file.name}:`, error);
+        } else if (directSuccess && ragSuccess) {
+          try {
+            const existingDoc = getDocument(directDocId);
+            if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
+              const updatedMetadata: DocumentMetadata = {
+                ...existingDoc.metadata,
+                totalTokens: directResult.tokenCount,
+                folderContext: folderMetadata
+              };
+              storeDocument(directDocId, content, updatedMetadata, existingDoc.filterId);
+              console.log(`[Direct] ✅ ${file.name} storage updated with content`);
+            }
+          } catch (error) {
+            console.error(`[Direct] ❌ Failed to update ${file.name}:`, error);
+          }
         }
+      } else {
+        console.log(`[Direct] ℹ️  Multi-file upload - storage handled by loadDocument`);
       }
     } else {
       console.error(`[Direct] ❌ ${file.name} processing failed: ${directResult.error}`);
@@ -895,20 +912,37 @@ export async function POST(
     const uploadBatchId = crypto.randomUUID();
     console.log(`📁 Upload Batch ID: ${uploadBatchId}`);
 
+    // Use a shared documentId for all files in the batch for Direct pipeline
+    // This allows Direct pipeline to accumulate all documents into one context
+    const sharedDocumentId = `batch-${uploadBatchId}`;
+    console.log(`📁 Shared Document ID for Direct pipeline: ${sharedDocumentId}`);
+
     // Process files sequentially
     const results: FileUploadResult[] = [];
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      // Each file gets unique ID for RAG (individual indexing)
+      // But uses shared ID for Direct (accumulated context)
+      const ragDocumentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       
       console.log(`\n📄 Processing file ${i + 1}/${files.length}: ${file.name}`);
+      console.log(`📄 RAG Document ID: ${ragDocumentId}`);
+      console.log(`📄 Direct Document ID: ${sharedDocumentId} (shared)`);
       
       // Extract folder metadata
       const folderMetadata = extractFolderMetadata(file, uploadBatchId);
       
-      // Process the file
-      const result = await processSingleFile(file, documentId, folderMetadata);
+      // Process the file with multi-file flag enabled
+      // Pass both RAG document ID (unique per file) and shared Direct document ID
+      const result = await processSingleFile(
+        file,
+        ragDocumentId,
+        folderMetadata,
+        true,
+        sharedDocumentId
+      );
+      
       results.push(result);
       
       console.log(`📄 File ${i + 1}/${files.length} complete: ${file.name}`);

@@ -38,10 +38,12 @@ interface DocumentUploadProps {
   onUploadResult?: (result: UploadResultData) => void;
 }
 
-interface UploadProgress {
-  current: number;
-  total: number;
-  currentFile?: string;
+interface FileStatus {
+  file: File;
+  status: 'pending' | 'processing' | 'success' | 'partial' | 'error';
+  error?: string;
+  ragStatus?: 'success' | 'error';
+  directStatus?: 'success' | 'error';
 }
 
 export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUploadProps) {
@@ -49,9 +51,9 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const [uploadMode, setUploadMode] = useState<'single' | 'folder'>('single');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({ current: 0, total: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [model, setModel] = useState('gpt-4-turbo');
+  const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,74 +184,331 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     }
   };
 
+  // Upload a single file and return the result
+  const uploadSingleFile = async (file: File, index: number): Promise<any> => {
+    // Mark as processing
+    setFileStatuses(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], status: 'processing' };
+      return updated;
+    });
+
+    const formData = new FormData();
+    formData.append('files', file);  // Single file
+    formData.append('model', model);
+
+    const response = await fetch('/api/rag-comparison/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    // Handle single-file response
+    if ('data' in result && result.data) {
+      return {
+        filename: file.name,
+        relativePath: (file as any).webkitRelativePath || file.name,
+        documentId: result.data.documentId,
+        hasImages: result.data.hasImages,
+        imageCount: result.data.imageCount,
+        rag: result.data.rag,
+        direct: result.data.direct
+      };
+    }
+
+    throw new Error('Unexpected response format');
+  };
+
+  // Update file status based on upload result
+  const updateFileStatus = (
+    index: number,
+    status: 'pending' | 'processing' | 'success' | 'partial' | 'error',
+    result?: any
+  ) => {
+    setFileStatuses(prev => {
+      const updated = [...prev];
+
+      if (status === 'success' && result) {
+        const ragSuccess = result.rag?.status === 'success';
+        const directSuccess = result.direct?.status === 'success';
+
+        if (ragSuccess && directSuccess) {
+          updated[index] = {
+            ...updated[index],
+            status: 'success',
+            ragStatus: result.rag?.status,
+            directStatus: result.direct?.status
+          };
+        } else if (ragSuccess || directSuccess) {
+          updated[index] = {
+            ...updated[index],
+            status: 'partial',
+            ragStatus: result.rag?.status,
+            directStatus: result.direct?.status,
+            error: `${!ragSuccess ? 'RAG' : 'Direct'} pipeline failed`
+          };
+        } else {
+          updated[index] = {
+            ...updated[index],
+            status: 'error',
+            ragStatus: result.rag?.status,
+            directStatus: result.direct?.status,
+            error: result.rag?.error || result.direct?.error || 'Both pipelines failed'
+          };
+        }
+      } else if (status === 'error' && result?.error) {
+        updated[index] = {
+          ...updated[index],
+          status: 'error',
+          error: result.error
+        };
+      } else {
+        updated[index] = { ...updated[index], status };
+      }
+
+      return updated;
+    });
+  };
+
+  // Upload all files in a single request for multi-file uploads
+  const uploadAllFiles = async (files: File[]) => {
+    // Mark all files as processing
+    files.forEach((_, index) => {
+      setFileStatuses(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], status: 'processing' };
+        return updated;
+      });
+    });
+
+    const formData = new FormData();
+    
+    // Append all files to the same FormData
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    formData.append('model', model);
+
+    const response = await fetch('/api/rag-comparison/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result;
+  };
+
+  // Upload files in parallel with concurrency limit
+  const uploadFilesInParallel = async (files: File[], concurrency: number = 4) => {
+    const results: any[] = [];
+    let successCount = 0;
+    let partialCount = 0;
+    let errorCount = 0;
+    let firstSuccessfulDocumentId: string | null = null;
+    let firstSuccessfulResult: any = null;
+
+    // For multi-file uploads, send all files in a single request
+    if (files.length > 1) {
+      try {
+        const result = await uploadAllFiles(files);
+        
+        // Handle multi-file response
+        if ('results' in result && Array.isArray(result.results)) {
+          results.push(...result.results);
+          
+          // Update file statuses based on results
+          result.results.forEach((fileResult: any, index: number) => {
+            const ragSuccess = fileResult.rag?.status === 'success';
+            const directSuccess = fileResult.direct?.status === 'success';
+            
+            if (ragSuccess && directSuccess) {
+              successCount++;
+              updateFileStatus(index, 'success', fileResult);
+            } else if (ragSuccess || directSuccess) {
+              partialCount++;
+              updateFileStatus(index, 'partial', fileResult);
+            } else {
+              errorCount++;
+              updateFileStatus(index, 'error', fileResult);
+            }
+            
+            // Store the shared documentId from the first result
+            if (!firstSuccessfulDocumentId && fileResult.documentId) {
+              firstSuccessfulDocumentId = fileResult.documentId;
+              firstSuccessfulResult = fileResult;
+            }
+          });
+        }
+      } catch (error) {
+        // Mark all files as error
+        files.forEach((_, index) => {
+          updateFileStatus(index, 'error', {
+            error: error instanceof Error ? error.message : 'Upload failed'
+          });
+          errorCount++;
+        });
+      }
+    } else {
+      // Single file upload - use original logic
+      // Process files in batches of 'concurrency'
+      for (let i = 0; i < files.length; i += concurrency) {
+        const batch = files.slice(i, i + concurrency);
+
+        // Upload batch in parallel
+        const batchPromises = batch.map((file, batchIndex) =>
+          uploadSingleFile(file, i + batchIndex)
+        );
+
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        // Process results
+        batchResults.forEach((result, batchIndex) => {
+          const fileIndex = i + batchIndex;
+          if (result.status === 'fulfilled') {
+            results.push(result.value);
+            updateFileStatus(fileIndex, 'success', result.value);
+            
+            // Count success types
+            const ragSuccess = result.value.rag?.status === 'success';
+            const directSuccess = result.value.direct?.status === 'success';
+            
+            if (ragSuccess && directSuccess) {
+              successCount++;
+              // Store first successful upload for callbacks
+              if (!firstSuccessfulDocumentId) {
+                firstSuccessfulDocumentId = result.value.documentId;
+                firstSuccessfulResult = result.value;
+              }
+            } else if (ragSuccess || directSuccess) {
+              partialCount++;
+              // Store first partial success for callbacks if no full success yet
+              if (!firstSuccessfulDocumentId) {
+                firstSuccessfulDocumentId = result.value.documentId;
+                firstSuccessfulResult = result.value;
+              }
+            } else {
+              errorCount++;
+            }
+          } else {
+            errorCount++;
+            updateFileStatus(fileIndex, 'error', { error: result.reason.message });
+          }
+        });
+      }
+    }
+
+    // Aggregate results for multi-file uploads
+    let aggregatedResult = null;
+    if (results.length > 0) {
+      aggregatedResult = {
+        documentId: firstSuccessfulDocumentId,
+        filename: `${files.length} files`,
+        hasImages: results.some(r => r.hasImages),
+        imageCount: results.reduce((sum, r) => sum + (r.imageCount || 0), 0),
+        rag: {
+          status: results.some(r => r.rag?.status === 'success') ? 'success' : 'error',
+          chunkCount: results.reduce((sum, r) => sum + (r.rag?.chunkCount || 0), 0),
+          tokenCount: results.reduce((sum, r) => sum + (r.rag?.tokenCount || 0), 0),
+          indexTime: results.reduce((sum, r) => sum + (r.rag?.indexTime || 0), 0),
+          // processedText not available in multi-file uploads from backend
+          processedText: undefined,
+          error: results.filter(r => r.rag?.error).map(r => r.rag?.error).join('; ') || undefined
+        },
+        direct: {
+          status: results.some(r => r.direct?.status === 'success') ? 'success' : 'error',
+          tokenCount: results.reduce((sum, r) => sum + (r.direct?.tokenCount || 0), 0),
+          loadTime: results.reduce((sum, r) => sum + (r.direct?.loadTime || 0), 0),
+          withinLimit: results.every(r => r.direct?.withinLimit !== false),
+          warnings: results.flatMap(r => r.direct?.warnings || []),
+          // processedText not available in multi-file uploads from backend
+          processedText: undefined,
+          error: results.filter(r => r.direct?.error).map(r => r.direct?.error).join('; ') || undefined
+        }
+      };
+    }
+
+    return {
+      results,
+      successCount,
+      partialCount,
+      errorCount,
+      firstSuccessfulDocumentId,
+      firstSuccessfulResult,
+      aggregatedResult
+    };
+  };
+
   const handleUpload = async () => {
     if (files.length === 0 || !model) return;
 
     setIsUploading(true);
-    setUploadProgress({ current: 0, total: files.length });
     setUploadStatus({ status: 'uploading', message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...` });
 
+    // Initialize all files as pending
+    const initialStatuses: FileStatus[] = files.map(file => ({
+      file,
+      status: 'pending' as const,
+    }));
+    setFileStatuses(initialStatuses);
+
     try {
-      const formData = new FormData();
-      
-      // Add all files to FormData
-      files.forEach(file => {
-        formData.append('files', file);
-      });
-      formData.append('model', model);
+      // Upload files in parallel (4 at a time)
+      const {
+        successCount,
+        partialCount,
+        firstSuccessfulDocumentId,
+        firstSuccessfulResult,
+        aggregatedResult
+      } = await uploadFilesInParallel(files, 4);
 
-      const response = await fetch('/api/rag-comparison/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      // Determine overall status
+      const totalFiles = files.length;
+      let overallStatus: 'success' | 'partial' | 'error';
+      let message: string;
 
-      const result = await response.json();
-
-      // Check if request completely failed
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Upload failed');
+      if (successCount === totalFiles) {
+        overallStatus = 'success';
+        message = `All ${totalFiles} file${totalFiles > 1 ? 's' : ''} processed successfully!`;
+      } else if (successCount + partialCount > 0) {
+        overallStatus = 'partial';
+        message = `${successCount + partialCount} of ${totalFiles} file${totalFiles > 1 ? 's' : ''} processed successfully.`;
+        if (partialCount > 0) {
+          message += ` (${partialCount} partial)`;
+        }
+      } else {
+        overallStatus = 'error';
+        message = 'All files failed to process.';
       }
 
-      // Handle single file response (backward compatible)
-      if ('data' in result && result.data && !Array.isArray(result.data)) {
-        // Single file response
-        const ragSuccess = result.data?.rag?.status === 'success';
-        const directSuccess = result.data?.direct?.status === 'success';
+      // Determine which result to use (single file or aggregated)
+      const resultToUse = files.length === 1 ? firstSuccessfulResult : aggregatedResult;
 
-        let overallStatus: 'success' | 'partial' | 'error';
-        let message: string;
-
-        if (ragSuccess && directSuccess) {
-          overallStatus = 'success';
-          message = 'Document processed successfully for both RAG and Direct approaches!';
-        } else if (ragSuccess || directSuccess) {
-          overallStatus = 'partial';
-          message = 'Document partially processed. ';
-          if (ragSuccess) {
-            message += 'RAG approach succeeded, but Direct approach failed.';
-          } else {
-            message += 'Direct approach succeeded, but RAG approach failed.';
-          }
-        } else {
-          overallStatus = 'error';
-          message = 'Both processing approaches failed.';
-        }
-
+      // Include detailed status for both single and multi-file uploads
+      if (resultToUse) {
         const uploadResultData = {
-          ragStatus: result.data?.rag?.status,
-          ragChunks: result.data?.rag?.chunkCount,
-          ragTokens: result.data?.rag?.tokenCount,
-          ragIndexTime: result.data?.rag?.indexTime,
-          ragProcessedText: result.data?.rag?.processedText,
-          ragError: result.data?.rag?.error,
-          directStatus: result.data?.direct?.status,
-          directTokens: result.data?.direct?.tokenCount,
-          directLoadTime: result.data?.direct?.loadTime,
-          directWarnings: result.data?.direct?.warnings,
-          directProcessedText: result.data?.direct?.processedText,
-          directError: result.data?.direct?.error,
-          hasImages: result.data?.hasImages,
-          imageCount: result.data?.imageCount,
+          ragStatus: resultToUse.rag?.status,
+          ragChunks: resultToUse.rag?.chunkCount,
+          ragTokens: resultToUse.rag?.tokenCount,
+          ragIndexTime: resultToUse.rag?.indexTime,
+          ragProcessedText: resultToUse.rag?.processedText,
+          ragError: resultToUse.rag?.error,
+          directStatus: resultToUse.direct?.status,
+          directTokens: resultToUse.direct?.tokenCount,
+          directLoadTime: resultToUse.direct?.loadTime,
+          directWarnings: resultToUse.direct?.warnings,
+          directProcessedText: resultToUse.direct?.processedText,
+          directError: resultToUse.direct?.error,
+          hasImages: resultToUse.hasImages,
+          imageCount: resultToUse.imageCount,
         };
 
         setUploadStatus({
@@ -258,48 +517,40 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           ...uploadResultData,
         });
 
-        // Call callbacks if at least one approach succeeded
-        if (ragSuccess || directSuccess) {
+        // Call callbacks if at least one file succeeded
+        if (firstSuccessfulDocumentId && (successCount + partialCount > 0)) {
           if (onUploadComplete) {
-            onUploadComplete(result.data.documentId);
+            onUploadComplete(firstSuccessfulDocumentId);
           }
           if (onUploadResult) {
             onUploadResult(uploadResultData);
           }
         }
       } else {
-        // Multi-file response
-        const successCount = result.results?.filter((r: any) => 
-          r.data?.rag?.status === 'success' || r.data?.direct?.status === 'success'
-        ).length || 0;
-        
-        const overallStatus: 'success' | 'partial' | 'error' = 
-          successCount === files.length ? 'success' :
-          successCount > 0 ? 'partial' : 'error';
-        
-        const message = 
-          overallStatus === 'success' ? `All ${files.length} files processed successfully!` :
-          overallStatus === 'partial' ? `${successCount} of ${files.length} files processed successfully.` :
-          'All files failed to process.';
-
         setUploadStatus({
           status: overallStatus,
           message,
         });
-
-        // For multi-file, we don't call the single callbacks
-        // The parent component should handle the multi-file response differently
       }
-      
-      setFiles([]);
+
+      // Clear files after successful upload
+      if (overallStatus !== 'error') {
+        setFiles([]);
+      }
     } catch (error) {
+      // Mark all files as error
+      setFileStatuses(prev => prev.map(fs => ({
+        ...fs,
+        status: 'error' as const,
+        error: error instanceof Error ? error.message : 'Upload failed'
+      })));
+
       setUploadStatus({
         status: 'error',
         message: error instanceof Error ? error.message : 'Upload failed',
       });
     } finally {
       setIsUploading(false);
-      setUploadProgress({ current: 0, total: 0 });
     }
   };
 
@@ -455,26 +706,79 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
             : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
         </button>
 
-        {/* Progress Display for Multi-file Uploads */}
-        {isUploading && uploadProgress.total > 1 && (
+        {/* Per-File Status Display */}
+        {isUploading && fileStatuses.length > 0 && (
           <div className="mt-4 p-4 border border-unkey-gray-700 rounded-unkey-md bg-unkey-gray-850">
-            <div className="flex justify-between text-sm mb-2 text-unkey-gray-300">
-              <span>Uploading files...</span>
-              <span>{uploadProgress.current} / {uploadProgress.total}</span>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-white">Upload Progress</h3>
+              {(() => {
+                const processingCount = fileStatuses.filter(fs => fs.status === 'processing').length;
+                const completedCount = fileStatuses.filter(fs =>
+                  fs.status === 'success' || fs.status === 'partial' || fs.status === 'error'
+                ).length;
+                return processingCount > 0 ? (
+                  <span className="text-sm text-unkey-teal-400 animate-pulse">
+                    Processing {processingCount} file{processingCount > 1 ? 's' : ''} in parallel... ({completedCount}/{fileStatuses.length})
+                  </span>
+                ) : null;
+              })()}
             </div>
-            <div className="w-full bg-unkey-gray-700 rounded-full h-2">
-              <div
-                className="bg-unkey-teal-500 h-2 rounded-full transition-all"
-                style={{
-                  width: `${(uploadProgress.current / uploadProgress.total) * 100}%`
-                }}
-              />
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {fileStatuses.map((fileStatus, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-3 p-2 rounded bg-unkey-gray-900 border border-unkey-gray-700"
+                >
+                  <div className="flex-shrink-0">
+                    {fileStatus.status === 'pending' && (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-400" />
+                    )}
+                    {fileStatus.status === 'processing' && (
+                      <div className="w-5 h-5">
+                        <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      </div>
+                    )}
+                    {fileStatus.status === 'success' && (
+                      <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                      </div>
+                    )}
+                    {fileStatus.status === 'partial' && (
+                      <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">!</span>
+                      </div>
+                    )}
+                    {fileStatus.status === 'error' && (
+                      <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate text-unkey-gray-200">
+                      {(fileStatus.file as any).webkitRelativePath || fileStatus.file.name}
+                    </div>
+                    {fileStatus.status === 'partial' && (
+                      <div className="text-xs text-yellow-400 mt-1">
+                        {fileStatus.ragStatus === 'success' ? 'RAG succeeded, Direct failed' : 'Direct succeeded, RAG failed'}
+                      </div>
+                    )}
+                    {fileStatus.error && (
+                      <div className="text-xs text-red-400 mt-1 truncate">
+                        {fileStatus.error}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            {uploadProgress.currentFile && (
-              <div className="text-xs text-unkey-gray-400 mt-2">
-                Processing: {uploadProgress.currentFile}
-              </div>
-            )}
           </div>
         )}
 
