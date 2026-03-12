@@ -4,6 +4,7 @@ import { ComparisonResult } from '@/types/rag-comparison';
 import { MetricsDisplay } from './MetricsDisplay';
 import { ExpandableText } from './ExpandableText';
 import { Badge } from './ui/Badge';
+import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 
 interface ComparisonResultsProps {
   result: ComparisonResult;
@@ -141,7 +142,8 @@ export function ComparisonResults({ result }: ComparisonResultsProps) {
   const directIsRecommended = result.summary.recommendation === 'direct';
 
   return (
-    <div className="w-full space-y-6">
+    <MetricsTabProvider>
+      <div className="w-full space-y-6">
       {/* Summary Section */}
       <SummaryCard result={result} />
 
@@ -171,7 +173,8 @@ export function ComparisonResults({ result }: ComparisonResultsProps) {
         ragResult={result.rag}
         directResult={result.direct}
       />
-    </div>
+      </div>
+    </MetricsTabProvider>
   );
 }
 

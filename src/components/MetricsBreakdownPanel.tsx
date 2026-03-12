@@ -6,6 +6,7 @@ import { TimingBreakdownView } from './breakdown/TimingBreakdownView';
 import { TokenBreakdownView } from './breakdown/TokenBreakdownView';
 import { CostBreakdownView } from './breakdown/CostBreakdownView';
 import { ContextWindowBreakdownView } from './breakdown/ContextWindowBreakdownView';
+import { useMetricsTab } from '@/contexts/MetricsTabContext';
 
 interface MetricsBreakdownPanelProps {
   breakdown: DetailedMetricsBreakdown;
@@ -16,7 +17,7 @@ type TabType = 'timing' | 'tokens' | 'cost' | 'context';
 
 export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakdownPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('timing');
+  const { activeTab, setActiveTab } = useMetricsTab();
 
   const isRAG = pipelineType === 'rag';
 

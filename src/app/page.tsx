@@ -8,6 +8,7 @@ import { RagSection } from '@/components/RagSection';
 import { DirectModelSection } from '@/components/DirectModelSection';
 import { UnifiedQuerySection } from '@/components/UnifiedQuerySection';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
+import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -147,7 +148,8 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-unkey-black relative overflow-hidden">
+    <MetricsTabProvider>
+      <div className="min-h-screen bg-unkey-black relative overflow-hidden">
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-unkey-teal/5 rounded-full blur-3xl" />
@@ -395,7 +397,8 @@ export default function Home() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </MetricsTabProvider>
   );
 }
 
