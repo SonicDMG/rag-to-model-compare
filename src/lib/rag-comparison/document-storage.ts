@@ -9,7 +9,7 @@
  * a database, or a file system with proper access controls.
  */
 
-import type { DocumentMetadata } from '@/types/rag-comparison';
+import type { DocumentMetadata, FolderMetadata } from '@/types/rag-comparison';
 
 /**
  * Stored document with content and metadata
@@ -21,6 +21,8 @@ export interface StoredDocument {
   metadata: DocumentMetadata;
   /** Knowledge filter ID for RAG queries */
   filterId?: string;
+  /** Folder metadata for multi-file uploads */
+  folderMetadata?: FolderMetadata;
 }
 
 /**

@@ -43,6 +43,24 @@ export type ProcessingStatus = 'idle' | 'processing' | 'ready' | 'error';
 export type ChunkStrategy = 'fixed' | 'paragraph' | 'semantic';
 
 /**
+ * Folder metadata for multi-file uploads
+ */
+export interface FolderMetadata {
+  /** Relative path within the folder structure */
+  relativePath: string;
+  /** Name of the root folder */
+  folderName: string;
+  /** Depth level in folder hierarchy (0 = root) */
+  depth: number;
+  /** Parent folder path if nested */
+  parentPath?: string;
+  /** Whether this file is part of a folder upload */
+  isPartOfFolder: boolean;
+  /** Unique batch ID for this folder upload */
+  uploadBatchId?: string;
+}
+
+/**
  * Metadata about a processed document
  */
 export interface DocumentMetadata {
@@ -60,6 +78,8 @@ export interface DocumentMetadata {
   totalTokens: number;
   /** Chunking strategy used */
   strategy: ChunkStrategy;
+  /** Folder context if part of multi-file upload */
+  folderContext?: FolderMetadata;
 }
 
 /**
@@ -345,6 +365,80 @@ export interface ErrorInfo {
   code?: string;
   /** Additional error details */
   details?: Record<string, unknown>;
+}
+
+/**
+ * Result for a single file upload in multi-file scenario
+ */
+export interface FileUploadResult {
+  /** Original filename */
+  filename: string;
+  /** Relative path within folder structure */
+  relativePath?: string;
+  /** Unique document ID */
+  documentId: string;
+  /** Whether file contains images */
+  hasImages: boolean;
+  /** Number of images in file */
+  imageCount: number;
+  /** RAG pipeline result */
+  rag: {
+    /** Processing status */
+    status: 'success' | 'error';
+    /** Number of chunks created */
+    chunkCount?: number;
+    /** Total tokens in chunks */
+    tokenCount?: number;
+    /** Time taken to index (ms) */
+    indexTime?: number;
+    /** Error message if failed */
+    error?: string;
+  };
+  /** Direct pipeline result */
+  direct: {
+    /** Processing status */
+    status: 'success' | 'error';
+    /** Total tokens in document */
+    tokenCount?: number;
+    /** Time taken to load (ms) */
+    loadTime?: number;
+    /** Whether within context window limit */
+    withinLimit?: boolean;
+    /** Warning messages */
+    warnings?: string[];
+    /** Error message if failed */
+    error?: string;
+  };
+}
+
+/**
+ * Response for multi-file upload
+ */
+export interface MultiFileUploadResponse {
+  /** Overall success status */
+  success: boolean;
+  /** Per-file results */
+  results: FileUploadResult[];
+  /** Summary statistics */
+  summary: {
+    /** Total files processed */
+    total: number;
+    /** Files that succeeded in both pipelines */
+    successful: number;
+    /** Files that failed in both pipelines */
+    failed: number;
+    /** Files that succeeded in at least one pipeline */
+    partialSuccess: number;
+    /** Total processing time (ms) */
+    totalProcessingTime: number;
+  };
+  /** Errors that prevented processing */
+  errors?: Array<{
+    /** Filename that caused error */
+    filename: string;
+    /** Error message */
+    error: string;
+  }>;
 }
 
 // Made with Bob

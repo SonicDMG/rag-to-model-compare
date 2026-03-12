@@ -13,7 +13,7 @@ interface RagUploadResultProps {
   imageCount?: number;
 }
 
-export function RagUploadResult({ status, chunkCount, tokenCount, indexTime, processedText, error, hasImages, imageCount }: RagUploadResultProps) {
+export function RagUploadResult({ status, tokenCount, indexTime, processedText, error, hasImages, imageCount }: RagUploadResultProps) {
   const [showText, setShowText] = useState(false);
 
   if (!status) return null;

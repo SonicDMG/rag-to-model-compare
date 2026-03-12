@@ -38,13 +38,86 @@ interface DocumentUploadProps {
   onUploadResult?: (result: UploadResultData) => void;
 }
 
+interface UploadProgress {
+  current: number;
+  total: number;
+  currentFile?: string;
+}
+
 export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUploadProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadMode, setUploadMode] = useState<'single' | 'folder'>('single');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({ current: 0, total: 0 });
+  const [isUploading, setIsUploading] = useState(false);
   const [model, setModel] = useState('gpt-4-turbo');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper function to validate file types
+  const isValidFileType = (file: File): boolean => {
+    const validExtensions = ['.txt', '.md', '.json', '.pdf', '.docx', '.doc'];
+    return validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+  };
+
+  // Helper function to format file sizes
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Recursive folder traversal for drag & drop
+  const traverseDirectory = async (
+    entry: FileSystemDirectoryEntry,
+    path: string = ''
+  ): Promise<File[]> => {
+    const collectedFiles: File[] = [];
+    const reader = entry.createReader();
+    
+    const readEntries = (): Promise<FileSystemEntry[]> => {
+      return new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+    };
+    
+    let entries = await readEntries();
+    
+    while (entries.length > 0) {
+      for (const entry of entries) {
+        const fullPath = path ? `${path}/${entry.name}` : entry.name;
+        
+        if (entry.isDirectory) {
+          const subFiles = await traverseDirectory(
+            entry as FileSystemDirectoryEntry,
+            fullPath
+          );
+          collectedFiles.push(...subFiles);
+        } else if (entry.isFile) {
+          const fileEntry = entry as FileSystemFileEntry;
+          const file = await new Promise<File>((resolve, reject) => {
+            fileEntry.file(resolve, reject);
+          });
+          
+          if (isValidFileType(file)) {
+            // Preserve folder structure
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: fullPath,
+              writable: false,
+              configurable: true
+            });
+            collectedFiles.push(file);
+          }
+        }
+      }
+      entries = await readEntries();
+    }
+    
+    return collectedFiles;
+  };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -56,43 +129,73 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     setIsDragging(false);
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      const extension = droppedFile.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-      const allowedExtensions = ['.txt', '.md', '.json', '.pdf', '.docx', '.doc'];
-      
-      if (extension && allowedExtensions.includes(extension)) {
-        setFile(droppedFile);
+    const items = Array.from(e.dataTransfer.items);
+    const collectedFiles: File[] = [];
+    
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          if (entry.isDirectory) {
+            const dirFiles = await traverseDirectory(
+              entry as FileSystemDirectoryEntry
+            );
+            collectedFiles.push(...dirFiles);
+          } else {
+            const file = item.getAsFile();
+            if (file && isValidFileType(file)) {
+              collectedFiles.push(file);
+            }
+          }
+        }
+      }
+    }
+    
+    if (collectedFiles.length > 0) {
+      setFiles(collectedFiles);
+      setUploadStatus({ status: 'idle' });
+    } else {
+      setUploadStatus({
+        status: 'error',
+        message: 'No valid files found. Please upload supported file types (TXT, MD, JSON, PDF, DOCX, DOC)'
+      });
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (selectedFiles && selectedFiles.length > 0) {
+      const fileArray = Array.from(selectedFiles).filter(isValidFileType);
+      if (fileArray.length > 0) {
+        setFiles(fileArray);
         setUploadStatus({ status: 'idle' });
       } else {
         setUploadStatus({
           status: 'error',
-          message: 'Please upload a supported file type (TXT, MD, JSON, PDF, DOCX, DOC)'
+          message: 'No valid files selected. Please upload supported file types (TXT, MD, JSON, PDF, DOCX, DOC)'
         });
       }
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setUploadStatus({ status: 'idle' });
-    }
-  };
-
   const handleUpload = async () => {
-    if (!file) return;
+    if (files.length === 0 || !model) return;
 
-    setUploadStatus({ status: 'uploading', message: 'Uploading document...' });
+    setIsUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
+    setUploadStatus({ status: 'uploading', message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...` });
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      
+      // Add all files to FormData
+      files.forEach(file => {
+        formData.append('files', file);
+      });
       formData.append('model', model);
 
       const response = await fetch('/api/rag-comparison/upload', {
@@ -107,67 +210,101 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         throw new Error(result.error || 'Upload failed');
       }
 
-      // Determine overall status based on individual pipeline results
-      const ragSuccess = result.data?.rag?.status === 'success';
-      const directSuccess = result.data?.direct?.status === 'success';
+      // Handle single file response (backward compatible)
+      if ('data' in result && result.data && !Array.isArray(result.data)) {
+        // Single file response
+        const ragSuccess = result.data?.rag?.status === 'success';
+        const directSuccess = result.data?.direct?.status === 'success';
 
-      let overallStatus: 'success' | 'partial' | 'error';
-      let message: string;
+        let overallStatus: 'success' | 'partial' | 'error';
+        let message: string;
 
-      if (ragSuccess && directSuccess) {
-        overallStatus = 'success';
-        message = 'Document processed successfully for both RAG and Direct approaches!';
-      } else if (ragSuccess || directSuccess) {
-        overallStatus = 'partial';
-        message = 'Document partially processed. ';
-        if (ragSuccess) {
-          message += 'RAG approach succeeded, but Direct approach failed.';
+        if (ragSuccess && directSuccess) {
+          overallStatus = 'success';
+          message = 'Document processed successfully for both RAG and Direct approaches!';
+        } else if (ragSuccess || directSuccess) {
+          overallStatus = 'partial';
+          message = 'Document partially processed. ';
+          if (ragSuccess) {
+            message += 'RAG approach succeeded, but Direct approach failed.';
+          } else {
+            message += 'Direct approach succeeded, but RAG approach failed.';
+          }
         } else {
-          message += 'Direct approach succeeded, but RAG approach failed.';
+          overallStatus = 'error';
+          message = 'Both processing approaches failed.';
+        }
+
+        const uploadResultData = {
+          ragStatus: result.data?.rag?.status,
+          ragChunks: result.data?.rag?.chunkCount,
+          ragTokens: result.data?.rag?.tokenCount,
+          ragIndexTime: result.data?.rag?.indexTime,
+          ragProcessedText: result.data?.rag?.processedText,
+          ragError: result.data?.rag?.error,
+          directStatus: result.data?.direct?.status,
+          directTokens: result.data?.direct?.tokenCount,
+          directLoadTime: result.data?.direct?.loadTime,
+          directWarnings: result.data?.direct?.warnings,
+          directProcessedText: result.data?.direct?.processedText,
+          directError: result.data?.direct?.error,
+          hasImages: result.data?.hasImages,
+          imageCount: result.data?.imageCount,
+        };
+
+        setUploadStatus({
+          status: overallStatus,
+          message,
+          ...uploadResultData,
+        });
+
+        // Call callbacks if at least one approach succeeded
+        if (ragSuccess || directSuccess) {
+          if (onUploadComplete) {
+            onUploadComplete(result.data.documentId);
+          }
+          if (onUploadResult) {
+            onUploadResult(uploadResultData);
+          }
         }
       } else {
-        overallStatus = 'error';
-        message = 'Both processing approaches failed.';
+        // Multi-file response
+        const successCount = result.results?.filter((r: any) => 
+          r.data?.rag?.status === 'success' || r.data?.direct?.status === 'success'
+        ).length || 0;
+        
+        const overallStatus: 'success' | 'partial' | 'error' = 
+          successCount === files.length ? 'success' :
+          successCount > 0 ? 'partial' : 'error';
+        
+        const message = 
+          overallStatus === 'success' ? `All ${files.length} files processed successfully!` :
+          overallStatus === 'partial' ? `${successCount} of ${files.length} files processed successfully.` :
+          'All files failed to process.';
+
+        setUploadStatus({
+          status: overallStatus,
+          message,
+        });
+
+        // For multi-file, we don't call the single callbacks
+        // The parent component should handle the multi-file response differently
       }
-
-      const uploadResultData = {
-        ragStatus: result.data?.rag?.status,
-        ragChunks: result.data?.rag?.chunkCount,
-        ragTokens: result.data?.rag?.tokenCount,
-        ragIndexTime: result.data?.rag?.indexTime,
-        ragProcessedText: result.data?.rag?.processedText,
-        ragError: result.data?.rag?.error,
-        directStatus: result.data?.direct?.status,
-        directTokens: result.data?.direct?.tokenCount,
-        directLoadTime: result.data?.direct?.loadTime,
-        directWarnings: result.data?.direct?.warnings,
-        directProcessedText: result.data?.direct?.processedText,
-        directError: result.data?.direct?.error,
-        hasImages: result.data?.hasImages,
-        imageCount: result.data?.imageCount,
-      };
-
-      setUploadStatus({
-        status: overallStatus,
-        message,
-        ...uploadResultData,
-      });
-
-      // Call callbacks if at least one approach succeeded
-      if (ragSuccess || directSuccess) {
-        if (onUploadComplete) {
-          onUploadComplete(result.data.documentId);
-        }
-        if (onUploadResult) {
-          onUploadResult(uploadResultData);
-        }
-      }
+      
+      setFiles([]);
     } catch (error) {
       setUploadStatus({
         status: 'error',
         message: error instanceof Error ? error.message : 'Upload failed',
       });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress({ current: 0, total: 0 });
     }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(files.filter((_, i) => i !== index));
   };
 
   const availableModels = Object.entries(SUPPORTED_MODELS)
@@ -178,6 +315,23 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     <div className="w-full space-y-6">
       <div className="bg-unkey-gray-900 border border-unkey-gray-700 rounded-unkey-lg shadow-unkey-card p-6">
         <h2 className="text-2xl font-bold mb-4 text-white">Upload Document</h2>
+        
+        {/* Upload Mode Toggle */}
+        <div className="mb-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={uploadMode === 'folder'}
+              onChange={(e) => {
+                setUploadMode(e.target.checked ? 'folder' : 'single');
+                setFiles([]);
+                setUploadStatus({ status: 'idle' });
+              }}
+              className="w-4 h-4 text-unkey-teal-500 bg-unkey-gray-850 border-unkey-gray-600 rounded focus:ring-unkey-teal-500 focus:ring-2"
+            />
+            <span className="text-sm text-unkey-gray-200">Upload entire folder</span>
+          </label>
+        </div>
         
         {/* Drag and Drop Area */}
         <div
@@ -198,6 +352,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
             ref={fileInputRef}
             type="file"
             accept=".txt,.md,.json,.pdf,.docx,.doc"
+            multiple={uploadMode === 'folder'}
+            {...(uploadMode === 'folder' ? { webkitdirectory: '' } : {})}
             onChange={handleFileSelect}
             className="hidden"
             aria-label="File upload"
@@ -219,21 +375,54 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
               />
             </svg>
             
-            {file ? (
+            {files.length > 0 ? (
               <p className="text-sm text-unkey-gray-300">
-                <span className="font-medium text-unkey-teal-500">{file.name}</span>
+                <span className="font-medium text-unkey-teal-500">
+                  {files.length} file{files.length > 1 ? 's' : ''} selected
+                </span>
                 <br />
-                Click to change file
+                Click to change {uploadMode === 'folder' ? 'folder' : 'file'}
               </p>
             ) : (
               <p className="text-sm text-unkey-gray-300">
                 <span className="font-medium text-unkey-teal-500">Click to upload</span> or drag and drop
                 <br />
-                TXT, MD, JSON, PDF, DOCX, DOC files
+                {uploadMode === 'folder' ? 'Folder with ' : ''}TXT, MD, JSON, PDF, DOCX, DOC files
               </p>
             )}
           </div>
         </div>
+
+        {/* File List Display */}
+        {files.length > 0 && (
+          <div className="mt-4 p-4 border border-unkey-gray-700 rounded-unkey-md bg-unkey-gray-850">
+            <h3 className="font-semibold mb-2 text-white">
+              Selected Files ({files.length})
+            </h3>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {files.map((file, index) => (
+                <div key={index} className="flex items-center justify-between text-sm py-1">
+                  <span className="truncate text-unkey-gray-300 flex-1">
+                    {(file as any).webkitRelativePath || file.name}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                    className="text-red-400 hover:text-red-300 ml-2 px-2"
+                    aria-label="Remove file"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-sm text-unkey-gray-400">
+              Total size: {formatFileSize(files.reduce((sum, f) => sum + f.size, 0))}
+            </div>
+          </div>
+        )}
 
         {/* Model Selection */}
         <div className="mt-6">
@@ -245,7 +434,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className="w-full px-3 py-2 bg-unkey-gray-850 border border-unkey-gray-600 text-white rounded-unkey-md focus:ring-2 focus:ring-unkey-teal-500/20 focus:border-unkey-teal-500 transition-all duration-200"
-            disabled={uploadStatus.status === 'uploading' || uploadStatus.status === 'processing'}
+            disabled={isUploading}
           >
             {availableModels.map(({ id, name }) => (
               <option key={id} value={id} className="bg-unkey-gray-850">
@@ -258,13 +447,36 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         {/* Upload Button */}
         <button
           onClick={handleUpload}
-          disabled={!file || uploadStatus.status === 'uploading' || uploadStatus.status === 'processing'}
+          disabled={files.length === 0 || isUploading}
           className="mt-6 w-full bg-white text-black py-3 px-4 rounded-unkey-md hover:bg-unkey-gray-100 disabled:bg-unkey-gray-700 disabled:text-unkey-gray-500 disabled:cursor-not-allowed transition-all duration-200 font-medium"
         >
-          {uploadStatus.status === 'uploading' || uploadStatus.status === 'processing'
+          {isUploading
             ? 'Processing...'
-            : 'Upload and Process'}
+            : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
         </button>
+
+        {/* Progress Display for Multi-file Uploads */}
+        {isUploading && uploadProgress.total > 1 && (
+          <div className="mt-4 p-4 border border-unkey-gray-700 rounded-unkey-md bg-unkey-gray-850">
+            <div className="flex justify-between text-sm mb-2 text-unkey-gray-300">
+              <span>Uploading files...</span>
+              <span>{uploadProgress.current} / {uploadProgress.total}</span>
+            </div>
+            <div className="w-full bg-unkey-gray-700 rounded-full h-2">
+              <div
+                className="bg-unkey-teal-500 h-2 rounded-full transition-all"
+                style={{
+                  width: `${(uploadProgress.current / uploadProgress.total) * 100}%`
+                }}
+              />
+            </div>
+            {uploadProgress.currentFile && (
+              <div className="text-xs text-unkey-gray-400 mt-2">
+                Processing: {uploadProgress.currentFile}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Status Display */}
         {uploadStatus.status !== 'idle' && (
