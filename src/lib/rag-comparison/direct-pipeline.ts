@@ -821,7 +821,8 @@ Please provide a clear and accurate answer based on the document above.`;
         model: config.model,
         timestamp: new Date(),
         notes: [
-          'Direct query uses full document context without retrieval'
+          'Direct query uses full document context without retrieval',
+          'Token count includes the entire document in the context window'
         ]
       }
     };
