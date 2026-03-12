@@ -1,12 +1,13 @@
 /**
  * Badge component for displaying labels and indicators
+ * Styled with Unkey-inspired dark theme
  */
 
 interface BadgeProps {
   /** Badge text content */
   children: React.ReactNode;
   /** Color variant */
-  variant?: 'default' | 'info' | 'warning' | 'success' | 'error';
+  variant?: 'default' | 'primary' | 'info' | 'warning' | 'success' | 'error';
   /** Size variant */
   size?: 'sm' | 'md' | 'lg';
   /** Additional CSS classes */
@@ -20,22 +21,23 @@ export function Badge({
   className = '',
 }: BadgeProps) {
   const variantClasses = {
-    default: 'bg-gray-100 text-gray-800 border-gray-300',
-    info: 'bg-blue-100 text-blue-800 border-blue-300',
-    warning: 'bg-orange-100 text-orange-800 border-orange-300',
-    success: 'bg-green-100 text-green-800 border-green-300',
-    error: 'bg-red-100 text-red-800 border-red-300',
+    default: 'bg-unkey-gray-850 text-unkey-gray-300 border-unkey-gray-700',
+    primary: 'bg-unkey-teal-500/10 text-unkey-teal-400 border-unkey-teal-500/20',
+    info: 'bg-blue/10 text-blue border-blue/20',
+    warning: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    success: 'bg-success/10 text-success border-success/20',
+    error: 'bg-red-500/10 text-red-400 border-red-500/20',
   };
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-0.5',
     md: 'text-sm px-2.5 py-1',
-    lg: 'text-base px-3 py-1.5',
+    lg: 'text-sm px-3 py-1.5',
   };
 
   return (
     <span
-      className={`inline-flex items-center font-medium rounded-full border ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center font-medium rounded-unkey-md border ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
     >
       {children}
     </span>

@@ -28,17 +28,17 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-md border-2 border-gray-200 overflow-hidden">
+    <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 overflow-hidden">
       {/* Header - Always Visible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-unkey-gray-850 transition-colors"
         aria-expanded={isExpanded}
         aria-controls="metrics-breakdown-content"
       >
         <div className="flex items-center gap-3">
           <svg
-            className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${
+            className={`w-5 h-5 text-unkey-gray-400 transition-transform duration-300 ${
               isExpanded ? 'rotate-90' : ''
             }`}
             fill="none"
@@ -52,24 +52,24 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
               d="M9 5l7 7-7 7"
             />
           </svg>
-          <h3 className="text-lg font-bold text-gray-900">
+          <h3 className="text-lg font-bold text-white">
             Detailed Metrics Breakdown
           </h3>
         </div>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-unkey-gray-400">
           {isExpanded ? 'Click to collapse' : 'Click to expand'}
         </span>
       </button>
 
       {/* Expandable Content */}
       {isExpanded && (
-        <div id="metrics-breakdown-content" className="border-t border-gray-200">
+        <div id="metrics-breakdown-content" className="border-t border-unkey-gray-700">
           {/* Metadata Notice */}
           {breakdown.metadata.notes && breakdown.metadata.notes.length > 0 && (
-            <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
+            <div className="px-6 py-3 bg-blue/10 border-b border-blue/20">
               <div className="flex items-start gap-2">
                 <svg
-                  className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"
+                  className="w-5 h-5 text-blue flex-shrink-0 mt-0.5"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -80,10 +80,10 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
                   />
                 </svg>
                 <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                  <h4 className="text-sm font-semibold text-white mb-1">
                     Important Notes
                   </h4>
-                  <ul className="text-xs text-blue-800 space-y-1">
+                  <ul className="text-xs text-unkey-gray-300 space-y-1">
                     {breakdown.metadata.notes.map((note, index) => (
                       <li key={index} className="flex items-start gap-1">
                         <span>•</span>
@@ -98,15 +98,15 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
 
           {/* Tab Navigation */}
           <div className="px-6 pt-4">
-            <div className="flex gap-2 border-b border-gray-200">
+            <div className="flex gap-2 border-b border-unkey-gray-700">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`px-4 py-2 text-sm font-medium transition-colors relative ${
                     activeTab === tab.id
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'text-unkey-teal-400 border-b-2 border-unkey-teal-500'
+                      : 'text-unkey-gray-400 hover:text-unkey-gray-200'
                   }`}
                   role="tab"
                   aria-selected={activeTab === tab.id}
@@ -166,10 +166,10 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
           </div>
 
           {/* Footer with Metadata */}
-          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
-            <div className="flex items-center justify-between text-xs text-gray-600">
+          <div className="px-6 py-3 bg-unkey-gray-850 border-t border-unkey-gray-700">
+            <div className="flex items-center justify-between text-xs text-unkey-gray-400">
               <span>
-                Model: <span className="font-semibold">{breakdown.metadata.model}</span>
+                Model: <span className="font-semibold text-unkey-gray-200">{breakdown.metadata.model}</span>
               </span>
               <span>
                 Calculated: {new Date(breakdown.metadata.timestamp).toLocaleString()}

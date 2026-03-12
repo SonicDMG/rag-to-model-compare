@@ -27,10 +27,10 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
   return (
     <div className="space-y-4">
       {/* Total Tokens */}
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div className="bg-unkey-gray-850 rounded-unkey-lg p-4 border border-unkey-gray-700 shadow-unkey-card">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-gray-700">Total Tokens</h4>
-          <span className="text-2xl font-bold text-gray-900">
+          <h4 className="text-sm font-semibold text-unkey-gray-200">Total Tokens</h4>
+          <span className="text-2xl font-bold text-white">
             {formatTokens(tokens.total)}
           </span>
         </div>
@@ -39,52 +39,52 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
       {/* Input/Output Breakdown */}
       <div className="space-y-3">
         {/* Input Tokens */}
-        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+        <div className="bg-unkey-gray-850 rounded-unkey-md p-4 border border-unkey-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="text-sm font-medium text-gray-700">Input Tokens</h5>
-            <span className="text-lg font-bold text-blue-700">
+            <h5 className="text-sm font-medium text-unkey-gray-200">Input Tokens</h5>
+            <span className="text-lg font-bold text-unkey-teal-400">
               {formatTokens(tokens.totalInput)}
             </span>
           </div>
           <ProgressBar
             percentage={inputPercentage}
-            variant="blue"
+            variant="teal"
             height="sm"
           />
 
           {/* Input Token Breakdown */}
-          <div className="mt-3 space-y-2 pl-4 border-l-2 border-blue-300">
+          <div className="mt-3 space-y-2 pl-4 border-l-2 border-unkey-teal-500/50">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">System Prompt</span>
+              <span className="text-unkey-gray-400">System Prompt</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-white">
                   {formatTokens(tokens.systemPrompt)}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-unkey-gray-500">
                   ({systemPromptPercent.toFixed(1)}%)
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Query</span>
+              <span className="text-unkey-gray-400">Query</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-white">
                   {formatTokens(tokens.query)}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-unkey-gray-500">
                   ({queryPercent.toFixed(1)}%)
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Context</span>
+              <span className="text-unkey-gray-400">Context</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-white">
                   {formatTokens(tokens.context)}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-unkey-gray-500">
                   ({contextPercent.toFixed(1)}%)
                 </span>
               </div>
@@ -93,16 +93,16 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
         </div>
 
         {/* Output Tokens */}
-        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+        <div className="bg-unkey-gray-850 rounded-unkey-md p-4 border border-unkey-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="text-sm font-medium text-gray-700">Output Tokens</h5>
-            <span className="text-lg font-bold text-green-700">
+            <h5 className="text-sm font-medium text-unkey-gray-200">Output Tokens</h5>
+            <span className="text-lg font-bold text-green-400">
               {formatTokens(tokens.output)}
             </span>
           </div>
           <ProgressBar
             percentage={outputPercentage}
-            variant="green"
+            variant="success"
             height="sm"
           />
         </div>
@@ -110,8 +110,8 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
 
       {/* Per-Source Breakdown (RAG only) */}
       {isRAG && tokens.perSource && tokens.perSource.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <h5 className="text-sm font-semibold text-gray-700 mb-3">
+        <div className="bg-unkey-gray-900 rounded-unkey-lg p-4 border border-unkey-gray-700">
+          <h5 className="text-base font-medium text-unkey-gray-200 mb-3">
             Per-Source Token Usage
           </h5>
           <div className="space-y-2">
@@ -120,24 +120,24 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
               return (
                 <div
                   key={source.sourceId}
-                  className="bg-white rounded p-3 border border-gray-200"
+                  className="bg-unkey-gray-850 rounded-unkey-md p-3 border border-unkey-gray-700 hover:border-unkey-gray-600 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-600">
+                    <span className="text-xs font-medium text-unkey-gray-400">
                       Source {index + 1}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900">
+                      <span className="text-sm font-semibold text-white">
                         {formatTokens(source.tokens)}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-unkey-gray-500">
                         ({sourcePercent.toFixed(1)}%)
                       </span>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-unkey-gray-800 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 transition-all duration-500"
+                      className="h-full bg-gradient-to-r from-unkey-teal-500 to-unkey-teal-400 transition-all duration-500"
                       style={{ width: `${sourcePercent}%` }}
                     />
                   </div>
@@ -149,7 +149,7 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
           {tokens.perSource.length > 3 && (
             <button
               onClick={() => setShowAllSources(!showAllSources)}
-              className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              className="mt-3 text-sm text-unkey-teal-400 hover:text-unkey-teal-300 font-medium transition-colors"
             >
               {showAllSources
                 ? 'Show fewer sources'
@@ -161,26 +161,26 @@ export function TokenBreakdownView({ tokens, isRAG }: TokenBreakdownViewProps) {
 
       {/* Token Distribution Visualization */}
       <div className="mt-4">
-        <h5 className="text-xs font-medium text-gray-600 mb-2">Token Distribution</h5>
-        <div className="flex h-8 rounded-lg overflow-hidden border border-gray-300">
+        <h5 className="text-sm font-medium text-unkey-gray-400 mb-2">Token Distribution</h5>
+        <div className="flex h-8 rounded-unkey-md overflow-hidden border border-unkey-gray-700 bg-unkey-gray-850">
           <div
-            className="bg-blue-500 flex items-center justify-center text-white text-xs font-semibold transition-all duration-500"
+            className="bg-gradient-to-r from-unkey-teal-500 to-unkey-teal-400 flex items-center justify-center text-white text-xs font-semibold transition-all duration-500"
             style={{ width: `${inputPercentage}%` }}
             title={`Input: ${inputPercentage.toFixed(1)}%`}
           >
             {inputPercentage > 15 && `${inputPercentage.toFixed(0)}%`}
           </div>
           <div
-            className="bg-green-500 flex items-center justify-center text-white text-xs font-semibold transition-all duration-500"
+            className="bg-gradient-to-r from-green-500 to-green-400 flex items-center justify-center text-white text-xs font-semibold transition-all duration-500"
             style={{ width: `${outputPercentage}%` }}
             title={`Output: ${outputPercentage.toFixed(1)}%`}
           >
             {outputPercentage > 15 && `${outputPercentage.toFixed(0)}%`}
           </div>
         </div>
-        <div className="flex justify-between mt-2 text-xs text-gray-600">
+        <div className="flex justify-between mt-2 text-xs text-unkey-gray-400">
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 bg-blue-500 rounded"></span>
+            <span className="w-3 h-3 bg-unkey-teal-500 rounded"></span>
             Input
           </span>
           <span className="flex items-center gap-1">

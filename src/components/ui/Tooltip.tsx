@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 /**
  * Tooltip component for displaying explanatory text on hover
+ * Styled with Unkey-inspired dark theme
  */
 
 interface TooltipProps {
@@ -39,17 +40,17 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
       
       {isVisible && (
         <div
-          className={`absolute z-50 ${positionClasses[position]} pointer-events-none`}
+          className={`absolute z-50 ${positionClasses[position]} pointer-events-none animate-in fade-in duration-200`}
           role="tooltip"
         >
-          <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 max-w-xs shadow-lg">
+          <div className="bg-unkey-gray-850 text-white text-xs rounded-unkey-md py-2 px-3 max-w-xs shadow-unkey-card border border-unkey-gray-700">
             {content}
             <div
-              className={`absolute w-2 h-2 bg-gray-900 transform rotate-45 ${
-                position === 'top' ? 'bottom-[-4px] left-1/2 -translate-x-1/2' :
-                position === 'bottom' ? 'top-[-4px] left-1/2 -translate-x-1/2' :
-                position === 'left' ? 'right-[-4px] top-1/2 -translate-y-1/2' :
-                'left-[-4px] top-1/2 -translate-y-1/2'
+              className={`absolute w-2 h-2 bg-unkey-gray-850 border-unkey-gray-700 transform rotate-45 ${
+                position === 'top' ? 'bottom-[-5px] left-1/2 -translate-x-1/2 border-b border-r' :
+                position === 'bottom' ? 'top-[-5px] left-1/2 -translate-x-1/2 border-t border-l' :
+                position === 'left' ? 'right-[-5px] top-1/2 -translate-y-1/2 border-t border-r' :
+                'left-[-5px] top-1/2 -translate-y-1/2 border-b border-l'
               }`}
             />
           </div>
@@ -61,11 +62,12 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
 
 /**
  * Info icon with tooltip
+ * Styled with Unkey colors
  */
 export function InfoTooltip({ content }: { content: string }) {
   return (
     <Tooltip content={content}>
-      <span className="inline-flex items-center justify-center w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors">
+      <span className="inline-flex items-center justify-center w-4 h-4 text-unkey-gray-400 hover:text-unkey-teal-400 transition-colors duration-200">
         <svg
           className="w-4 h-4"
           fill="currentColor"

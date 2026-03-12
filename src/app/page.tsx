@@ -147,15 +147,26 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-unkey-black relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-unkey-teal/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-unkey-cyan/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-unkey-teal/3 rounded-full blur-3xl" />
+      </div>
+
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              RAG vs Direct Context Comparison
-            </h1>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+      <header className="relative border-b border-unkey-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center space-y-4 animate-fadeIn">
+            {/* Title with Glow Effect */}
+            <div className="relative inline-block">
+              <div className="absolute inset-0 bg-gradient-to-r from-unkey-teal/20 to-unkey-cyan/20 blur-2xl" />
+              <h1 className="relative text-5xl sm:text-6xl font-bold text-white mb-2">
+                RAG vs Direct Context
+              </h1>
+            </div>
+            <p className="text-lg sm:text-xl text-unkey-gray-300 max-w-3xl mx-auto">
               Compare Retrieval-Augmented Generation (RAG) with direct context window ingestion.
               Upload a document once, ask questions to both approaches, and see which works best.
             </p>
@@ -164,45 +175,47 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
         {/* Introduction */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">How It Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-bold">
-                  R
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">RAG Approach (Left)</h3>
-                  <p className="text-sm text-gray-600">
-                    Document is split into chunks, relevant pieces are retrieved based on your query, 
-                    and only those chunks are sent to the model for context.
-                  </p>
+        <section className="animate-slideUp">
+          <div className="bg-unkey-gray-900/50 backdrop-blur-sm rounded-xl border border-unkey-gray-800 p-6 sm:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6">How It Works</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-unkey-teal to-unkey-cyan rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-unkey-teal/20">
+                    R
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white mb-2">RAG Approach (Left)</h3>
+                    <p className="text-sm text-unkey-gray-300 leading-relaxed">
+                      Document is split into chunks, relevant pieces are retrieved based on your query,
+                      and only those chunks are sent to the model for context.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold">
-                  D
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Direct Context Approach (Right)</h3>
-                  <p className="text-sm text-gray-600">
-                    The entire document is sent directly to the model's context window without 
-                    chunking or retrieval steps.
-                  </p>
+              
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+                    D
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white mb-2">Direct Context Approach (Right)</h3>
+                    <p className="text-sm text-unkey-gray-300 leading-relaxed">
+                      The entire document is sent directly to the model's context window without
+                      chunking or retrieval steps.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Single Upload Section */}
-        <section className="mb-8">
+        <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
           <DocumentUpload
             onUploadComplete={handleUploadComplete}
             onUploadResult={handleUploadResult}
@@ -211,7 +224,7 @@ export default function Home() {
 
         {/* Upload Results - Side by Side */}
         {uploadResult && (uploadResult.ragStatus || uploadResult.directStatus) && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.2s' }}>
             <RagUploadResult
               status={uploadResult.ragStatus}
               chunkCount={uploadResult.ragChunks}
@@ -232,12 +245,12 @@ export default function Home() {
               hasImages={uploadResult.hasImages}
               imageCount={uploadResult.imageCount}
             />
-          </div>
+          </section>
         )}
 
         {/* Unified Query Section */}
         {documentId && (
-          <section className="mb-8">
+          <section className="animate-slideUp" style={{ animationDelay: '0.3s' }}>
             <UnifiedQuerySection
               documentId={documentId}
               onQueryBoth={handleQueryBoth}
@@ -248,7 +261,7 @@ export default function Home() {
 
         {/* Side-by-Side Answer Sections */}
         {documentId && (ragResult || directResult || isRagQuerying || isDirectQuerying) && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.4s' }}>
             <RagSection
               ragResult={ragResult}
               isQuerying={isRagQuerying}
@@ -259,113 +272,127 @@ export default function Home() {
               isQuerying={isDirectQuerying}
               error={directError}
             />
-          </div>
+          </section>
         )}
 
         {/* Get Started Message */}
         {!documentId && (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <div className="max-w-2xl mx-auto space-y-4">
-              <svg
-                className="mx-auto h-16 w-16 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              
-              <h2 className="text-2xl font-bold text-gray-900">
-                Get Started
-              </h2>
-              
-              <p className="text-gray-600">
-                Upload a document above to begin comparing RAG and Direct Context approaches.
-                The same document will be processed by both pipelines, allowing you to query each independently.
-              </p>
+          <section className="animate-slideUp" style={{ animationDelay: '0.2s' }}>
+            <div className="bg-unkey-gray-900/50 backdrop-blur-sm rounded-xl border border-unkey-gray-800 p-8 sm:p-12 text-center">
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="relative inline-block">
+                  <div className="absolute inset-0 bg-unkey-teal/10 blur-2xl rounded-full" />
+                  <svg
+                    className="relative mx-auto h-16 w-16 text-unkey-teal"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">
+                  Get Started
+                </h2>
+                
+                <p className="text-unkey-gray-300 leading-relaxed">
+                  Upload a document above to begin comparing RAG and Direct Context approaches.
+                  The same document will be processed by both pipelines, allowing you to query each independently.
+                </p>
+              </div>
             </div>
-          </div>
+          </section>
         )}
 
         {/* Benefits Comparison */}
-        <div className="mt-12 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            When to Use Each Approach
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* RAG Benefits */}
-            <div className="bg-green-50 rounded-lg p-6 border-2 border-green-200">
-              <h3 className="text-lg font-bold text-green-900 mb-4">
-                RAG is Better For:
-              </h3>
-              <ul className="space-y-2 text-sm text-green-800">
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-1">✓</span>
-                  <span><strong>Large documents</strong> that exceed context window limits</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-1">✓</span>
-                  <span><strong>Cost optimization</strong> when only specific sections are needed</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-1">✓</span>
-                  <span><strong>Source attribution</strong> with specific chunk citations</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-1">✓</span>
-                  <span><strong>Multiple documents</strong> in a knowledge base</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-1">✓</span>
-                  <span><strong>Focused queries</strong> about specific topics</span>
-                </li>
-              </ul>
-            </div>
+        <section className="animate-slideUp" style={{ animationDelay: '0.5s' }}>
+          <div className="bg-unkey-gray-900/50 backdrop-blur-sm rounded-xl border border-unkey-gray-800 p-6 sm:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-8 text-center">
+              When to Use Each Approach
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* RAG Benefits */}
+              <div className="bg-gradient-to-br from-unkey-teal/10 to-unkey-cyan/10 rounded-xl p-6 border border-unkey-teal/20 hover:border-unkey-teal/40 transition-colors">
+                <h3 className="text-lg font-bold text-unkey-teal mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-unkey-teal rounded-full" />
+                  RAG is Better For:
+                </h3>
+                <ul className="space-y-3 text-sm text-unkey-gray-300">
+                  <li className="flex items-start gap-3">
+                    <span className="text-unkey-teal mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Large documents</strong> that exceed context window limits</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-unkey-teal mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Cost optimization</strong> when only specific sections are needed</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-unkey-teal mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Source attribution</strong> with specific chunk citations</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-unkey-teal mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Multiple documents</strong> in a knowledge base</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-unkey-teal mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Focused queries</strong> about specific topics</span>
+                  </li>
+                </ul>
+              </div>
 
-            {/* Direct Benefits */}
-            <div className="bg-blue-50 rounded-lg p-6 border-2 border-blue-200">
-              <h3 className="text-lg font-bold text-blue-900 mb-4">
-                Direct Context is Better For:
-              </h3>
-              <ul className="space-y-2 text-sm text-blue-800">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <span><strong>Small to medium documents</strong> that fit in context</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <span><strong>Holistic understanding</strong> requiring full document context</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <span><strong>Simpler implementation</strong> with no retrieval step</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <span><strong>Cross-referencing</strong> information across the document</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <span><strong>Faster processing</strong> with no retrieval overhead</span>
-                </li>
-              </ul>
+              {/* Direct Benefits */}
+              <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 rounded-xl p-6 border border-blue-500/20 hover:border-blue-500/40 transition-colors">
+                <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-400 rounded-full" />
+                  Direct Context is Better For:
+                </h3>
+                <ul className="space-y-3 text-sm text-unkey-gray-300">
+                  <li className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Small to medium documents</strong> that fit in context</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Holistic understanding</strong> requiring full document context</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Simpler implementation</strong> with no retrieval step</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Cross-referencing</strong> information across the document</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Faster processing</strong> with no retrieval overhead</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       </main>
 
       {/* Footer */}
-      <footer className="mt-16 border-t border-gray-200 bg-white">
-        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-sm text-gray-500">
-            RAG Comparison Tool - Evaluate which approach works best for your use case
-          </p>
+      <footer className="relative mt-16 border-t border-unkey-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center space-y-2">
+            <p className="text-sm text-unkey-gray-400">
+              RAG Comparison Tool - Evaluate which approach works best for your use case
+            </p>
+            <p className="text-xs text-unkey-gray-500">
+              Built with Next.js, OpenAI, and Unkey-inspired design
+            </p>
+          </div>
         </div>
       </footer>
     </div>

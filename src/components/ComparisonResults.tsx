@@ -3,59 +3,62 @@
 import { ComparisonResult } from '@/types/rag-comparison';
 import { MetricsDisplay } from './MetricsDisplay';
 import { ExpandableText } from './ExpandableText';
+import { Badge } from './ui/Badge';
 
 interface ComparisonResultsProps {
   result: ComparisonResult;
 }
 
-function AnswerCard({ 
-  title, 
-  answer, 
-  sources, 
-  isWinner 
-}: { 
-  title: string; 
-  answer: string; 
-  sources?: Array<{ id: string; content: string; metadata: any }>; 
+function AnswerCard({
+  title,
+  answer,
+  sources,
+  isWinner
+}: {
+  title: string;
+  answer: string;
+  sources?: Array<{ id: string; content: string; metadata: any }>;
   isWinner: boolean;
 }) {
   return (
-    <div className={`bg-white rounded-lg border-2 ${
-      isWinner ? 'border-green-500' : 'border-gray-200'
-    } p-6 relative`}>
+    <div className={`bg-unkey-gray-900 rounded-unkey-lg border ${
+      isWinner ? 'border-unkey-teal-500' : 'border-unkey-gray-700'
+    } p-6 relative shadow-unkey-card`}>
       {isWinner && (
-        <div className="absolute -top-3 left-4 px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-full">
-          Recommended
+        <div className="absolute -top-3 left-4">
+          <Badge variant="success" size="md">
+            Recommended
+          </Badge>
         </div>
       )}
       
-      <h3 className="text-lg font-bold text-gray-900 mb-4">{title}</h3>
+      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
       
       <div className="prose prose-sm max-w-none">
         <ExpandableText text={answer} characterLimit={400} />
       </div>
 
       {sources && sources.length > 0 && (
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">
+        <div className="mt-6 pt-6 border-t border-unkey-gray-700">
+          <h4 className="text-sm font-semibold text-unkey-gray-200 mb-3">
             Source Citations ({sources.length})
           </h4>
           <div className="space-y-3">
             {sources.map((source, index) => (
-              <div 
-                key={source.id} 
-                className="bg-gray-50 rounded-lg p-3 text-sm"
+              <div
+                key={source.id}
+                className="bg-unkey-gray-850 rounded-unkey-md p-3 text-sm border border-unkey-gray-700"
               >
                 <div className="flex items-start gap-2">
-                  <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
+                  <span className="flex-shrink-0 w-6 h-6 bg-unkey-teal-500 text-white rounded-full flex items-center justify-center text-xs font-semibold">
                     {index + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-600 line-clamp-3">
+                    <p className="text-unkey-gray-300 line-clamp-3">
                       {source.content}
                     </p>
                     {source.metadata?.index !== undefined && (
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-unkey-gray-500 mt-1">
                         Chunk {source.metadata.index + 1}
                       </p>
                     )}
@@ -74,11 +77,11 @@ function SummaryCard({ result }: { result: ComparisonResult }) {
   const getRecommendationColor = (rec: string) => {
     switch (rec) {
       case 'rag':
-        return 'bg-green-50 border-green-200 text-green-800';
+        return 'bg-success/10 border-success/20 text-success';
       case 'direct':
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+        return 'bg-blue/10 border-blue/20 text-blue';
       default:
-        return 'bg-gray-50 border-gray-200 text-gray-800';
+        return 'bg-unkey-gray-850 border-unkey-gray-700 text-unkey-gray-300';
     }
   };
 
@@ -94,17 +97,17 @@ function SummaryCard({ result }: { result: ComparisonResult }) {
   };
 
   return (
-    <div className={`rounded-lg border-2 p-6 ${getRecommendationColor(result.summary.recommendation)}`}>
+    <div className={`rounded-unkey-lg border p-6 shadow-unkey-card ${getRecommendationColor(result.summary.recommendation)}`}>
       <div className="flex items-start gap-3">
-        <svg 
-          className="w-6 h-6 flex-shrink-0 mt-0.5" 
-          fill="currentColor" 
+        <svg
+          className="w-6 h-6 flex-shrink-0 mt-0.5"
+          fill="currentColor"
           viewBox="0 0 20 20"
         >
-          <path 
-            fillRule="evenodd" 
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" 
-            clipRule="evenodd" 
+          <path
+            fillRule="evenodd"
+            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+            clipRule="evenodd"
           />
         </svg>
         
@@ -143,8 +146,8 @@ export function ComparisonResults({ result }: ComparisonResultsProps) {
       <SummaryCard result={result} />
 
       {/* Side-by-Side Answers */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-6">Answer Comparison</h2>
+      <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
+        <h2 className="text-2xl font-bold text-white mb-6">Answer Comparison</h2>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AnswerCard

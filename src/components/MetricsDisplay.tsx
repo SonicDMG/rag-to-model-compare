@@ -3,6 +3,8 @@
 import { ComparisonMetrics, RAGResult, DirectResult } from '@/types/rag-comparison';
 import { formatCost, formatTokens, formatTime, formatPercentage } from '@/lib/utils/formatters';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
+import { Badge } from './ui/Badge';
+import { ProgressBar } from './ui/ProgressBar';
 
 interface MetricsDisplayProps {
   metrics: ComparisonMetrics;
@@ -20,11 +22,11 @@ interface MetricCardProps {
   directLabel?: string;
 }
 
-function MetricCard({ 
-  title, 
-  ragValue, 
-  directValue, 
-  difference, 
+function MetricCard({
+  title,
+  ragValue,
+  directValue,
+  difference,
   isInverse = false,
   ragLabel = 'RAG',
   directLabel = 'Direct'
@@ -35,49 +37,54 @@ function MetricCard({
   const isTie = Math.abs(difference) < 0.1;
 
   const getColor = (isWinner: boolean) => {
-    if (isTie) return 'text-gray-600 bg-gray-100';
-    return isWinner ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100';
+    if (isTie) return 'bg-unkey-gray-850 border-unkey-gray-700';
+    return isWinner ? 'bg-success/10 border-success/20' : 'bg-red-500/10 border-red-500/20';
+  };
+
+  const getTextColor = (isWinner: boolean) => {
+    if (isTie) return 'text-unkey-gray-300';
+    return isWinner ? 'text-success' : 'text-red-400';
   };
 
   const getBadge = (isWinner: boolean) => {
     if (isTie) return null;
     return isWinner ? (
-      <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-green-600 text-white">
+      <Badge variant="success" size="sm">
         Winner
-      </span>
+      </Badge>
     ) : null;
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <h3 className="text-sm font-medium text-gray-500 mb-3">{title}</h3>
+    <div className="bg-unkey-gray-900 rounded-unkey-lg border border-unkey-gray-700 p-4 shadow-unkey-card">
+      <h3 className="text-sm font-medium text-unkey-gray-400 mb-3">{title}</h3>
       
       <div className="space-y-3">
         {/* RAG Value */}
-        <div className={`flex items-center justify-between p-3 rounded-lg ${getColor(ragWins)}`}>
+        <div className={`flex items-center justify-between p-3 rounded-unkey-md border ${getColor(ragWins)}`}>
           <div>
-            <span className="text-xs font-medium">{ragLabel}</span>
-            <div className="text-lg font-bold mt-1">{ragValue}</div>
+            <span className="text-xs font-medium text-unkey-gray-400">{ragLabel}</span>
+            <div className={`text-lg font-bold mt-1 ${getTextColor(ragWins)}`}>{ragValue}</div>
           </div>
           {getBadge(ragWins)}
         </div>
 
         {/* Direct Value */}
-        <div className={`flex items-center justify-between p-3 rounded-lg ${getColor(directWins)}`}>
+        <div className={`flex items-center justify-between p-3 rounded-unkey-md border ${getColor(directWins)}`}>
           <div>
-            <span className="text-xs font-medium">{directLabel}</span>
-            <div className="text-lg font-bold mt-1">{directValue}</div>
+            <span className="text-xs font-medium text-unkey-gray-400">{directLabel}</span>
+            <div className={`text-lg font-bold mt-1 ${getTextColor(directWins)}`}>{directValue}</div>
           </div>
           {getBadge(directWins)}
         </div>
 
         {/* Difference */}
-        <div className="pt-2 border-t border-gray-200">
+        <div className="pt-2 border-t border-unkey-gray-700">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Difference</span>
+            <span className="text-unkey-gray-400">Difference</span>
             <span className={`font-semibold ${
-              isTie ? 'text-gray-600' : 
-              (isInverse ? difference < 0 : difference > 0) ? 'text-green-600' : 'text-red-600'
+              isTie ? 'text-unkey-gray-300' :
+              (isInverse ? difference < 0 : difference > 0) ? 'text-success' : 'text-red-400'
             }`}>
               {difference > 0 ? '+' : ''}{difference.toFixed(1)}%
             </span>
@@ -88,30 +95,25 @@ function MetricCard({
   );
 }
 
-function ContextWindowBar({ 
-  label, 
-  percentage, 
-  isWinner 
-}: { 
-  label: string; 
-  percentage: number; 
+function ContextWindowBar({
+  label,
+  percentage,
+  isWinner
+}: {
+  label: string;
+  percentage: number;
   isWinner: boolean;
 }) {
   const isTie = Math.abs(percentage - 50) < 5;
-  const color = isTie ? 'bg-gray-400' : isWinner ? 'bg-green-500' : 'bg-red-500';
+  const variant = isTie ? 'teal' : isWinner ? 'success' : 'blue';
   
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="font-semibold text-gray-900">{formatPercentage(percentage / 100)}</span>
+        <span className="font-medium text-unkey-gray-200">{label}</span>
+        <span className="font-semibold text-white">{formatPercentage(percentage / 100)}</span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-        <div
-          className={`h-full ${color} transition-all duration-500 ease-out`}
-          style={{ width: `${Math.min(percentage, 100)}%` }}
-        />
-      </div>
+      <ProgressBar percentage={percentage} variant={variant} showLabel={false} />
     </div>
   );
 }
@@ -123,8 +125,8 @@ export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisp
 
   return (
     <div className="w-full space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-6">Performance Metrics</h2>
+      <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
+        <h2 className="text-2xl font-bold text-white mb-6">Performance Metrics</h2>
         
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -154,8 +156,8 @@ export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisp
         </div>
 
         {/* Context Window Usage */}
-        <div className="bg-gray-50 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Context Window Usage</h3>
+        <div className="bg-unkey-gray-850 rounded-unkey-lg p-6 border border-unkey-gray-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Context Window Usage</h3>
           
           <div className="space-y-4">
             <ContextWindowBar
@@ -171,12 +173,12 @@ export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisp
             />
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-unkey-gray-700">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Difference</span>
+              <span className="text-unkey-gray-400">Difference</span>
               <span className={`font-semibold ${
-                contextTie ? 'text-gray-600' : 
-                metrics.contextWindow.difference < 0 ? 'text-green-600' : 'text-red-600'
+                contextTie ? 'text-unkey-gray-300' :
+                metrics.contextWindow.difference < 0 ? 'text-success' : 'text-red-400'
               }`}>
                 {metrics.contextWindow.difference > 0 ? '+' : ''}
                 {metrics.contextWindow.difference.toFixed(1)} percentage points
@@ -187,20 +189,20 @@ export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisp
 
         {/* Quality Metrics (if available) */}
         {metrics.quality && (
-          <div className="mt-6 bg-blue-50 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quality Comparison</h3>
+          <div className="mt-6 bg-unkey-teal-500/10 rounded-unkey-lg p-6 border border-unkey-teal-500/20">
+            <h3 className="text-lg font-semibold text-white mb-4">Quality Comparison</h3>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-sm text-gray-600">RAG Quality Score</span>
-                <div className="text-2xl font-bold text-blue-600 mt-1">
+                <span className="text-sm text-unkey-gray-400">RAG Quality Score</span>
+                <div className="text-2xl font-bold text-unkey-teal-400 mt-1">
                   {metrics.quality.ragScore?.toFixed(2) || 'N/A'}
                 </div>
               </div>
               
               <div>
-                <span className="text-sm text-gray-600">Direct Quality Score</span>
-                <div className="text-2xl font-bold text-blue-600 mt-1">
+                <span className="text-sm text-unkey-gray-400">Direct Quality Score</span>
+                <div className="text-2xl font-bold text-unkey-teal-400 mt-1">
                   {metrics.quality.directScore?.toFixed(2) || 'N/A'}
                 </div>
               </div>
