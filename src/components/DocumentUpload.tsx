@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, DragEvent } from 'react';
-import { SUPPORTED_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -34,7 +33,7 @@ export interface UploadResultData {
 }
 
 interface DocumentUploadProps {
-  onUploadComplete?: (documentId: string, model?: string) => void;
+  onUploadComplete?: (documentId: string) => void;
   onUploadResult?: (result: UploadResultData) => void;
 }
 
@@ -52,7 +51,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
   const [isUploading, setIsUploading] = useState(false);
-  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -199,7 +197,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
 
     const formData = new FormData();
     formData.append('files', file);  // Single file
-    formData.append('model', model);
     
     // If this is part of a multi-file upload, include the shared document ID
     if (sharedDocumentId) {
@@ -395,7 +392,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   };
 
   const handleUpload = async () => {
-    if (files.length === 0 || !model) return;
+    if (files.length === 0) return;
 
     setIsUploading(true);
     setUploadStatus({ status: 'uploading', message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...` });
@@ -467,7 +464,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         // Call callbacks if at least one file succeeded
         if (firstSuccessfulDocumentId && (successCount + partialCount > 0)) {
           if (onUploadComplete) {
-            onUploadComplete(firstSuccessfulDocumentId, model);
+            onUploadComplete(firstSuccessfulDocumentId);
           }
           if (onUploadResult) {
             onUploadResult(uploadResultData);
@@ -504,10 +501,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const removeFile = (index: number) => {
     setFiles(files.filter((_, i) => i !== index));
   };
-
-  const availableModels = Object.entries(SUPPORTED_MODELS)
-    .filter(([_, config]) => config.available)
-    .map(([id, config]) => ({ id, name: config.name }));
 
   return (
     <div className="w-full space-y-6">
@@ -621,26 +614,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
             </div>
           </div>
         )}
-
-        {/* Model Selection */}
-        <div className="mt-6">
-          <label htmlFor="model" className="block text-sm font-medium text-unkey-gray-200 mb-2">
-            Model
-          </label>
-          <select
-            id="model"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full px-3 py-2 bg-unkey-gray-850 border border-unkey-gray-600 text-white rounded-unkey-md focus:ring-2 focus:ring-unkey-teal-500/20 focus:border-unkey-teal-500 transition-all duration-200"
-            disabled={isUploading}
-          >
-            {availableModels.map(({ id, name }) => (
-              <option key={id} value={id} className="bg-unkey-gray-850">
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
 
         {/* Upload Button */}
         <button

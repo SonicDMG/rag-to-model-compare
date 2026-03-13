@@ -9,9 +9,15 @@ interface RagSectionProps {
   ragResult: RAGResult | null;
   isQuerying: boolean;
   error: string | null;
+  documentTokens?: number;
 }
 
-export function RagSection({ ragResult, isQuerying, error }: RagSectionProps) {
+export function RagSection({
+  ragResult,
+  isQuerying,
+  error,
+  documentTokens
+}: RagSectionProps) {
 
   return (
     <div className="space-y-6">
@@ -184,6 +190,7 @@ export function RagSection({ ragResult, isQuerying, error }: RagSectionProps) {
             <MetricsBreakdownPanel
               breakdown={ragResult.metrics.breakdown}
               pipelineType="rag"
+              documentTokens={documentTokens}
             />
           )}
         </section>

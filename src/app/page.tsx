@@ -7,16 +7,21 @@ import { DirectUploadResult } from '@/components/DirectUploadResult';
 import { RagSection } from '@/components/RagSection';
 import { DirectModelSection } from '@/components/DirectModelSection';
 import { UnifiedQuerySection } from '@/components/UnifiedQuerySection';
+import { ModelSelector } from '@/components/ui/ModelSelector';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
+import { DEFAULT_MODEL, SUPPORTED_MODELS } from '@/lib/constants/models';
+import { recalculateRagMetrics, recalculateDirectMetrics } from '@/lib/rag-comparison/metrics-recalculator';
 
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o'); // Track selected model
   
   // Query state
   const [isQuerying, setIsQuerying] = useState(false);
+  
+  // Model state - used for metrics recalculation (applies to both pipelines)
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   
   // RAG state
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
@@ -28,11 +33,8 @@ export default function Home() {
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
 
-  const handleUploadComplete = (docId: string, model?: string) => {
+  const handleUploadComplete = (docId: string) => {
     setDocumentId(docId);
-    if (model) {
-      setSelectedModel(model);
-    }
   };
 
   const handleUploadResult = (result: UploadResultData) => {
@@ -60,9 +62,9 @@ export default function Home() {
         body: JSON.stringify({
           query,
           documentId,
-          model: selectedModel,
           temperature,
           maxTokens,
+          model: selectedModel, // Use selected model for initial query
         }),
       });
 
@@ -151,6 +153,27 @@ export default function Home() {
       setIsDirectQuerying(false);
     }
   };
+
+  // Handle model change for BOTH pipelines - recalculate metrics locally
+  const handleModelChange = (newModel: string) => {
+    if (!ragResult || !directResult) {
+      console.error('Cannot change model: results not available for both pipelines');
+      return;
+    }
+
+    // Recalculate metrics with new model pricing for BOTH pipelines
+    const updatedRagResult = recalculateRagMetrics(ragResult, newModel);
+    const updatedDirectResult = recalculateDirectMetrics(directResult, newModel);
+    
+    setRagResult(updatedRagResult);
+    setDirectResult(updatedDirectResult);
+    setSelectedModel(newModel);
+  };
+
+  // Get list of available model IDs
+  const availableModels = Object.keys(SUPPORTED_MODELS).filter(
+    modelId => SUPPORTED_MODELS[modelId].available
+  );
 
   return (
     <MetricsTabProvider>
@@ -266,18 +289,42 @@ export default function Home() {
           </section>
         )}
 
-        {/* Side-by-Side Answer Sections */}
-        {documentId && (ragResult || directResult || isRagQuerying || isDirectQuerying) && (
-          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.4s' }}>
+        {/* Model Selector - Show when both results are available */}
+        {documentId && ragResult && directResult && !isRagQuerying && !isDirectQuerying && (
+          <section className="animate-slideUp" style={{ animationDelay: '0.4s' }}>
+            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Model Configuration</h2>
+              <p className="text-sm text-unkey-gray-400 mb-6">
+                Change the model to recalculate metrics for both RAG and Direct pipelines. No re-query needed - metrics update instantly.
+              </p>
+              
+              <div className="max-w-md">
+                <ModelSelector
+                  currentModel={selectedModel}
+                  availableModels={availableModels}
+                  onModelChange={handleModelChange}
+                  disabled={false}
+                  isLoading={false}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Side-by-Side Answer Sections - Show during loading or when results are available */}
+        {documentId && (isRagQuerying || isDirectQuerying || ragResult || directResult) && (
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.5s' }}>
             <RagSection
               ragResult={ragResult}
               isQuerying={isRagQuerying}
               error={ragError}
+              documentTokens={uploadResult?.ragTokens}
             />
             <DirectModelSection
               directResult={directResult}
               isQuerying={isDirectQuerying}
               error={directError}
+              documentTokens={uploadResult?.directTokens}
             />
           </section>
         )}

@@ -9,9 +9,15 @@ interface DirectModelSectionProps {
   directResult: DirectResult | null;
   isQuerying: boolean;
   error: string | null;
+  documentTokens?: number;
 }
 
-export function DirectModelSection({ directResult, isQuerying, error }: DirectModelSectionProps) {
+export function DirectModelSection({
+  directResult,
+  isQuerying,
+  error,
+  documentTokens
+}: DirectModelSectionProps) {
 
   return (
     <div className="space-y-6">
@@ -151,6 +157,7 @@ export function DirectModelSection({ directResult, isQuerying, error }: DirectMo
             <MetricsBreakdownPanel
               breakdown={directResult.metrics.breakdown}
               pipelineType="direct"
+              documentTokens={documentTokens}
             />
           )}
         </section>

@@ -5,9 +5,13 @@ import { MetricsDisplay } from './MetricsDisplay';
 import { ExpandableText } from './ExpandableText';
 import { Badge } from './ui/Badge';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
+import { ModelSelector } from './ui/ModelSelector';
+import { SUPPORTED_MODELS } from '@/lib/constants/models';
 
 interface ComparisonResultsProps {
   result: ComparisonResult;
+  selectedModel: string;
+  onModelChange: (newModel: string) => void;
 }
 
 function AnswerCard({
@@ -137,15 +141,42 @@ function SummaryCard({ result }: { result: ComparisonResult }) {
   );
 }
 
-export function ComparisonResults({ result }: ComparisonResultsProps) {
+export function ComparisonResults({
+  result,
+  selectedModel,
+  onModelChange
+}: ComparisonResultsProps) {
   const ragIsRecommended = result.summary.recommendation === 'rag';
   const directIsRecommended = result.summary.recommendation === 'direct';
+
+  // Get list of available model IDs
+  const availableModels = Object.keys(SUPPORTED_MODELS).filter(
+    modelId => SUPPORTED_MODELS[modelId].available
+  );
 
   return (
     <MetricsTabProvider>
       <div className="w-full space-y-6">
       {/* Summary Section */}
       <SummaryCard result={result} />
+
+      {/* Single Model Selector - Above Everything */}
+      <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
+        <h2 className="text-xl font-bold text-white mb-4">Model Configuration</h2>
+        <p className="text-sm text-unkey-gray-400 mb-6">
+          Change the model to recalculate metrics for both RAG and Direct pipelines. No re-query needed - metrics update instantly.
+        </p>
+        
+        <div className="max-w-md">
+          <ModelSelector
+            currentModel={selectedModel}
+            availableModels={availableModels}
+            onModelChange={onModelChange}
+            disabled={false}
+            isLoading={false}
+          />
+        </div>
+      </div>
 
       {/* Side-by-Side Answers */}
       <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
@@ -167,7 +198,96 @@ export function ComparisonResults({ result }: ComparisonResultsProps) {
         </div>
       </div>
 
-      {/* Metrics Display */}
+      {/* Side-by-Side Metrics Display */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* RAG Metrics Column */}
+        <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-success/30 p-6">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span className="w-2 h-2 bg-success rounded-full" />
+            RAG Performance
+          </h3>
+          
+          <div className="space-y-4">
+            {/* Generation Time */}
+            <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Generation Time</h4>
+              <p className="text-2xl font-bold text-success">
+                {result.rag.metrics.generationTime.toFixed(0)}ms
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                Retrieval: {result.rag.metrics.retrievalTime.toFixed(0)}ms
+              </p>
+            </div>
+
+            {/* Token Usage */}
+            <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Tokens Used</h4>
+              <p className="text-2xl font-bold text-success">
+                {result.rag.metrics.tokens.toLocaleString()}
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                Retrieved chunks only
+              </p>
+            </div>
+
+            {/* Cost */}
+            <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Cost</h4>
+              <p className="text-2xl font-bold text-success">
+                ${result.rag.metrics.cost.toFixed(4)}
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                Total: {(result.rag.metrics.retrievalTime + result.rag.metrics.generationTime).toFixed(0)}ms
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Direct Metrics Column */}
+        <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-blue/30 p-6">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span className="w-2 h-2 bg-blue rounded-full" />
+            Direct Performance
+          </h3>
+          
+          <div className="space-y-4">
+            {/* Generation Time */}
+            <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Generation Time</h4>
+              <p className="text-2xl font-bold text-blue">
+                {result.direct.metrics.generationTime.toFixed(0)}ms
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                No retrieval step needed
+              </p>
+            </div>
+
+            {/* Token Usage */}
+            <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Tokens Used</h4>
+              <p className="text-2xl font-bold text-blue">
+                {result.direct.metrics.tokens.toLocaleString()}
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                Full document in context
+              </p>
+            </div>
+
+            {/* Cost */}
+            <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20">
+              <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Cost</h4>
+              <p className="text-2xl font-bold text-blue">
+                ${result.direct.metrics.cost.toFixed(4)}
+              </p>
+              <p className="text-xs text-unkey-gray-500 mt-1">
+                Single API call
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Full Metrics Display with Breakdown */}
       <MetricsDisplay
         metrics={result.comparison}
         ragResult={result.rag}

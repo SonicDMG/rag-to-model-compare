@@ -119,7 +119,11 @@ function ContextWindowBar({
   );
 }
 
-export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisplayProps) {
+export function MetricsDisplay({
+  metrics,
+  ragResult,
+  directResult
+}: MetricsDisplayProps) {
   const ragContextWins = metrics.contextWindow.ragUsage < metrics.contextWindow.directUsage;
   const directContextWins = metrics.contextWindow.directUsage < metrics.contextWindow.ragUsage;
   const contextTie = Math.abs(metrics.contextWindow.difference) < 5;

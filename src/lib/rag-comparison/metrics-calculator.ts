@@ -782,8 +782,9 @@ export function calculateCostBreakdown(
     };
   }
   
-  const inputCost = (inputTokens / 1000) * pricing.input;
-  const outputCost = (outputTokens / 1000) * pricing.output;
+  // Dividing by 1,000,000 for per 1M tokens pricing
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
   
   // Embedding cost is a placeholder estimate
   // Actual embedding costs vary by provider and model

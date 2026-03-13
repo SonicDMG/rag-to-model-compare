@@ -3,6 +3,22 @@
  */
 
 /**
+ * Props for the ModelSelector component
+ */
+export interface ModelSelectorProps {
+  /** Currently selected model ID */
+  currentModel: string;
+  /** Array of available model IDs to display */
+  availableModels: string[];
+  /** Callback when model selection changes */
+  onModelChange: (newModel: string) => void;
+  /** Whether the selector is disabled */
+  disabled?: boolean;
+  /** Whether a model change is in progress */
+  isLoading?: boolean;
+}
+
+/**
  * Represents a single chunk of text from a document
  */
 export interface Chunk {

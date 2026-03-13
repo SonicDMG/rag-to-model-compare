@@ -11,11 +11,16 @@ import { useMetricsTab } from '@/contexts/MetricsTabContext';
 interface MetricsBreakdownPanelProps {
   breakdown: DetailedMetricsBreakdown;
   pipelineType: 'rag' | 'direct';
+  documentTokens?: number;
 }
 
 type TabType = 'timing' | 'tokens' | 'cost' | 'context';
 
-export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakdownPanelProps) {
+export function MetricsBreakdownPanel({
+  breakdown,
+  pipelineType,
+  documentTokens: _documentTokens
+}: MetricsBreakdownPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { activeTab, setActiveTab } = useMetricsTab();
 
