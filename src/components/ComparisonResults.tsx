@@ -28,7 +28,7 @@ function AnswerCard({
   return (
     <div className={`bg-unkey-gray-900 rounded-unkey-lg border ${
       isWinner ? 'border-unkey-teal-500' : 'border-unkey-gray-700'
-    } p-6 relative shadow-unkey-card`}>
+    } p-6 relative shadow-unkey-card flex flex-col`}>
       {isWinner && (
         <div className="absolute -top-3 left-4">
           <Badge variant="success" size="md">
@@ -182,7 +182,7 @@ export function ComparisonResults({
       <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
         <h2 className="text-2xl font-bold text-white mb-6">Answer Comparison</h2>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <AnswerCard
             title="RAG Approach"
             answer={result.rag.answer}

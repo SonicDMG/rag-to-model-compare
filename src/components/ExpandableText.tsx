@@ -24,15 +24,21 @@ export function ExpandableText({
     : text;
 
   return (
-    <div className={className}>
-      <div className={`text-unkey-gray-300 whitespace-pre-wrap leading-relaxed ${!isExpanded ? 'h-[180px] overflow-hidden' : ''}`}>
+    <div className={`flex flex-col flex-shrink-0 ${className}`}>
+      <div
+        className="text-unkey-gray-300 whitespace-pre-wrap leading-relaxed"
+        style={{
+          height: isExpanded ? 'auto' : '180px',
+          overflow: isExpanded ? 'visible' : 'hidden'
+        }}
+      >
         {displayText}
       </div>
       
       {needsTruncation && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-unkey-teal-400 hover:text-unkey-teal-300 transition-colors focus:outline-none focus:ring-2 focus:ring-unkey-teal-500 focus:ring-offset-2 focus:ring-offset-unkey-gray-900 rounded-unkey-md px-2 py-1"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-unkey-teal-400 hover:text-unkey-teal-300 transition-colors focus:outline-none focus:ring-2 focus:ring-unkey-teal-500 focus:ring-offset-2 focus:ring-offset-unkey-gray-900 rounded-unkey-md px-2 py-1 self-start flex-shrink-0"
           aria-expanded={isExpanded}
           aria-label={isExpanded ? 'Show less text' : 'Show more text'}
         >
