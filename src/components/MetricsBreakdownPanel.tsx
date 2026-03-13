@@ -152,6 +152,7 @@ export function MetricsBreakdownPanel({ breakdown, pipelineType }: MetricsBreakd
                     output: breakdown.tokens.output,
                   }}
                   isRAG={isRAG}
+                  modelId={breakdown.metadata.model}
                 />
               </div>
             )}

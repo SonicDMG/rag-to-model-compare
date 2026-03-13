@@ -3,6 +3,7 @@
 import { RAGResult } from '@/types/rag-comparison';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
+import { ModelInfoBadge } from './ModelInfoBadge';
 
 interface RagSectionProps {
   ragResult: RAGResult | null;
@@ -130,6 +131,17 @@ export function RagSection({ ragResult, isQuerying, error }: RagSectionProps) {
           {/* Metrics Display */}
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
             <h3 className="text-xl font-bold text-white mb-4">Performance Metrics</h3>
+            
+            {/* Model Information */}
+            {ragResult.metrics.breakdown?.metadata.model && (
+              <div className="mb-6 pb-6 border-b border-unkey-gray-700">
+                <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Model Configuration</h4>
+                <ModelInfoBadge
+                  modelId={ragResult.metrics.breakdown.metadata.model}
+                  variant="success"
+                />
+              </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Generation Time */}

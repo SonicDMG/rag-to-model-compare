@@ -19,7 +19,8 @@ import {
 import {
   calculateCost,
   getContextWindowSize,
-  getModelPricing
+  getModelPricing,
+  DEFAULT_MODEL
 } from '@/lib/constants/models';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import {
@@ -640,7 +641,7 @@ export async function loadDocument(
         : tokenCount;
       
       // Get context window limit for a default model
-      const referenceLimit = getContextWindowSize('gpt-4-turbo');
+      const referenceLimit = getContextWindowSize(DEFAULT_MODEL);
       
       // Check if accumulated content is within limits
       const withinLimit = totalTokenCount < referenceLimit * 0.9;
@@ -663,8 +664,8 @@ export async function loadDocument(
 
     // Single file upload - original behavior
     // Get context window limit for a default model (we'll check per-model at query time)
-    // Using gpt-4-turbo as reference for warnings
-    const referenceLimit = getContextWindowSize('gpt-4-turbo');
+    // Using DEFAULT_MODEL as reference for warnings
+    const referenceLimit = getContextWindowSize(DEFAULT_MODEL);
     
     // Check if within reasonable limits
     const withinLimit = tokenCount < referenceLimit * 0.9; // Leave 10% for query/response

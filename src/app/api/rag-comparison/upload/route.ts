@@ -21,6 +21,7 @@ import {
   loadDocument as directLoadDocument
 } from '@/lib/rag-comparison/direct-pipeline';
 import { storeDocument, getDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
+import { DEFAULT_MODEL } from '@/lib/constants/models';
 import type {
   DocumentMetadata,
   FolderMetadata,
@@ -144,13 +145,13 @@ function sanitizeInput(input: string): string {
  */
 function validateModel(model: string | null): string {
   if (!model) {
-    return 'gpt-4-turbo'; // Default
+    return DEFAULT_MODEL; // Use the default model from constants
   }
 
   const sanitized = sanitizeInput(model);
   
-  // Basic validation - model name should be alphanumeric with hyphens
-  if (!/^[a-zA-Z0-9-]+$/.test(sanitized)) {
+  // Basic validation - model name should be alphanumeric with hyphens and dots
+  if (!/^[a-zA-Z0-9.-]+$/.test(sanitized)) {
     throw new Error('Invalid model name format');
   }
 
@@ -477,7 +478,7 @@ async function processSingleFile(
  *
  * Request: FormData with:
  * - file: File or File[] (required) - Document file(s) to upload
- * - model: string (optional) - Model to use (default: 'gpt-4-turbo')
+ * - model: string (optional) - Model to use (default: 'gpt-4o')
  *
  * Response: UploadResponse (single file) or MultiFileUploadResponse (multiple files)
  *
@@ -1044,7 +1045,7 @@ export async function GET(): Promise<NextResponse> {
         model: {
           type: 'string',
           required: false,
-          default: 'gpt-4-turbo',
+          default: 'gpt-4o',
           description: 'Model to use for processing'
         }
       },

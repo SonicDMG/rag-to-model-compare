@@ -5,6 +5,7 @@ import { formatCost, formatTokens, formatTime, formatPercentage } from '@/lib/ut
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 import { Badge } from './ui/Badge';
 import { ProgressBar } from './ui/ProgressBar';
+import { ModelInfoBadge } from './ModelInfoBadge';
 
 interface MetricsDisplayProps {
   metrics: ComparisonMetrics;
@@ -127,6 +128,32 @@ export function MetricsDisplay({ metrics, ragResult, directResult }: MetricsDisp
     <div className="w-full space-y-6">
       <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
         <h2 className="text-2xl font-bold text-white mb-6">Performance Metrics</h2>
+        
+        {/* Model Information */}
+        {(ragResult?.metrics.breakdown?.metadata.model || directResult?.metrics.breakdown?.metadata.model) && (
+          <div className="mb-6 pb-6 border-b border-unkey-gray-700">
+            <div className="flex flex-col gap-4">
+              {ragResult?.metrics.breakdown?.metadata.model && (
+                <div>
+                  <h3 className="text-sm font-medium text-unkey-gray-400 mb-2">RAG Model</h3>
+                  <ModelInfoBadge
+                    modelId={ragResult.metrics.breakdown.metadata.model}
+                    variant="success"
+                  />
+                </div>
+              )}
+              {directResult?.metrics.breakdown?.metadata.model && (
+                <div>
+                  <h3 className="text-sm font-medium text-unkey-gray-400 mb-2">Direct Model</h3>
+                  <ModelInfoBadge
+                    modelId={directResult.metrics.breakdown.metadata.model}
+                    variant="info"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">

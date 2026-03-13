@@ -13,6 +13,7 @@ import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o'); // Track selected model
   
   // Query state
   const [isQuerying, setIsQuerying] = useState(false);
@@ -27,8 +28,11 @@ export default function Home() {
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
 
-  const handleUploadComplete = (docId: string) => {
+  const handleUploadComplete = (docId: string, model?: string) => {
     setDocumentId(docId);
+    if (model) {
+      setSelectedModel(model);
+    }
   };
 
   const handleUploadResult = (result: UploadResultData) => {
@@ -56,6 +60,7 @@ export default function Home() {
         body: JSON.stringify({
           query,
           documentId,
+          model: selectedModel,
           temperature,
           maxTokens,
         }),

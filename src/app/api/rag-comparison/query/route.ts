@@ -14,6 +14,7 @@ import {
 import {
   query as directQuery
 } from '@/lib/rag-comparison/direct-pipeline';
+import { DEFAULT_MODEL } from '@/lib/constants/models';
 import type {
   RAGConfig,
   DirectConfig
@@ -33,9 +34,9 @@ const QueryRequestSchema = z.object({
     .max(10000, 'Query exceeds maximum length'),
   
   model: z.string()
-    .regex(/^[a-zA-Z0-9-]+$/, 'Invalid model name format')
+    .regex(/^[a-zA-Z0-9.-]+$/, 'Invalid model name format')
     .optional()
-    .default('gpt-4-turbo'),
+    .default(DEFAULT_MODEL),
   
   temperature: z.number()
     .min(0, 'Temperature must be between 0 and 1')
@@ -85,7 +86,7 @@ function sanitizeInput(input: string): string {
  * {
  *   "documentId": "doc-123",
  *   "query": "What is the main topic?",
- *   "model": "gpt-4-turbo",
+ *   "model": "gpt-4o",
  *   "temperature": 0.7,
  *   "maxTokens": 1000,
  *   "topK": 5
@@ -343,7 +344,7 @@ export async function GET(): Promise<NextResponse> {
         model: {
           type: 'string',
           required: false,
-          default: 'gpt-4-turbo',
+          default: 'gpt-4o',
           description: 'Model to use for generation',
           validation: 'Alphanumeric with hyphens'
         },
@@ -383,7 +384,7 @@ export async function GET(): Promise<NextResponse> {
         request: {
           documentId: 'doc-123',
           query: 'What is the main topic of this document?',
-          model: 'gpt-4-turbo',
+          model: 'gpt-4o',
           temperature: 0.7,
           maxTokens: 1000,
           topK: 5

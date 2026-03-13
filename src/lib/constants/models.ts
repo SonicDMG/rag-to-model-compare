@@ -1,19 +1,59 @@
 /**
  * Model configuration constants for RAG comparison application
- * 
+ *
  * Includes context window limits, pricing information, and supported models
  * for various LLM providers (OpenAI, Anthropic, etc.)
  */
 
 /**
+ * Pricing metadata for tracking source and update information
+ */
+export interface PricingMetadata {
+  /** Source URL for pricing information */
+  sourceUrl: string;
+  /** Date when pricing was last updated (ISO 8601 format) */
+  lastUpdated: string;
+  /** Provider name */
+  provider: string;
+}
+
+/**
  * Model pricing structure
  */
 export interface ModelPricing {
-  /** Cost per 1K input tokens in USD */
+  /** Cost per 1M input tokens in USD */
   input: number;
-  /** Cost per 1K output tokens in USD */
+  /** Cost per 1M output tokens in USD */
   output: number;
+  /** Optional: Cost per 1M cached input tokens in USD */
+  cachedInput?: number;
+  /** Optional: Long context pricing (for inputs >= 272K tokens) */
+  longContext?: {
+    /** Cost per 1M input tokens in USD for long context */
+    input: number;
+    /** Cost per 1M output tokens in USD for long context */
+    output: number;
+    /** Optional: Cost per 1M cached input tokens in USD for long context */
+    cachedInput?: number;
+  };
 }
+
+/**
+ * Threshold for long context pricing (in tokens)
+ * According to OpenAI: short context < 272K tokens, long context >= 272K tokens
+ */
+export const LONG_CONTEXT_THRESHOLD = 272000;
+
+/**
+ * Pricing metadata for OpenAI models
+ * Source: https://platform.openai.com/docs/pricing
+ * Last updated: 2026-03-13
+ */
+export const OPENAI_PRICING_METADATA: PricingMetadata = {
+  sourceUrl: 'https://platform.openai.com/docs/pricing',
+  lastUpdated: '2026-03-13',
+  provider: 'openai',
+};
 
 /**
  * Model configuration
@@ -33,40 +73,113 @@ export interface ModelConfig {
 
 /**
  * Context window limits for supported models (in tokens)
- * 
+ *
  * These represent the maximum number of tokens that can be used
  * in a single request (prompt + completion).
  */
 export const MODEL_LIMITS: Record<string, number> = {
   // OpenAI Models
+  // Source: https://platform.openai.com/docs/pricing (Last updated: 2026-03-13)
+  'gpt-5.4': 128000,
+  'gpt-5.4-pro': 128000,
+  'gpt-5.2': 128000,
+  'gpt-5.1': 128000,
+  'gpt-5': 128000,
+  'gpt-5-mini': 128000,
+  'gpt-5-nano': 128000,
+  'gpt-4.1': 128000,
+  'gpt-4.1-mini': 128000,
+  'gpt-4.1-nano': 128000,
+  'gpt-4o': 128000,
+  'gpt-4o-mini': 128000,
   'gpt-4-turbo': 128000,
   'gpt-4-turbo-preview': 128000,
   'gpt-4': 8192,
   'gpt-4-32k': 32768,
-  'gpt-3.5-turbo': 16385,
-  'gpt-3.5-turbo-16k': 16385,
-  
-  // Anthropic Claude Models
-  'claude-3-opus': 200000,
-  'claude-3-sonnet': 200000,
-  'claude-3-haiku': 200000,
-  'claude-2.1': 200000,
-  'claude-2': 100000,
-  'claude-instant-1.2': 100000,
-  
-  // Google Models (if supported)
-  'gemini-pro': 32768,
-  'gemini-pro-vision': 16384,
 } as const;
 
 /**
- * Pricing per 1K tokens for supported models (in USD)
- * 
- * Prices are current as of March 2024 and may change.
- * Always verify with provider documentation for latest pricing.
+ * Pricing per 1M tokens for supported models (in USD)
+ *
+ * OpenAI pricing source: https://platform.openai.com/docs/pricing
+ * Last updated: 2026-03-13
+ *
+ * Prices may change. Always verify with provider documentation for latest pricing.
  */
 export const MODEL_PRICING: Record<string, ModelPricing> = {
-  // OpenAI Models
+  // OpenAI GPT-5 Models
+  // Source: https://platform.openai.com/docs/pricing (Last updated: 2026-03-13)
+  'gpt-5.4': {
+    input: 2.50,
+    output: 15.00,
+    cachedInput: 0.25,
+    longContext: {
+      input: 5.00,
+      output: 22.50,
+      cachedInput: 0.50,
+    },
+  },
+  'gpt-5.4-pro': {
+    input: 30.00,
+    output: 180.00,
+    longContext: {
+      input: 60.00,
+      output: 270.00,
+    },
+  },
+  'gpt-5.2': {
+    input: 1.75,
+    output: 14.00,
+    cachedInput: 0.175,
+  },
+  'gpt-5.1': {
+    input: 1.25,
+    output: 10.00,
+    cachedInput: 0.125,
+  },
+  'gpt-5': {
+    input: 1.25,
+    output: 10.00,
+    cachedInput: 0.125,
+  },
+  'gpt-5-mini': {
+    input: 0.25,
+    output: 2.00,
+    cachedInput: 0.025,
+  },
+  'gpt-5-nano': {
+    input: 0.05,
+    output: 0.40,
+    cachedInput: 0.005,
+  },
+  
+  // OpenAI GPT-4 Models
+  // Source: https://platform.openai.com/docs/pricing (Last updated: 2026-03-13)
+  'gpt-4.1': {
+    input: 2.00,
+    output: 8.00,
+    cachedInput: 0.50,
+  },
+  'gpt-4.1-mini': {
+    input: 0.40,
+    output: 1.60,
+    cachedInput: 0.10,
+  },
+  'gpt-4.1-nano': {
+    input: 0.10,
+    output: 0.40,
+    cachedInput: 0.025,
+  },
+  'gpt-4o': {
+    input: 2.50,
+    output: 10.00,
+    cachedInput: 1.25,
+  },
+  'gpt-4o-mini': {
+    input: 0.15,
+    output: 0.60,
+    cachedInput: 0.075,
+  },
   'gpt-4-turbo': {
     input: 0.01,
     output: 0.03,
@@ -83,73 +196,67 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     input: 0.06,
     output: 0.12,
   },
-  'gpt-3.5-turbo': {
-    input: 0.0005,
-    output: 0.0015,
-  },
-  'gpt-3.5-turbo-16k': {
-    input: 0.001,
-    output: 0.002,
-  },
-  
-  // Anthropic Claude Models
-  'claude-3-opus': {
-    input: 0.015,
-    output: 0.075,
-  },
-  'claude-3-sonnet': {
-    input: 0.003,
-    output: 0.015,
-  },
-  'claude-3-haiku': {
-    input: 0.00025,
-    output: 0.00125,
-  },
-  'claude-2.1': {
-    input: 0.008,
-    output: 0.024,
-  },
-  'claude-2': {
-    input: 0.008,
-    output: 0.024,
-  },
-  'claude-instant-1.2': {
-    input: 0.0008,
-    output: 0.0024,
-  },
-  
-  // Google Models
-  'gemini-pro': {
-    input: 0.00025,
-    output: 0.0005,
-  },
-  'gemini-pro-vision': {
-    input: 0.00025,
-    output: 0.0005,
-  },
 } as const;
 
 /**
  * Default model to use when none is specified
  */
-export const DEFAULT_MODEL = 'gpt-4-turbo' as const;
+export const DEFAULT_MODEL = 'gpt-4o' as const;
 
 /**
  * List of supported models with full configuration
  */
 export const SUPPORTED_MODELS: Record<string, ModelConfig> = {
-  'gpt-4-turbo': {
-    name: 'GPT-4 Turbo',
+  // GPT-5 Models
+  'gpt-5.4': {
+    name: 'GPT-5.4',
     provider: 'openai',
-    contextWindow: MODEL_LIMITS['gpt-4-turbo'],
-    pricing: MODEL_PRICING['gpt-4-turbo'],
+    contextWindow: MODEL_LIMITS['gpt-5.4'],
+    pricing: MODEL_PRICING['gpt-5.4'],
     available: true,
   },
-  'gpt-4-turbo-preview': {
-    name: 'GPT-4 Turbo Preview',
+  'gpt-5.4-pro': {
+    name: 'GPT-5.4 Pro',
     provider: 'openai',
-    contextWindow: MODEL_LIMITS['gpt-4-turbo-preview'],
-    pricing: MODEL_PRICING['gpt-4-turbo-preview'],
+    contextWindow: MODEL_LIMITS['gpt-5.4-pro'],
+    pricing: MODEL_PRICING['gpt-5.4-pro'],
+    available: true,
+  },
+  'gpt-5': {
+    name: 'GPT-5',
+    provider: 'openai',
+    contextWindow: MODEL_LIMITS['gpt-5'],
+    pricing: MODEL_PRICING['gpt-5'],
+    available: true,
+  },
+  'gpt-5-mini': {
+    name: 'GPT-5 Mini',
+    provider: 'openai',
+    contextWindow: MODEL_LIMITS['gpt-5-mini'],
+    pricing: MODEL_PRICING['gpt-5-mini'],
+    available: true,
+  },
+  'gpt-5-nano': {
+    name: 'GPT-5 Nano',
+    provider: 'openai',
+    contextWindow: MODEL_LIMITS['gpt-5-nano'],
+    pricing: MODEL_PRICING['gpt-5-nano'],
+    available: true,
+  },
+  
+  // GPT-4 Models
+  'gpt-4o': {
+    name: 'GPT-4o',
+    provider: 'openai',
+    contextWindow: MODEL_LIMITS['gpt-4o'],
+    pricing: MODEL_PRICING['gpt-4o'],
+    available: true,
+  },
+  'gpt-4o-mini': {
+    name: 'GPT-4o Mini',
+    provider: 'openai',
+    contextWindow: MODEL_LIMITS['gpt-4o-mini'],
+    pricing: MODEL_PRICING['gpt-4o-mini'],
     available: true,
   },
   'gpt-4': {
@@ -158,83 +265,6 @@ export const SUPPORTED_MODELS: Record<string, ModelConfig> = {
     contextWindow: MODEL_LIMITS['gpt-4'],
     pricing: MODEL_PRICING['gpt-4'],
     available: true,
-  },
-  'gpt-4-32k': {
-    name: 'GPT-4 32K',
-    provider: 'openai',
-    contextWindow: MODEL_LIMITS['gpt-4-32k'],
-    pricing: MODEL_PRICING['gpt-4-32k'],
-    available: true,
-  },
-  'gpt-3.5-turbo': {
-    name: 'GPT-3.5 Turbo',
-    provider: 'openai',
-    contextWindow: MODEL_LIMITS['gpt-3.5-turbo'],
-    pricing: MODEL_PRICING['gpt-3.5-turbo'],
-    available: true,
-  },
-  'gpt-3.5-turbo-16k': {
-    name: 'GPT-3.5 Turbo 16K',
-    provider: 'openai',
-    contextWindow: MODEL_LIMITS['gpt-3.5-turbo-16k'],
-    pricing: MODEL_PRICING['gpt-3.5-turbo-16k'],
-    available: true,
-  },
-  'claude-3-opus': {
-    name: 'Claude 3 Opus',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-3-opus'],
-    pricing: MODEL_PRICING['claude-3-opus'],
-    available: true,
-  },
-  'claude-3-sonnet': {
-    name: 'Claude 3 Sonnet',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-3-sonnet'],
-    pricing: MODEL_PRICING['claude-3-sonnet'],
-    available: true,
-  },
-  'claude-3-haiku': {
-    name: 'Claude 3 Haiku',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-3-haiku'],
-    pricing: MODEL_PRICING['claude-3-haiku'],
-    available: true,
-  },
-  'claude-2.1': {
-    name: 'Claude 2.1',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-2.1'],
-    pricing: MODEL_PRICING['claude-2.1'],
-    available: true,
-  },
-  'claude-2': {
-    name: 'Claude 2',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-2'],
-    pricing: MODEL_PRICING['claude-2'],
-    available: true,
-  },
-  'claude-instant-1.2': {
-    name: 'Claude Instant 1.2',
-    provider: 'anthropic',
-    contextWindow: MODEL_LIMITS['claude-instant-1.2'],
-    pricing: MODEL_PRICING['claude-instant-1.2'],
-    available: true,
-  },
-  'gemini-pro': {
-    name: 'Gemini Pro',
-    provider: 'google',
-    contextWindow: MODEL_LIMITS['gemini-pro'],
-    pricing: MODEL_PRICING['gemini-pro'],
-    available: false, // Set to true when implemented
-  },
-  'gemini-pro-vision': {
-    name: 'Gemini Pro Vision',
-    provider: 'google',
-    contextWindow: MODEL_LIMITS['gemini-pro-vision'],
-    pricing: MODEL_PRICING['gemini-pro-vision'],
-    available: false, // Set to true when implemented
   },
 } as const;
 
@@ -287,16 +317,16 @@ export function getModelPricing(modelId: string): ModelPricing | undefined {
 
 /**
  * Calculate cost for a given number of tokens
- * 
+ *
  * @param modelId - The model identifier
  * @param inputTokens - Number of input tokens
  * @param outputTokens - Number of output tokens
  * @returns Total cost in USD, or 0 if model not found
- * 
+ *
  * @example
  * ```typescript
  * const cost = calculateCost('gpt-4-turbo', 1000, 500);
- * console.log(cost); // 0.025 (1000 * 0.01/1000 + 500 * 0.03/1000)
+ * console.log(cost); // 0.000025 (1000 * 0.01/1000000 + 500 * 0.03/1000000)
  * ```
  */
 export function calculateCost(
@@ -310,8 +340,12 @@ export function calculateCost(
     return 0;
   }
   
-  const inputCost = (inputTokens / 1000) * pricing.input;
-  const outputCost = (outputTokens / 1000) * pricing.output;
+  // Determine if we should use long context pricing
+  const useLongContext = inputTokens >= LONG_CONTEXT_THRESHOLD && pricing.longContext;
+  const effectivePricing = useLongContext ? pricing.longContext! : pricing;
+  
+  const inputCost = (inputTokens / 1000000) * effectivePricing.input;
+  const outputCost = (outputTokens / 1000000) * effectivePricing.output;
   
   return inputCost + outputCost;
 }
@@ -352,10 +386,10 @@ export function getAvailableModels(): string[] {
 
 /**
  * Get models by provider
- * 
+ *
  * @param provider - Provider name ('openai', 'anthropic', 'google')
  * @returns Array of model IDs for the provider
- * 
+ *
  * @example
  * ```typescript
  * const openaiModels = getModelsByProvider('openai');
@@ -366,6 +400,74 @@ export function getModelsByProvider(provider: string): string[] {
   return Object.entries(SUPPORTED_MODELS)
     .filter(([_, config]) => config.provider === provider)
     .map(([id, _]) => id);
+}
+
+/**
+ * Get the effective pricing for a model based on input token count
+ *
+ * @param modelId - The model identifier
+ * @param inputTokens - Number of input tokens
+ * @returns Effective pricing (short or long context) and whether long context pricing was used
+ *
+ * @example
+ * ```typescript
+ * const { pricing, isLongContext } = getEffectivePricing('gpt-5.4', 300000);
+ * console.log(isLongContext); // true
+ * console.log(pricing.input); // 5.00 (long context rate)
+ * ```
+ */
+export function getEffectivePricing(
+  modelId: string,
+  inputTokens: number
+): { pricing: ModelPricing | undefined; isLongContext: boolean } {
+  const basePricing = getModelPricing(modelId);
+  
+  if (!basePricing) {
+    return { pricing: undefined, isLongContext: false };
+  }
+  
+  const isLongContext = inputTokens >= LONG_CONTEXT_THRESHOLD && !!basePricing.longContext;
+  
+  if (isLongContext && basePricing.longContext) {
+    // Return long context pricing as a full ModelPricing object
+    return {
+      pricing: {
+        input: basePricing.longContext.input,
+        output: basePricing.longContext.output,
+        cachedInput: basePricing.longContext.cachedInput,
+      },
+      isLongContext: true,
+    };
+  }
+  
+  return { pricing: basePricing, isLongContext: false };
+}
+
+/**
+ * Get pricing metadata for a model's provider
+ *
+ * @param modelId - The model identifier
+ * @returns Pricing metadata or undefined if not available
+ *
+ * @example
+ * ```typescript
+ * const metadata = getPricingMetadata('gpt-5.4');
+ * console.log(metadata?.sourceUrl); // 'https://platform.openai.com/docs/pricing'
+ * ```
+ */
+export function getPricingMetadata(modelId: string): PricingMetadata | undefined {
+  const config = getModelConfig(modelId);
+  
+  if (!config) {
+    return undefined;
+  }
+  
+  // Return metadata based on provider
+  if (config.provider === 'openai') {
+    return OPENAI_PRICING_METADATA;
+  }
+  
+  return undefined;
 }
 
 // Made with Bob

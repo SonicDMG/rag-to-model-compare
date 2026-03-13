@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, DragEvent } from 'react';
-import { SUPPORTED_MODELS } from '@/lib/constants/models';
+import { SUPPORTED_MODELS, DEFAULT_MODEL } from '@/lib/constants/models';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -34,7 +34,7 @@ export interface UploadResultData {
 }
 
 interface DocumentUploadProps {
-  onUploadComplete?: (documentId: string) => void;
+  onUploadComplete?: (documentId: string, model?: string) => void;
   onUploadResult?: (result: UploadResultData) => void;
 }
 
@@ -52,7 +52,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
   const [isUploading, setIsUploading] = useState(false);
-  const [model, setModel] = useState('gpt-4-turbo');
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -467,7 +467,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         // Call callbacks if at least one file succeeded
         if (firstSuccessfulDocumentId && (successCount + partialCount > 0)) {
           if (onUploadComplete) {
-            onUploadComplete(firstSuccessfulDocumentId);
+            onUploadComplete(firstSuccessfulDocumentId, model);
           }
           if (onUploadResult) {
             onUploadResult(uploadResultData);
