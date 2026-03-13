@@ -106,28 +106,6 @@ export function CostBreakdownView({ cost, tokens, isRAG, modelId }: CostBreakdow
                 {outputPercentage.toFixed(1)}%
               </td>
             </tr>
-
-            {/* Embedding Cost (RAG only) */}
-            {isRAG && (
-              <tr className="hover:bg-unkey-gray-850 transition-colors">
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-orange-500 rounded"></span>
-                    <span className="font-medium text-white">Embeddings</span>
-                    <InfoTooltip content="Embedding costs are managed by OpenRAG and not exposed in API responses. Typical embedding costs are ~$0.10 per 1M tokens." />
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-right text-unkey-gray-400 italic">
-                  Not Available
-                </td>
-                <td className="py-3 px-4 text-right text-unkey-gray-500">
-                  —
-                </td>
-                <td className="py-3 px-4 text-right text-unkey-gray-500">
-                  —
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -161,6 +139,39 @@ export function CostBreakdownView({ cost, tokens, isRAG, modelId }: CostBreakdow
             Output
           </span>
         </div>
+      </div>
+
+      {/* Calculation Details */}
+      <div className="bg-unkey-gray-850 rounded-unkey-lg p-4 border border-unkey-gray-700 shadow-unkey-card">
+        <h4 className="text-sm font-semibold text-unkey-gray-200 mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          Calculation Details
+        </h4>
+        <div className="space-y-2 text-sm font-mono">
+          <div className="flex items-center justify-between py-2 px-3 bg-unkey-gray-900 rounded border border-unkey-gray-700">
+            <span className="text-unkey-gray-400">Input:</span>
+            <span className="text-unkey-teal-300">
+              {tokens.totalInput.toLocaleString()} tokens × ${inputRatePer1M.toFixed(2)}/1M = {formatCost(cost.inputCost)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-2 px-3 bg-unkey-gray-900 rounded border border-unkey-gray-700">
+            <span className="text-unkey-gray-400">Output:</span>
+            <span className="text-green-300">
+              {tokens.output.toLocaleString()} tokens × ${outputRatePer1M.toFixed(2)}/1M = {formatCost(cost.outputCost)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-2 px-3 bg-unkey-gray-900 rounded border border-unkey-teal-500/30 border-2">
+            <span className="text-unkey-gray-200 font-semibold">Total:</span>
+            <span className="text-white font-bold">
+              {formatCost(cost.totalCost)}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-unkey-gray-500 mt-3 italic">
+          All pricing is calculated per 1 million (1M) tokens
+        </p>
       </div>
 
       {/* Additional Info */}
