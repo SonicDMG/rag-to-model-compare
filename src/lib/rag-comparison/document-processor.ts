@@ -17,9 +17,9 @@ import { estimateTokens } from '@/lib/utils/token-estimator';
 import type { Chunk, ChunkStrategy } from '@/types/rag-comparison';
 
 /**
- * Maximum file size allowed (10MB)
+ * Maximum file size allowed (150MB)
  */
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+const MAX_FILE_SIZE = 150 * 1024 * 1024; // 150MB in bytes
 
 /**
  * Allowed MIME types for document upload

@@ -30,10 +30,10 @@ import type {
 } from '@/types/rag-comparison';
 
 /**
- * Maximum file size (100MB)
+ * Maximum file size (150MB)
  * Increased limit for comprehensive RAG comparison testing with larger documents
  */
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILE_SIZE = 150 * 1024 * 1024;
 
 /**
  * Multi-file upload limits

@@ -20,7 +20,7 @@ export function RagUploadResult({ status, tokenCount, indexTime, processedText, 
 
   return (
     <div className={`
-      p-4 rounded-unkey-lg border shadow-unkey-card
+      p-4 rounded-unkey-lg border shadow-unkey-card flex flex-col
       ${status === 'success'
         ? 'bg-success/10 border-success/20'
         : 'bg-red-500/10 border-red-500/20'
@@ -28,40 +28,42 @@ export function RagUploadResult({ status, tokenCount, indexTime, processedText, 
     `}>
       <h3 className="text-lg font-bold text-white mb-3">RAG Approach Results</h3>
       {status === 'success' ? (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-success" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-sm font-medium text-success">Successfully Processed</span>
-          </div>
-          <div className="ml-7 space-y-1">
-            {tokenCount !== undefined && (
-              <p className="text-sm text-unkey-gray-300">
-                <span className="font-semibold text-unkey-gray-200">Token Count:</span> {tokenCount.toLocaleString()} tokens loaded into context
-              </p>
-            )}
-            {indexTime !== undefined && (
-              <p className="text-sm text-unkey-gray-300">
-                <span className="font-semibold text-unkey-gray-200">Upload Duration:</span> {indexTime}ms
-              </p>
-            )}
-            {hasImages && imageCount !== undefined && (
-              <div className="mt-2 p-2 bg-success/20 border border-success/30 rounded-unkey-md">
-                <p className="text-sm text-success flex items-center gap-2">
-                  <span className="text-base">🖼️</span>
-                  <span className="font-semibold">Contains {imageCount} image{imageCount !== 1 ? 's' : ''}</span>
+        <div className="flex flex-col flex-grow">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-success" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm font-medium text-success">Successfully Processed</span>
+            </div>
+            <div className="ml-7 space-y-1">
+              {tokenCount !== undefined && (
+                <p className="text-sm text-unkey-gray-300">
+                  <span className="font-semibold text-unkey-gray-200">Token Count:</span> {tokenCount.toLocaleString()} tokens loaded into context
                 </p>
-                <p className="text-xs text-unkey-gray-300 mt-1 ml-6">
-                  Images are processed by RAG and contribute to the token count. This explains why RAG token counts may be higher than direct text extraction.
+              )}
+              {indexTime !== undefined && (
+                <p className="text-sm text-unkey-gray-300">
+                  <span className="font-semibold text-unkey-gray-200">Upload Duration:</span> {indexTime}ms
                 </p>
-              </div>
-            )}
+              )}
+              {hasImages && imageCount !== undefined && (
+                <div className="mt-2 p-2 bg-success/20 border border-success/30 rounded-unkey-md">
+                  <p className="text-sm text-success flex items-center gap-2">
+                    <span className="text-base">🖼️</span>
+                    <span className="font-semibold">Contains {imageCount} image{imageCount !== 1 ? 's' : ''}</span>
+                  </p>
+                  <p className="text-xs text-unkey-gray-300 mt-1 ml-6">
+                    Images are processed by RAG and contribute to the token count. This explains why RAG token counts may be higher than direct text extraction.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
           
-          {/* Collapsible processed text section */}
+          {/* Collapsible processed text section - pushed to bottom */}
           {processedText && (
-            <div className="mt-3 ml-7">
+            <div className="mt-auto pt-3 ml-7">
               <button
                 onClick={() => setShowText(!showText)}
                 className="flex items-center gap-2 text-sm font-medium text-success hover:text-success/80 transition-colors"

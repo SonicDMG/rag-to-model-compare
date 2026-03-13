@@ -569,9 +569,9 @@ export async function indexDocument(
     }
 
     // Validate file size to prevent DoS
-    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+    if (file.size > 150 * 1024 * 1024) { // 150MB limit
       throw new RAGPipelineError(
-        'File size exceeds maximum (100MB)',
+        'File size exceeds maximum (150MB)',
         'FILE_TOO_LARGE',
         { documentId, fileSize: file.size }
       );

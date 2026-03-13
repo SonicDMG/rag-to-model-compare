@@ -331,12 +331,12 @@ function validateContent(content: string): void {
     );
   }
 
-  // Limit content length to prevent DoS (100MB)
-  if (sanitized.length > 100 * 1024 * 1024) {
+  // Limit content length to prevent DoS (150MB)
+  if (sanitized.length > 150 * 1024 * 1024) {
     throw new DirectPipelineError(
       'Document content exceeds maximum size',
       'INVALID_CONTENT',
-      { contentLength: sanitized.length, maxLength: 100 * 1024 * 1024 }
+      { contentLength: sanitized.length, maxLength: 150 * 1024 * 1024 }
     );
   }
 }
