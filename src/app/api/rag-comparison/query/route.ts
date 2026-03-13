@@ -6,6 +6,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+/**
+ * Maximum duration for this API route in seconds
+ * Set to 120 seconds (2 minutes) to accommodate LLM response generation
+ * which can take longer for complex queries or large documents
+ */
+export const maxDuration = 120;
 import { z } from 'zod';
 import { getDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
 import {

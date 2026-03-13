@@ -10,6 +10,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+/**
+ * Maximum duration for this API route in seconds
+ * Set to 120 seconds (2 minutes) to accommodate document processing and indexing
+ * which can take longer for large files or multiple file uploads
+ */
+export const maxDuration = 120;
 import {
   parseDocument,
   DocumentProcessingError
