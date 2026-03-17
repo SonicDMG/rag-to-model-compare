@@ -438,6 +438,11 @@ async function processSingleFile(
       }
     }
 
+    // Normalize content to remove extra whitespace and formatting artifacts
+    // This ensures consistent token counting between upload and query time
+    // The normalization matches what estimateTokens() does internally
+    const normalizedContent = content.trim().replace(/\s+/g, ' ');
+
     const directMetadata: DocumentMetadata = {
       filename: file.name,
       size: file.size,
@@ -449,8 +454,9 @@ async function processSingleFile(
       folderContext: folderMetadata
     };
 
+    // Pass normalized content to loadDocument for consistent token counting
     const directResult = await directLoadDocument(
-      content,
+      normalizedContent,
       directDocId,
       directMetadata,
       isMultiFile,
@@ -463,7 +469,7 @@ async function processSingleFile(
       loadTime: directResult.loadTime,
       withinLimit: directResult.withinLimit,
       warnings: directResult.warnings,
-      processedText: parsedContent || undefined,
+      processedText: normalizedContent || undefined, // Use normalized content for accurate token display
       error: directResult.error
     };
 
@@ -488,7 +494,8 @@ async function processSingleFile(
               folderContext: folderMetadata
             };
 
-            storeDocument(directDocId, content, storageMetadata);
+            // Store normalized content for consistency with token counting
+            storeDocument(directDocId, normalizedContent, storageMetadata);
             console.log(`[Direct] ✅ ${file.name} stored (Direct-only)`);
           } catch (error) {
             console.error(`[Direct] ❌ Failed to store ${file.name}:`, error);
@@ -502,7 +509,8 @@ async function processSingleFile(
                 totalTokens: directResult.tokenCount,
                 folderContext: folderMetadata
               };
-              storeDocument(directDocId, content, updatedMetadata, existingDoc.filterId);
+              // Store normalized content for consistency with token counting
+              storeDocument(directDocId, normalizedContent, updatedMetadata, existingDoc.filterId);
               console.log(`[Direct] ✅ ${file.name} storage updated with content`);
             }
           } catch (error) {

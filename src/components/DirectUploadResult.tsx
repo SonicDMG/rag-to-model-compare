@@ -11,16 +11,22 @@ interface DirectUploadResultProps {
   error?: string;
   hasImages?: boolean;
   imageCount?: number;
+  fileSize?: number;
 }
 
-export function DirectUploadResult({ status, tokenCount, loadTime, warnings, processedText, error, hasImages, imageCount }: DirectUploadResultProps) {
+export function DirectUploadResult({ status, tokenCount, loadTime, warnings, processedText, error, hasImages, imageCount, fileSize }: DirectUploadResultProps) {
   const [showText, setShowText] = useState(false);
 
   if (!status) return null;
 
+  // Calculate character count from processed text if available, otherwise estimate from file size
+  // Note: processedText is the actual extracted text content, which is more accurate than file size
+  const characterCount = processedText ? processedText.length : (fileSize || 0);
+  const estimatedRawTokens = characterCount > 0 ? Math.ceil(characterCount / 4) : undefined;
+
   return (
     <div className={`
-      p-4 rounded-unkey-lg border shadow-unkey-card flex flex-col
+      p-4 rounded-unkey-lg border shadow-unkey-card flex flex-col min-h-[280px]
       ${status === 'success'
         ? 'bg-blue/10 border-blue/20'
         : 'bg-red-500/10 border-red-500/20'
@@ -29,34 +35,58 @@ export function DirectUploadResult({ status, tokenCount, loadTime, warnings, pro
       <h3 className="text-lg font-bold text-white mb-3">Direct Approach Results</h3>
       {status === 'success' ? (
         <div className="flex flex-col flex-grow">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <svg className="h-5 w-5 text-blue" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               <span className="text-sm font-medium text-blue">Successfully Processed</span>
             </div>
-            <div className="ml-7 space-y-1">
-              <p className="text-sm text-unkey-gray-300">
-                <span className="font-semibold text-unkey-gray-200">Token Count:</span> {tokenCount?.toLocaleString()} tokens loaded into context
-              </p>
-              {loadTime !== undefined && (
-                <p className="text-sm text-unkey-gray-300">
-                  <span className="font-semibold text-unkey-gray-200">Upload Duration:</span> {loadTime}ms
+            
+            {/* Token Analysis Section */}
+            <div className="ml-7 space-y-2">
+              <p className="text-sm font-semibold text-unkey-gray-200">Token Analysis:</p>
+              <div className="space-y-1 text-sm text-unkey-gray-300">
+                <p className="flex items-start gap-2">
+                  <span className="text-blue">✓</span>
+                  <span>
+                    <span className="font-medium text-blue">Content Tokens:</span> {tokenCount?.toLocaleString()} tokens <span className="text-xs text-unkey-gray-400">(extracted text, images and formatting removed)</span>
+                  </span>
                 </p>
-              )}
-              {hasImages && imageCount !== undefined && (
-                <div className="mt-2 p-2 bg-blue/20 border border-blue/30 rounded-unkey-md">
+                {characterCount > 0 && (
+                  <p className="flex items-start gap-2">
+                    <span className="text-unkey-gray-400">•</span>
+                    <span className="text-xs text-unkey-gray-400">
+                      Character count: {characterCount.toLocaleString()} characters
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Images Section */}
+            {hasImages && imageCount !== undefined && (
+              <div className="ml-7">
+                <div className="p-2 bg-blue/20 border border-blue/30 rounded-unkey-md">
                   <p className="text-sm text-blue flex items-center gap-2">
                     <span className="text-base">🖼️</span>
                     <span className="font-semibold">Contains {imageCount} image{imageCount !== 1 ? 's' : ''}</span>
                   </p>
                   <p className="text-xs text-unkey-gray-300 mt-1 ml-6">
-                    Images are stripped during text extraction. Only text content is counted, which explains the lower token count compared to RAG.
+                    Images are stripped during text extraction. Only text content is counted.
                   </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Duration Section */}
+            {loadTime !== undefined && (
+              <div className="ml-7">
+                <p className="text-sm text-unkey-gray-300">
+                  <span className="font-semibold text-unkey-gray-200">Upload Duration:</span> {loadTime}ms
+                </p>
+              </div>
+            )}
             {warnings && warnings.length > 0 && (
               <div className="mt-3 ml-7 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-unkey-md">
                 <p className="text-xs font-medium text-yellow-400 mb-1">Warnings:</p>

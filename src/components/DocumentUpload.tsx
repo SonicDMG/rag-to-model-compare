@@ -30,6 +30,7 @@ export interface UploadResultData {
   directError?: string;
   hasImages?: boolean;
   imageCount?: number;
+  fileSize?: number;
 }
 
 interface DocumentUploadProps {
@@ -355,22 +356,32 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         .map(r => `=== ${r.filename} ===\n${r.direct?.processedText}`)
         .join('\n\n');
 
+      // For batch uploads with shared document ID, the LAST file contains the TOTAL token count
+      // for all files combined (accumulated). Don't sum them up or we'll get inflated counts!
+      const lastResult = results[results.length - 1];
+      
+      // Use the last file's token count for Direct (it contains the cumulative total)
+      // For RAG, we still sum because each file is indexed separately
+      const directTokenCount = lastResult.direct?.tokenCount || 0;
+      const ragTokenCount = results.reduce((sum, r) => sum + (r.rag?.tokenCount || 0), 0);
+
       aggregatedResult = {
         documentId: firstSuccessfulDocumentId,
         filename: `${files.length} files`,
         hasImages: results.some(r => r.hasImages),
         imageCount: results.reduce((sum, r) => sum + (r.imageCount || 0), 0),
+        fileSize: files.reduce((sum, file) => sum + file.size, 0),
         rag: {
           status: results.some(r => r.rag?.status === 'success') ? 'success' : 'error',
           chunkCount: results.reduce((sum, r) => sum + (r.rag?.chunkCount || 0), 0),
-          tokenCount: results.reduce((sum, r) => sum + (r.rag?.tokenCount || 0), 0),
+          tokenCount: ragTokenCount,
           indexTime: results.reduce((sum, r) => sum + (r.rag?.indexTime || 0), 0),
           processedText: ragProcessedTexts || undefined,
           error: results.filter(r => r.rag?.error).map(r => r.rag?.error).join('; ') || undefined
         },
         direct: {
           status: results.some(r => r.direct?.status === 'success') ? 'success' : 'error',
-          tokenCount: results.reduce((sum, r) => sum + (r.direct?.tokenCount || 0), 0),
+          tokenCount: directTokenCount, // Use last file's cumulative count, not sum!
           loadTime: results.reduce((sum, r) => sum + (r.direct?.loadTime || 0), 0),
           withinLimit: results.every(r => r.direct?.withinLimit !== false),
           warnings: results.flatMap(r => r.direct?.warnings || []),
@@ -453,6 +464,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           directError: resultToUse.direct?.error,
           hasImages: resultToUse.hasImages,
           imageCount: resultToUse.imageCount,
+          fileSize: resultToUse.fileSize || (files.length === 1 ? files[0].size : files.reduce((sum, file) => sum + file.size, 0)),
         };
 
         setUploadStatus({

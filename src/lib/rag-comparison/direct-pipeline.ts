@@ -607,10 +607,19 @@ export async function loadDocument(
     validateDocumentId(documentId);
     validateContent(content);
 
+    // Sanitize and normalize content for accurate token counting
+    // The sanitizeInput removes control characters, but we also need to normalize whitespace
+    // to match what estimateTokens() does internally for consistent counting
     const sanitizedContent = sanitizeInput(content);
-
-    // Estimate total tokens for this document
-    const tokenCount = estimateTokens(sanitizedContent);
+    
+    // Normalize whitespace to get the actual usable content
+    // This removes extra spaces, newlines, and formatting artifacts from PDF/DOCX parsing
+    // The normalized content is what will actually be used during queries
+    const normalizedContent = sanitizedContent.trim().replace(/\s+/g, ' ');
+    
+    // Estimate total tokens for this document using normalized content
+    // This gives us the actual usable token count, not the inflated raw content count
+    const tokenCount = estimateTokens(normalizedContent);
 
     // Handle multi-file uploads - append to existing document
     if (isMultiFile) {
@@ -622,22 +631,27 @@ export async function loadDocument(
       const existingDoc = getDocument(documentId);
       
       if (existingDoc) {
-        // Append to existing document
-        appendToDocument(documentId, sanitizedContent, metadata, undefined, separator);
+        // Append to existing document - use normalized content for consistency
+        appendToDocument(documentId, normalizedContent, metadata, undefined, separator);
         console.log(`[Direct] Appended ${filename || 'document'} to batch ${documentId}`);
       } else {
         // First document in the batch - create with separator prefix
         const contentWithHeader = filename
-          ? `=== DOCUMENT: ${filename} ===\n\n${sanitizedContent}`
-          : sanitizedContent;
+          ? `=== DOCUMENT: ${filename} ===\n\n${normalizedContent}`
+          : normalizedContent;
         appendToDocument(documentId, contentWithHeader, metadata);
         console.log(`[Direct] Created batch ${documentId} with ${filename || 'document'}`);
       }
       
       // Get the accumulated document to calculate total tokens
       const accumulatedDoc = getDocument(documentId);
+      // Normalize the accumulated content before calculating tokens
+      // This ensures separators and any remaining whitespace are normalized
+      const normalizedAccumulatedContent = accumulatedDoc
+        ? accumulatedDoc.content.trim().replace(/\s+/g, ' ')
+        : normalizedContent;
       const totalTokenCount = accumulatedDoc
-        ? estimateTokens(accumulatedDoc.content)
+        ? estimateTokens(normalizedAccumulatedContent)
         : tokenCount;
       
       // Get context window limit for a default model
@@ -863,16 +877,24 @@ Please provide a clear and accurate answer based on the document above.`;
     // Extract answer from SDK response
     const answer = responseData.response || '';
 
-    // Calculate token usage breakdown
-    // Input tokens = system prompt + full document + user query
-    const systemPrompt = buildSystemPrompt();
-    const systemPromptTokens = estimateTokens(systemPrompt);
-    const queryTokens = estimateTokens(sanitizedQuery);
-    const documentTokens = estimateTokens(sanitizedContent);
-    const inputTokens = systemPromptTokens + documentTokens + queryTokens;
+    // Calculate token usage on ACTUAL content sent to API
+    // This is the key fix: count what we actually send, not estimates of components
+    // Input tokens = the exact fullMessage that was sent to the LLM
+    const inputTokens = estimateTokens(fullMessage);
+    
+    console.log('[Direct Pipeline Query] ✅ Token count calculated on ACTUAL message sent to API');
+    console.log('[Direct Pipeline Query] Input tokens (actual):', inputTokens);
+    console.log('[Direct Pipeline Query] Message character count:', fullMessage.length);
     
     // Output tokens = generated response
     const outputTokens = estimateTokens(answer);
+    
+    // For breakdown display, calculate component tokens from the actual message
+    const systemPrompt = buildSystemPrompt();
+    const systemPromptTokens = estimateTokens(systemPrompt);
+    const queryTokens = estimateTokens(sanitizedQuery);
+    // Document tokens = total input minus system prompt and query
+    const documentTokens = inputTokens - systemPromptTokens - queryTokens;
 
     // Get context window size for usage calculation
     const contextWindowSize = getContextWindowSize(config.model);
