@@ -35,6 +35,7 @@ import type {
   FileUploadResult,
   MultiFileUploadResponse
 } from '@/types/rag-comparison';
+import { OpenRAGClient } from 'openrag-sdk';
 
 /**
  * Maximum file size (150MB)
@@ -200,6 +201,61 @@ function validateMultiFileUpload(files: File[]): { valid: boolean; error?: strin
   
   return { valid: true };
 }
+/**
+ * Ensure the "Compare" knowledge filter exists before processing files
+ * This prevents race conditions when multiple files are uploaded simultaneously
+ * 
+ * @returns Promise resolving to the filter ID
+ * @throws Error if filter creation/retrieval fails
+ */
+async function ensureKnowledgeFilter(): Promise<string> {
+  try {
+    console.log('🔍 Ensuring "Compare" knowledge filter exists...');
+    
+    // Get OpenRAG client
+    const client = new OpenRAGClient({
+      apiKey: process.env.OPENRAG_API_KEY!,
+      baseUrl: process.env.OPENRAG_URL!,
+    });
+    
+    const filterName = 'Compare';
+    
+    // Search for existing filter
+    const existingFilters = await client.knowledgeFilters.search(filterName, 1);
+    
+    if (existingFilters && existingFilters.length > 0) {
+      const filterId = existingFilters[0].id;
+      console.log(`✅ Found existing "${filterName}" filter with ID: ${filterId}`);
+      return filterId;
+    }
+    
+    // Create new filter if it doesn't exist
+    console.log(`📝 Creating new "${filterName}" filter...`);
+    const result = await client.knowledgeFilters.create({
+      name: filterName,
+      description: 'Filter for document comparison',
+      queryData: {
+        filters: {
+          data_sources: [] // Start with empty array, files will add themselves
+        }
+      }
+    });
+    
+    if (!result.success || !result.id) {
+      throw new Error('Failed to create knowledge filter');
+    }
+    
+    console.log(`✅ Created "${filterName}" filter with ID: ${result.id}`);
+    return result.id;
+    
+  } catch (error) {
+    console.error('❌ Failed to ensure knowledge filter:', error);
+    throw new Error(
+      `Failed to ensure knowledge filter: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
 
 /**
  * Extracts folder metadata from a file
@@ -243,7 +299,8 @@ async function processSingleFile(
   documentId: string,
   folderMetadata?: FolderMetadata,
   isMultiFile: boolean = false,
-  sharedDirectDocumentId?: string
+  sharedDirectDocumentId?: string,
+  knowledgeFilterId?: string
 ): Promise<FileUploadResult> {
   // Use shared document ID for Direct pipeline in multi-file uploads
   const directDocId = isMultiFile && sharedDirectDocumentId ? sharedDirectDocumentId : documentId;
@@ -300,7 +357,7 @@ async function processSingleFile(
       folderContext: folderMetadata
     };
 
-    const ragResult = await ragIndexDocument(file, documentId, ragMetadata);
+    const ragResult = await ragIndexDocument(file, documentId, ragMetadata, knowledgeFilterId);
 
     let filterIdForStorage: string | undefined = undefined;
     if (ragResult.success && ragResult.filterId) {
@@ -948,6 +1005,18 @@ export async function POST(
     const sharedDocumentId = `batch-${uploadBatchId}`;
     console.log(`📁 Shared Document ID for Direct pipeline: ${sharedDocumentId}`);
 
+    // Ensure knowledge filter exists BEFORE processing any files
+    // This prevents race conditions when multiple files try to create/update the filter simultaneously
+    let knowledgeFilterId: string | undefined;
+    try {
+      knowledgeFilterId = await ensureKnowledgeFilter();
+      console.log(`✅ Knowledge filter ready: ${knowledgeFilterId}`);
+    } catch (error) {
+      console.error('❌ Failed to ensure knowledge filter:', error);
+      // Continue without pre-created filter - files will try to create/find it individually
+      // This maintains backward compatibility
+    }
+
     // Process files sequentially
     const results: FileUploadResult[] = [];
     
@@ -966,12 +1035,14 @@ export async function POST(
       
       // Process the file with multi-file flag enabled
       // Pass both RAG document ID (unique per file) and shared Direct document ID
+      // Also pass the pre-created knowledge filter ID to avoid race conditions
       const result = await processSingleFile(
         file,
         ragDocumentId,
         folderMetadata,
         true,
-        sharedDocumentId
+        sharedDocumentId,
+        knowledgeFilterId
       );
       
       results.push(result);

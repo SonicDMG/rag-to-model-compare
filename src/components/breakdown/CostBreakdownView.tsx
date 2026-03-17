@@ -1,6 +1,5 @@
 import { CostBreakdown } from '@/types/rag-comparison';
 import { formatCost } from '@/lib/utils/formatters';
-import { InfoTooltip } from '@/components/ui/Tooltip';
 import { getPricingMetadata, getEffectivePricing, LONG_CONTEXT_THRESHOLD } from '@/lib/constants/models';
 
 interface CostBreakdownViewProps {
@@ -9,11 +8,10 @@ interface CostBreakdownViewProps {
     totalInput: number;
     output: number;
   };
-  isRAG: boolean;
   modelId?: string;
 }
 
-export function CostBreakdownView({ cost, tokens, isRAG, modelId }: CostBreakdownViewProps) {
+export function CostBreakdownView({ cost, tokens, modelId }: CostBreakdownViewProps) {
   // Get pricing metadata if modelId is provided (OpenAI only)
   const pricingMetadata = modelId ? getPricingMetadata(modelId) : undefined;
   

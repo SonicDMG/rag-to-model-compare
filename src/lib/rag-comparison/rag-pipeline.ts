@@ -326,9 +326,52 @@ function validateQuery(query: string): void {
  * const filterId = await createKnowledgeFilter('doc-123', 'example.pdf');
  * ```
  */
+/**
+ * Helper function to update filter with retry logic
+ */
+async function updateFilterWithRetry(
+  client: OpenRAGClient,
+  filterId: string,
+  dataSources: string[],
+  maxRetries: number = 3
+): Promise<void> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await client.knowledgeFilters.update(filterId, {
+        queryData: {
+          filters: {
+            data_sources: dataSources
+          }
+        }
+      });
+      console.log(`✅ Filter update successful on attempt ${attempt}`);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      console.warn(`⚠️  Filter update attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
+      
+      if (attempt < maxRetries) {
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const delay = 100 * Math.pow(2, attempt - 1);
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw new RAGPipelineError(
+    `Failed to update filter after ${maxRetries} attempts`,
+    'FILTER_UPDATE_ERROR',
+    { filterId, lastError: lastError?.message }
+  );
+}
+
 export async function createKnowledgeFilter(
   documentId: string,
-  filename: string
+  filename: string,
+  existingFilterId?: string
 ): Promise<string> {
   try {
     // Validate inputs
@@ -353,6 +396,37 @@ export async function createKnowledgeFilter(
     // Use the constant "Compare" as the filter name
     const filterName = KNOWLEDGE_FILTER_ID;
     
+    // If existingFilterId is provided, ONLY attempt update - never create
+    if (existingFilterId) {
+      console.log(`Using pre-existing filter ID: ${existingFilterId}`);
+      
+      // Get the filter to check current data sources
+      const existingFilters = await client.knowledgeFilters.search(filterName, 1);
+      
+      if (!existingFilters || existingFilters.length === 0) {
+        throw new RAGPipelineError(
+          `Filter ${existingFilterId} not found - cannot update non-existent filter`,
+          'FILTER_NOT_FOUND',
+          { filterId: existingFilterId, filterName }
+        );
+      }
+      
+      const existingFilter = existingFilters[0];
+      const currentDataSources = existingFilter.queryData?.filters?.data_sources || [];
+      
+      // Add new filename if not already present
+      if (!currentDataSources.includes(filename)) {
+        console.log(`Adding filename "${filename}" to existing filter`);
+        // updateFilterWithRetry will throw if all retries fail
+        await updateFilterWithRetry(client, existingFilter.id, [...currentDataSources, filename]);
+        console.log(`✅ Updated filter with new filename`);
+      } else {
+        console.log(`ℹ️  Filename "${filename}" already in filter`);
+      }
+      
+      return existingFilter.id;
+    }
+    
     // Check if "Compare" filter already exists
     const existingFilters = await client.knowledgeFilters.search(filterName, 1);
     
@@ -366,16 +440,10 @@ export async function createKnowledgeFilter(
       // Add new filename if not already present
       if (!currentDataSources.includes(filename)) {
         console.log(`Adding filename "${filename}" to existing filter`);
-        await client.knowledgeFilters.update(existingFilter.id, {
-          queryData: {
-            filters: {
-              data_sources: [...currentDataSources, filename]
-            }
-          }
-        });
-        console.log(`Updated filter with new filename`);
+        await updateFilterWithRetry(client, existingFilter.id, [...currentDataSources, filename]);
+        console.log(`✅ Updated filter with new filename`);
       } else {
-        console.log(`Filename "${filename}" already in filter`);
+        console.log(`ℹ️  Filename "${filename}" already in filter`);
       }
       
       return existingFilter.id;
@@ -401,7 +469,7 @@ export async function createKnowledgeFilter(
       );
     }
     
-    console.log(`Created knowledge filter "${filterName}" with ID: ${result.id}`);
+    console.log(`✅ Created knowledge filter "${filterName}" with ID: ${result.id}`);
     return result.id;
     
   } catch (error) {
@@ -552,7 +620,8 @@ export function calculateMetrics(
 export async function indexDocument(
   file: File,
   documentId: string,
-  metadata: DocumentMetadata
+  metadata: DocumentMetadata,
+  knowledgeFilterId?: string
 ): Promise<IndexResult> {
   const startTime = performance.now();
 
@@ -608,9 +677,10 @@ export async function indexDocument(
       );
     }
 
-    // Create knowledge filter for this document after successful ingestion
+    // Create or update knowledge filter for this document after successful ingestion
     // This filter will scope retrieval to only this document
-    const filterId = await createKnowledgeFilter(documentId, metadata.filename);
+    // If knowledgeFilterId is provided, use it to avoid race conditions
+    const filterId = await createKnowledgeFilter(documentId, metadata.filename, knowledgeFilterId);
 
     const endTime = performance.now();
     const indexTime = Math.round(endTime - startTime);
