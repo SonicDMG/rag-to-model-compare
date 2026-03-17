@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface ExpandableTextProps {
   text: string;
@@ -14,18 +14,36 @@ export function ExpandableText({
   className = ''
 }: ExpandableTextProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [needsTruncation, setNeedsTruncation] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   
-  // Check if text needs truncation
-  const needsTruncation = text.length > characterLimit;
+  // Check if text needs truncation based on character limit OR overflow
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (text.length > characterLimit) {
+        setNeedsTruncation(true);
+        return;
+      }
+      
+      // Also check if content overflows the 180px height
+      if (contentRef.current) {
+        const isOverflowing = contentRef.current.scrollHeight > 180;
+        setNeedsTruncation(isOverflowing);
+      }
+    };
+    
+    checkTruncation();
+  }, [text, characterLimit]);
   
   // Get display text based on expansion state
-  const displayText = needsTruncation && !isExpanded
+  const displayText = text.length > characterLimit && !isExpanded
     ? text.slice(0, characterLimit) + '...'
     : text;
 
   return (
     <div className={`flex flex-col flex-shrink-0 ${className}`}>
       <div
+        ref={contentRef}
         className="text-unkey-gray-300 whitespace-pre-wrap leading-relaxed"
         style={{
           height: isExpanded ? 'auto' : '180px',
