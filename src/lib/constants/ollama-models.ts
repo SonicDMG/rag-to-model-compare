@@ -65,11 +65,53 @@ export const OLLAMA_MODEL_CONFIGS: Record<string, OllamaModelConfig> = {
     family: 'qwen',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
+  'qwen3': {
+    name: 'Qwen 3',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'qwen',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
   'qwen3.5': {
     name: 'Qwen 3.5',
     contextWindow: 128000,
     supportsImages: false,
     family: 'qwen',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'qwen3-coder-next': {
+    name: 'Qwen 3 Coder Next',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'qwen3next',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'gemini-3-flash-preview': {
+    name: 'Gemini 3 Flash Preview',
+    contextWindow: 128000,
+    supportsImages: true,
+    family: 'gemini',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'nemotron-3-nano': {
+    name: 'Nemotron 3 Nano',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'nemotron_h_moe',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'gpt-oss': {
+    name: 'GPT-OSS',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'gptoss',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'granite4': {
+    name: 'Granite 4',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'granite',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   }
 };
