@@ -56,7 +56,7 @@ export function RagSection({
 
       {/* Loading State */}
       {isQuerying && (
-        <div className="bg-success/10 border border-success/20 rounded-unkey-lg p-6 shadow-unkey-card">
+        <div className="bg-success/10 border border-success/20 rounded-unkey-lg p-6 shadow-unkey-card h-[140px]">
           <div className="flex items-center justify-center gap-3">
             <svg
               className="animate-spin h-8 w-8 text-success"
@@ -96,7 +96,7 @@ export function RagSection({
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-success/30">
             <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
             
-            <div className="prose prose-sm max-w-none">
+            <div className="prose prose-sm max-w-none min-h-[180px]">
               <ExpandableText text={ragResult.answer} characterLimit={400} />
             </div>
 

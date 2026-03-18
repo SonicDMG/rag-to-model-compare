@@ -2,6 +2,8 @@
  * Core type definitions for RAG comparison application
  */
 
+import type { OllamaConfig, OllamaResult } from './ollama';
+
 /**
  * Props for the ModelSelector component
  */
@@ -256,7 +258,7 @@ export interface DirectResult {
 }
 
 /**
- * Comparison metrics between RAG and direct approaches
+ * Comparison metrics between RAG, direct, and Ollama approaches
  */
 export interface ComparisonMetrics {
   /** Speed comparison */
@@ -265,6 +267,8 @@ export interface ComparisonMetrics {
     ragTotal: number;
     /** Direct generation time in ms */
     directTotal: number;
+    /** Ollama generation time in ms (optional) */
+    ollamaTotal?: number;
     /** Percentage difference (positive means RAG is faster) */
     difference: number;
   };
@@ -274,6 +278,8 @@ export interface ComparisonMetrics {
     rag: number;
     /** Tokens used by direct approach */
     direct: number;
+    /** Tokens used by Ollama approach (optional) */
+    ollama?: number;
     /** Percentage difference (positive means RAG uses fewer) */
     difference: number;
   };
@@ -283,6 +289,8 @@ export interface ComparisonMetrics {
     rag: number;
     /** Cost of direct approach in USD */
     direct: number;
+    /** Cost of Ollama approach in USD (optional, always $0) */
+    ollama?: number;
     /** Percentage difference (positive means RAG is cheaper) */
     difference: number;
   };
@@ -292,6 +300,8 @@ export interface ComparisonMetrics {
     ragUsage: number;
     /** Percentage used by direct approach */
     directUsage: number;
+    /** Percentage used by Ollama approach (optional) */
+    ollamaUsage?: number;
     /** Difference in percentage points */
     difference: number;
   };
@@ -301,25 +311,29 @@ export interface ComparisonMetrics {
     ragScore?: number;
     /** Direct answer quality score (0-1) */
     directScore?: number;
+    /** Ollama answer quality score (0-1) */
+    ollamaScore?: number;
     /** Difference in quality scores */
     difference?: number;
   };
 }
 
 /**
- * Complete comparison result between RAG and direct approaches
+ * Complete comparison result between RAG, direct, and Ollama approaches
  */
 export interface ComparisonResult {
   /** RAG approach result */
   rag: RAGResult;
   /** Direct approach result */
   direct: DirectResult;
+  /** Ollama approach result (optional) */
+  ollama?: OllamaResult;
   /** Comparative metrics */
   comparison: ComparisonMetrics;
   /** Summary and recommendations */
   summary: {
     /** Which approach performed better overall */
-    recommendation: 'rag' | 'direct' | 'similar';
+    recommendation: 'rag' | 'direct' | 'ollama' | 'similar';
     /** Key insights from the comparison */
     insights: string[];
     /** Timestamp of the comparison */
@@ -367,6 +381,8 @@ export interface QueryRequest {
   ragConfig: RAGConfig;
   /** Direct query configuration */
   directConfig: DirectConfig;
+  /** Ollama configuration (optional) */
+  ollamaConfig?: OllamaConfig;
   /** Document ID to query against */
   documentId?: string;
 }

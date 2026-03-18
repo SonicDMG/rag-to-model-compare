@@ -1,8 +1,8 @@
 /**
  * Query Execution API Route
  *
- * Handles query execution against uploaded documents using both RAG and Direct
- * pipelines independently via Server-Sent Events streaming.
+ * Handles query execution against uploaded documents using RAG, Direct, and
+ * Ollama pipelines independently via Server-Sent Events streaming.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -21,11 +21,16 @@ import {
 import {
   query as directQuery
 } from '@/lib/rag-comparison/direct-pipeline';
+import {
+  query as ollamaQuery
+} from '@/lib/rag-comparison/ollama-pipeline';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
+import { OLLAMA_CONFIG } from '@/lib/env';
 import type {
   RAGConfig,
   DirectConfig
 } from '@/types/rag-comparison';
+import type { OllamaConfig } from '@/types/ollama';
 
 /**
  * Request validation schema using Zod
@@ -62,6 +67,20 @@ const QueryRequestSchema = z.object({
     .max(20, 'Top K cannot exceed 20')
     .optional()
     .default(5),
+  
+  // Ollama-specific parameters
+  ollamaModel: z.string()
+    .regex(/^[a-zA-Z0-9.:_-]+$/, 'Invalid Ollama model name format')
+    .optional(),
+  
+  ollamaTemperature: z.number()
+    .min(0, 'Ollama temperature must be between 0 and 2')
+    .max(2, 'Ollama temperature must be between 0 and 2')
+    .optional(),
+  
+  ollamaMaxTokens: z.number()
+    .min(1, 'Ollama max tokens must be positive')
+    .optional(),
 });
 
 
@@ -140,12 +159,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    const { documentId, query, model, temperature, maxTokens, topK } = validatedData;
+    const {
+      documentId,
+      query,
+      model,
+      temperature,
+      maxTokens,
+      topK,
+      ollamaModel,
+      ollamaTemperature,
+      ollamaMaxTokens
+    } = validatedData;
 
     // Sanitize inputs
     const sanitizedDocumentId = sanitizeInput(documentId);
     const sanitizedQuery = sanitizeInput(query);
     const sanitizedModel = sanitizeInput(model);
+    const sanitizedOllamaModel = ollamaModel ? sanitizeInput(ollamaModel) : undefined;
     
     console.log('Sanitized inputs:', {
       documentId: sanitizedDocumentId,
@@ -153,7 +183,10 @@ export async function POST(request: NextRequest): Promise<Response> {
       model: sanitizedModel,
       temperature,
       maxTokens,
-      topK
+      topK,
+      ollamaModel: sanitizedOllamaModel,
+      ollamaTemperature,
+      ollamaMaxTokens
     });
 
     // Retrieve document from storage (needed for Direct pipeline)
@@ -215,6 +248,15 @@ export async function POST(request: NextRequest): Promise<Response> {
     };
     console.log('Direct config:', JSON.stringify(directConfig, null, 2));
 
+    // Build Ollama configuration
+    const ollamaConfig: OllamaConfig = {
+      model: sanitizedOllamaModel || OLLAMA_CONFIG.defaultModel,
+      temperature: ollamaTemperature ?? temperature,
+      maxTokens: ollamaMaxTokens ?? maxTokens,
+      baseUrl: OLLAMA_CONFIG.baseUrl
+    };
+    console.log('Ollama config:', JSON.stringify(ollamaConfig, null, 2));
+
     // Create a streaming response using Server-Sent Events
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -223,7 +265,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         console.log('⚡ EXECUTING PIPELINES INDEPENDENTLY');
         console.log('========================================\n');
 
-        // Execute both pipelines independently - store promises to avoid duplicate execution
+        // Execute all three pipelines independently - store promises to avoid duplicate execution
         // RAG pipeline
         const ragPromise = ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig);
         
@@ -272,15 +314,41 @@ export async function POST(request: NextRequest): Promise<Response> {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Wait for both to complete (or fail) before closing the stream
+        // Ollama pipeline
+        const ollamaPromise = storedDoc
+          ? ollamaQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, ollamaConfig)
+          : Promise.reject(new Error('Document not found for Ollama pipeline'));
+
+        ollamaPromise
+          .then((ollamaResult) => {
+            console.log('🟣 Ollama pipeline completed successfully');
+            const data = JSON.stringify({
+              type: 'ollama',
+              success: true,
+              data: ollamaResult
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          })
+          .catch((error) => {
+            console.error('🟣 Ollama pipeline failed:', error);
+            const data = JSON.stringify({
+              type: 'ollama',
+              success: false,
+              error: error instanceof Error ? error.message : 'Ollama pipeline failed'
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          });
+
+        // Wait for all three to complete (or fail) before closing the stream
         // Reuse the same promises to avoid duplicate execution
         await Promise.allSettled([
           ragPromise.catch(() => {}),
-          directPromise.catch(() => {})
+          directPromise.catch(() => {}),
+          ollamaPromise.catch(() => {})
         ]);
 
         console.log('\n========================================');
-        console.log('⚡ BOTH PIPELINES COMPLETE');
+        console.log('⚡ ALL PIPELINES COMPLETE');
         console.log('========================================');
         console.log('╔════════════════════════════════════════╗');
         console.log('║     QUERY API ROUTE - END              ║');
@@ -334,7 +402,7 @@ export async function GET(): Promise<NextResponse> {
     {
       endpoint: '/api/rag-comparison/query',
       method: 'POST',
-      description: 'Execute queries against uploaded documents using both RAG and Direct approaches',
+      description: 'Execute queries against uploaded documents using RAG, Direct, and Ollama approaches',
       parameters: {
         documentId: {
           type: 'string',
@@ -352,7 +420,7 @@ export async function GET(): Promise<NextResponse> {
           type: 'string',
           required: false,
           default: 'gpt-4o',
-          description: 'Model to use for generation',
+          description: 'Model to use for RAG and Direct pipelines',
           validation: 'Alphanumeric with hyphens'
         },
         temperature: {
@@ -375,6 +443,24 @@ export async function GET(): Promise<NextResponse> {
           default: 5,
           description: 'Number of chunks to retrieve for RAG',
           validation: 'Integer between 1 and 20'
+        },
+        ollamaModel: {
+          type: 'string',
+          required: false,
+          description: 'Ollama model to use (e.g., llama3.2, mistral)',
+          validation: 'Alphanumeric with colons, dots, hyphens, and underscores'
+        },
+        ollamaTemperature: {
+          type: 'number',
+          required: false,
+          description: 'Temperature for Ollama generation (0-2)',
+          validation: 'Number between 0 and 2'
+        },
+        ollamaMaxTokens: {
+          type: 'number',
+          required: false,
+          description: 'Maximum tokens for Ollama to generate',
+          validation: 'Positive integer'
         }
       },
       response: {
@@ -382,6 +468,7 @@ export async function GET(): Promise<NextResponse> {
         data: {
           rag: 'RAGResult with answer, sources, and metrics',
           direct: 'DirectResult with answer and metrics',
+          ollama: 'OllamaResult with answer and metrics',
           comparison: 'ComparisonMetrics with speed, tokens, cost, and context window comparisons',
           summary: 'Summary with recommendation and insights'
         },
@@ -394,7 +481,10 @@ export async function GET(): Promise<NextResponse> {
           model: 'gpt-4o',
           temperature: 0.7,
           maxTokens: 1000,
-          topK: 5
+          topK: 5,
+          ollamaModel: 'llama3.2',
+          ollamaTemperature: 0.7,
+          ollamaMaxTokens: 1000
         }
       }
     },

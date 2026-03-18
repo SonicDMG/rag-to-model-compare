@@ -1,17 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DocumentUpload, UploadResultData } from '@/components/DocumentUpload';
 import { RagUploadResult } from '@/components/RagUploadResult';
 import { DirectUploadResult } from '@/components/DirectUploadResult';
-import { RagSection } from '@/components/RagSection';
-import { DirectModelSection } from '@/components/DirectModelSection';
 import { UnifiedQuerySection } from '@/components/UnifiedQuerySection';
-import { ModelSelector } from '@/components/ui/ModelSelector';
+import { ModelConfigSection } from '@/components/ModelConfigSection';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
-import { DEFAULT_MODEL, SUPPORTED_MODELS } from '@/lib/constants/models';
-import { recalculateRagMetrics, recalculateDirectMetrics } from '@/lib/rag-comparison/metrics-recalculator';
+import { DEFAULT_MODEL } from '@/lib/constants/models';
+
+interface OllamaModelInfo {
+  name: string;
+  displayName: string;
+  supportsImages: boolean;
+}
 
 export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -19,9 +22,6 @@ export default function Home() {
   
   // Query state
   const [isQuerying, setIsQuerying] = useState(false);
-  
-  // Model state - used for metrics recalculation (applies to both pipelines)
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   
   // RAG state
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
@@ -32,6 +32,37 @@ export default function Home() {
   const [directResult, setDirectResult] = useState<DirectResult | null>(null);
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
+
+  // Ollama state (lifted from UnifiedQuerySection)
+  const [ollamaModel, setOllamaModel] = useState<string>('llama3.2');
+  const [availableOllamaModels, setAvailableOllamaModels] = useState<OllamaModelInfo[]>([]);
+  const [isOllamaAvailable, setIsOllamaAvailable] = useState<boolean>(false);
+
+  // Fetch available Ollama models on mount
+  useEffect(() => {
+    async function checkOllama() {
+      try {
+        const healthRes = await fetch('/api/ollama/health');
+        const healthData = await healthRes.json();
+        setIsOllamaAvailable(healthData.available);
+        
+        if (healthData.available) {
+          const modelsRes = await fetch('/api/ollama/models');
+          const modelsData = await modelsRes.json();
+          if (modelsData.success && modelsData.models.length > 0) {
+            setAvailableOllamaModels(modelsData.models);
+            // Set default model to first available
+            setOllamaModel(modelsData.models[0].name);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check Ollama:', error);
+        setIsOllamaAvailable(false);
+      }
+    }
+    
+    checkOllama();
+  }, []);
 
   const handleUploadComplete = (docId: string) => {
     setDocumentId(docId);
@@ -64,7 +95,7 @@ export default function Home() {
           documentId,
           temperature,
           maxTokens,
-          model: selectedModel, // Use selected model for initial query
+          model: DEFAULT_MODEL,
         }),
       });
 
@@ -154,27 +185,6 @@ export default function Home() {
     }
   };
 
-  // Handle model change for BOTH pipelines - recalculate metrics locally
-  const handleModelChange = (newModel: string) => {
-    if (!ragResult || !directResult) {
-      console.error('Cannot change model: results not available for both pipelines');
-      return;
-    }
-
-    // Recalculate metrics with new model pricing for BOTH pipelines
-    const updatedRagResult = recalculateRagMetrics(ragResult, newModel);
-    const updatedDirectResult = recalculateDirectMetrics(directResult, newModel);
-    
-    setRagResult(updatedRagResult);
-    setDirectResult(updatedDirectResult);
-    setSelectedModel(newModel);
-  };
-
-  // Get list of available model IDs
-  const availableModels = Object.keys(SUPPORTED_MODELS).filter(
-    modelId => SUPPORTED_MODELS[modelId].available
-  );
-
   return (
     <MetricsTabProvider>
       <div className="min-h-screen bg-unkey-black relative overflow-hidden">
@@ -210,14 +220,14 @@ export default function Home() {
         <section className="animate-slideUp">
           <div className="bg-unkey-gray-900/50 backdrop-blur-sm rounded-xl border border-unkey-gray-800 p-6 sm:p-8">
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6">How It Works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-unkey-teal to-unkey-cyan rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-unkey-teal/20">
                     R
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white mb-2">RAG Approach (Left)</h3>
+                    <h3 className="font-semibold text-white mb-2">RAG Approach</h3>
                     <p className="text-sm text-unkey-gray-300 leading-relaxed">
                       Document is split into chunks, relevant pieces are retrieved based on your query,
                       and only those chunks are sent to the model for context.
@@ -232,10 +242,25 @@ export default function Home() {
                     D
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white mb-2">Direct Context Approach (Right)</h3>
+                    <h3 className="font-semibold text-white mb-2">Direct Context Approach</h3>
                     <p className="text-sm text-unkey-gray-300 leading-relaxed">
                       The entire document is sent directly to the model's context window without
                       chunking or retrieval steps.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
+                    O
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white mb-2">Ollama Approach</h3>
+                    <p className="text-sm text-unkey-gray-300 leading-relaxed">
+                      Local LLM inference with full document context - no API costs, complete privacy,
+                      runs entirely on your machine.
                     </p>
                   </div>
                 </div>
@@ -244,12 +269,22 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Single Upload Section */}
-        <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
-          <DocumentUpload
-            onUploadComplete={handleUploadComplete}
-            onUploadResult={handleUploadResult}
-          />
+        {/* Upload and Model Configuration Section - 3 Column Layout */}
+        <section className="grid grid-cols-1 xl:grid-cols-3 gap-6 animate-slideUp" style={{ animationDelay: '0.1s' }}>
+          <div className="xl:col-span-2">
+            <DocumentUpload
+              onUploadComplete={handleUploadComplete}
+              onUploadResult={handleUploadResult}
+            />
+          </div>
+          <div className="xl:col-span-1">
+            <ModelConfigSection
+              selectedModel={ollamaModel}
+              onModelChange={setOllamaModel}
+              isOllamaAvailable={isOllamaAvailable}
+              availableModels={availableOllamaModels}
+            />
+          </div>
         </section>
 
         {/* Upload Results - Side by Side */}
@@ -287,49 +322,20 @@ export default function Home() {
               documentId={documentId}
               onQueryBoth={handleQueryBoth}
               isLoading={isQuerying}
-            />
-          </section>
-        )}
-
-        {/* Model Selector - Show when both results are available */}
-        {documentId && ragResult && directResult && !isRagQuerying && !isDirectQuerying && (
-          <section className="animate-slideUp" style={{ animationDelay: '0.4s' }}>
-            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
-              <h2 className="text-xl font-bold text-white mb-4">Model Configuration</h2>
-              <p className="text-sm text-unkey-gray-400 mb-6">
-                Change the model to recalculate metrics for both RAG and Direct pipelines. No re-query needed - metrics update instantly.
-              </p>
-              
-              <div className="max-w-md">
-                <ModelSelector
-                  currentModel={selectedModel}
-                  availableModels={availableModels}
-                  onModelChange={handleModelChange}
-                  disabled={false}
-                  isLoading={false}
-                />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Side-by-Side Answer Sections - Show during loading or when results are available */}
-        {documentId && (isRagQuerying || isDirectQuerying || ragResult || directResult) && (
-          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.5s' }}>
-            <RagSection
               ragResult={ragResult}
-              isQuerying={isRagQuerying}
-              error={ragError}
-              documentTokens={uploadResult?.ragTokens}
-            />
-            <DirectModelSection
+              isRagQuerying={isRagQuerying}
+              ragError={ragError}
               directResult={directResult}
-              isQuerying={isDirectQuerying}
-              error={directError}
-              documentTokens={uploadResult?.directTokens}
+              isDirectQuerying={isDirectQuerying}
+              directError={directError}
+              documentTokens={uploadResult?.ragTokens}
+              ollamaModel={ollamaModel}
+              availableOllamaModels={availableOllamaModels}
+              isOllamaAvailable={isOllamaAvailable}
             />
           </section>
         )}
+
 
         {/* Get Started Message */}
         {!documentId && (
@@ -373,7 +379,7 @@ export default function Home() {
               When to Use Each Approach
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* RAG Benefits */}
               <div className="bg-gradient-to-br from-unkey-teal/10 to-unkey-cyan/10 rounded-xl p-6 border border-unkey-teal/20 hover:border-unkey-teal/40 transition-colors">
                 <h3 className="text-lg font-bold text-unkey-teal mb-4 flex items-center gap-2">
@@ -430,6 +436,36 @@ export default function Home() {
                   <li className="flex items-start gap-3">
                     <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>
                     <span><strong className="text-white">Faster processing</strong> with no retrieval overhead</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Ollama Benefits */}
+              <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-colors">
+                <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-purple-400 rounded-full" />
+                  Ollama is Better For:
+                </h3>
+                <ul className="space-y-3 text-sm text-unkey-gray-300">
+                  <li className="flex items-start gap-3">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Privacy-sensitive data</strong> that cannot leave your infrastructure</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Zero API costs</strong> for unlimited queries</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Offline operation</strong> without internet dependency</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Custom models</strong> fine-tuned for your domain</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span><strong className="text-white">Development and testing</strong> without API rate limits</span>
                   </li>
                 </ul>
               </div>

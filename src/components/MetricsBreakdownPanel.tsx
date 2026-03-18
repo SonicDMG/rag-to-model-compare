@@ -10,7 +10,7 @@ import { useMetricsTab } from '@/contexts/MetricsTabContext';
 
 interface MetricsBreakdownPanelProps {
   breakdown: DetailedMetricsBreakdown;
-  pipelineType: 'rag' | 'direct';
+  pipelineType: 'rag' | 'direct' | 'ollama';
   documentTokens?: number;
 }
 

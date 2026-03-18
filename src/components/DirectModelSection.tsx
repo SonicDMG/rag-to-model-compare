@@ -56,7 +56,7 @@ export function DirectModelSection({
 
       {/* Loading State */}
       {isQuerying && (
-        <div className="bg-blue/10 border border-blue/20 rounded-unkey-lg p-6 shadow-unkey-card">
+        <div className="bg-blue/10 border border-blue/20 rounded-unkey-lg p-6 shadow-unkey-card h-[140px]">
           <div className="flex items-center justify-center gap-3">
             <svg
               className="animate-spin h-8 w-8 text-blue"
@@ -96,7 +96,7 @@ export function DirectModelSection({
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-blue/30">
             <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
             
-            <div className="prose prose-sm max-w-none">
+            <div className="prose prose-sm max-w-none min-h-[180px]">
               <ExpandableText text={directResult.answer} characterLimit={400} />
             </div>
           </div>

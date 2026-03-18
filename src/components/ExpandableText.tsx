@@ -46,6 +46,7 @@ export function ExpandableText({
         ref={contentRef}
         className="text-unkey-gray-300 whitespace-pre-wrap leading-relaxed"
         style={{
+          minHeight: '180px',
           height: isExpanded ? 'auto' : '180px',
           overflow: isExpanded ? 'visible' : 'hidden'
         }}
