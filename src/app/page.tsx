@@ -264,6 +264,7 @@ export default function Home() {
               error={uploadResult.ragError}
               hasImages={uploadResult.hasImages}
               imageCount={uploadResult.imageCount}
+              fileSize={uploadResult.fileSize}
             />
             <DirectUploadResult
               status={uploadResult.directStatus}
@@ -274,6 +275,7 @@ export default function Home() {
               error={uploadResult.directError}
               hasImages={uploadResult.hasImages}
               imageCount={uploadResult.imageCount}
+              fileSize={uploadResult.fileSize}
             />
           </section>
         )}

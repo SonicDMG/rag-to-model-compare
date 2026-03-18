@@ -22,7 +22,6 @@ export function DirectUploadResult({ status, tokenCount, loadTime, warnings, pro
   // Calculate character count from processed text if available, otherwise estimate from file size
   // Note: processedText is the actual extracted text content, which is more accurate than file size
   const characterCount = processedText ? processedText.length : (fileSize || 0);
-  const estimatedRawTokens = characterCount > 0 ? Math.ceil(characterCount / 4) : undefined;
 
   return (
     <div className={`

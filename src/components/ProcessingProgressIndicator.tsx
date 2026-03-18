@@ -15,7 +15,7 @@ export function ProcessingProgressIndicator({
   processingFiles,
   isActive,
 }: ProcessingProgressIndicatorProps) {
-  const [marchingBoxes, setMarchingBoxes] = useState<number[]>([0, 1, 2, 3, 4]);
+  const marchingBoxes = [0, 1, 2, 3, 4];
   const [animationOffset, setAnimationOffset] = useState(0);
 
   // Animate marching boxes
