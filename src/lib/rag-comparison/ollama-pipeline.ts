@@ -636,26 +636,6 @@ export async function query(
     // Get Ollama client
     const client = getOllamaClient();
 
-    // Build the messages array that will be sent to Ollama
-    const messagesArray = [
-      {
-        role: 'system',
-        content: OLLAMA_SYSTEM_PROMPT
-      },
-      {
-        role: 'user',
-        content: `=== DOCUMENT START ===
-
-${sanitizedContent}
-
-=== DOCUMENT END ===
-
-User Question: ${sanitizedQuery}
-
-Please provide a clear and accurate answer based on the document above.`
-      }
-    ];
-
     // Log the exact request being sent to Ollama API (similar to Direct pipeline logging)
     console.log('\n[Ollama Pipeline Query] ===== OLLAMA API REQUEST DEBUG =====');
     console.log('[Ollama Pipeline Query] Model:', config.model);

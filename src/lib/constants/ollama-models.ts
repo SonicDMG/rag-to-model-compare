@@ -16,107 +16,79 @@ export interface OllamaModelConfig {
 }
 
 export const OLLAMA_MODEL_CONFIGS: Record<string, OllamaModelConfig> = {
-  'llama3.2': {
-    name: 'Llama 3.2',
-    contextWindow: 128000,
-    supportsImages: false,
-    family: 'llama',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'llama3.2-vision': {
-    name: 'Llama 3.2 Vision',
-    contextWindow: 128000,
-    supportsImages: true,
-    family: 'llama',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'llama3.1': {
-    name: 'Llama 3.1',
-    contextWindow: 128000,
-    supportsImages: false,
-    family: 'llama',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'mistral': {
-    name: 'Mistral',
-    contextWindow: 32768,
-    supportsImages: false,
-    family: 'mistral',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'mixtral': {
-    name: 'Mixtral',
-    contextWindow: 32768,
-    supportsImages: false,
-    family: 'mistral',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'phi3': {
-    name: 'Phi-3',
-    contextWindow: 128000,
-    supportsImages: false,
-    family: 'phi',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'qwen2.5': {
-    name: 'Qwen 2.5',
-    contextWindow: 128000,
-    supportsImages: false,
-    family: 'qwen',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
-  'qwen3': {
-    name: 'Qwen 3',
-    contextWindow: 128000,
-    supportsImages: false,
-    family: 'qwen',
-    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
-  },
   'qwen3.5': {
-    name: 'Qwen 3.5',
+    name: 'qwen3.5',
     contextWindow: 128000,
     supportsImages: false,
     family: 'qwen',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
   'qwen3-coder-next': {
-    name: 'Qwen 3 Coder Next',
+    name: 'qwen3-coder-next',
     contextWindow: 128000,
     supportsImages: false,
     family: 'qwen3next',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
+  'moz123m/astronomy-bot': {
+    name: 'moz123m/astronomy-bot',
+    contextWindow: 8192,
+    supportsImages: false,
+    family: 'llama',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'vanta-research/atom-astronomy-7b': {
+    name: 'vanta-research/atom-astronomy-7b',
+    contextWindow: 8192,
+    supportsImages: false,
+    family: 'olmo2',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
   'gemini-3-flash-preview': {
-    name: 'Gemini 3 Flash Preview',
+    name: 'gemini-3-flash-preview',
     contextWindow: 128000,
     supportsImages: true,
     family: 'gemini',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
   'nemotron-3-nano': {
-    name: 'Nemotron 3 Nano',
+    name: 'nemotron-3-nano',
     contextWindow: 128000,
     supportsImages: false,
     family: 'nemotron_h_moe',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
   'gpt-oss': {
-    name: 'GPT-OSS',
+    name: 'gpt-oss',
     contextWindow: 128000,
     supportsImages: false,
     family: 'gptoss',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   },
   'granite4': {
-    name: 'Granite 4',
+    name: 'granite4',
     contextWindow: 128000,
     supportsImages: false,
     family: 'granite',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'all-minilm': {
+    name: 'all-minilm',
+    contextWindow: 512,
+    supportsImages: false,
+    family: 'bert',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'nomic-embed-text': {
+    name: 'nomic-embed-text',
+    contextWindow: 8192,
+    supportsImages: false,
+    family: 'nomic-bert',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   }
 };
 
-export const DEFAULT_OLLAMA_MODEL = 'llama3.2';
+export const DEFAULT_OLLAMA_MODEL = 'qwen3.5';
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 
 /**

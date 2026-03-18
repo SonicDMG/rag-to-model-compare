@@ -237,8 +237,8 @@ function convertApiModelToInfo(apiModel: any): OllamaModelInfo {
                       parsed.quantization?.toUpperCase() ||
                       'Unknown';
   
-  // Generate display name using the new formatter that preserves full model name
-  const displayName = config?.name || formatModelDisplayName(apiModel.name);
+  // Use the formatted model name directly (preserves full model name with proper capitalization)
+  const displayName = formatModelDisplayName(apiModel.name);
   
   return {
     name: apiModel.name, // Keep the full original name for API calls
