@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, DragEvent } from 'react';
+import { ProcessingProgressIndicator } from './ProcessingProgressIndicator';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -641,19 +642,18 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         {/* Per-File Status Display */}
         {isUploading && fileStatuses.length > 0 && (
           <div className="mt-4 p-4 border border-unkey-gray-700 rounded-unkey-md bg-unkey-gray-850">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-white">Upload Progress</h3>
-              {(() => {
-                const processingCount = fileStatuses.filter(fs => fs.status === 'processing').length;
-                const completedCount = fileStatuses.filter(fs =>
+            <h3 className="font-semibold text-white mb-4">Upload Progress</h3>
+            
+            {/* Marching Boxes Progress Indicator */}
+            <div className="mb-4">
+              <ProcessingProgressIndicator
+                totalFiles={fileStatuses.length}
+                completedFiles={fileStatuses.filter(fs =>
                   fs.status === 'success' || fs.status === 'partial' || fs.status === 'error'
-                ).length;
-                return processingCount > 0 ? (
-                  <span className="text-sm text-unkey-teal-400 animate-pulse">
-                    Processing {processingCount} file{processingCount > 1 ? 's' : ''} in parallel... ({completedCount}/{fileStatuses.length})
-                  </span>
-                ) : null;
-              })()}
+                ).length}
+                processingFiles={fileStatuses.filter(fs => fs.status === 'processing').length}
+                isActive={isUploading}
+              />
             </div>
             <div className="max-h-80 overflow-y-auto space-y-2">
               {fileStatuses.map((fileStatus, index) => (
