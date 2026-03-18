@@ -14,6 +14,7 @@ import type {
 } from '@/types/rag-comparison';
 import { formatCost, formatTime, formatTokens, formatPercentage } from '@/lib/utils/formatters';
 import { getModelPricing, getContextWindowSize } from '@/lib/constants/models';
+import { getOllamaModelConfig } from '@/lib/constants/ollama-models';
 
 /**
  * Tie thresholds for determining winners
@@ -818,7 +819,16 @@ export function calculateContextWindowBreakdown(
   modelId: string,
   tokensUsed: number
 ): import('@/types/rag-comparison').ContextWindowBreakdown {
-  const contextWindowSize = getContextWindowSize(modelId);
+  // Try to get context window size from standard models first
+  let contextWindowSize = getContextWindowSize(modelId);
+  
+  // If not found, check Ollama models
+  if (contextWindowSize === 0) {
+    const ollamaConfig = getOllamaModelConfig(modelId);
+    if (ollamaConfig) {
+      contextWindowSize = ollamaConfig.contextWindow;
+    }
+  }
   
   if (contextWindowSize === 0) {
     return {

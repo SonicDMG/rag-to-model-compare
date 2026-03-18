@@ -636,6 +636,47 @@ export async function query(
     // Get Ollama client
     const client = getOllamaClient();
 
+    // Build the messages array that will be sent to Ollama
+    const messagesArray = [
+      {
+        role: 'system',
+        content: OLLAMA_SYSTEM_PROMPT
+      },
+      {
+        role: 'user',
+        content: `=== DOCUMENT START ===
+
+${sanitizedContent}
+
+=== DOCUMENT END ===
+
+User Question: ${sanitizedQuery}
+
+Please provide a clear and accurate answer based on the document above.`
+      }
+    ];
+
+    // Log the exact request being sent to Ollama API (similar to Direct pipeline logging)
+    console.log('\n[Ollama Pipeline Query] ===== OLLAMA API REQUEST DEBUG =====');
+    console.log('[Ollama Pipeline Query] Model:', config.model);
+    console.log('[Ollama Pipeline Query] Request format: Using prompt (not messages array)');
+    console.log('[Ollama Pipeline Query] COMPLETE FULL PROMPT:');
+    console.log(fullPrompt);
+    console.log('[Ollama Pipeline Query] Full prompt character count:', fullPrompt.length);
+    console.log('[Ollama Pipeline Query] System prompt tokens:', estimateTokens(OLLAMA_SYSTEM_PROMPT));
+    console.log('[Ollama Pipeline Query] Query tokens:', estimateTokens(sanitizedQuery));
+    console.log('[Ollama Pipeline Query] Document tokens (estimated):',
+      estimateTokens(fullPrompt) - estimateTokens(OLLAMA_SYSTEM_PROMPT) - estimateTokens(sanitizedQuery));
+    console.log('[Ollama Pipeline Query] Request parameters:', {
+      model: config.model,
+      temperature: config.temperature,
+      top_p: config.top_p,
+      top_k: config.top_k,
+      num_predict: config.maxTokens,
+      has_images: images && images.length > 0
+    });
+    console.log('[Ollama Pipeline Query] ===== END OLLAMA API REQUEST DEBUG =====\n');
+
     // Call Ollama with full context
     const response = await client.generate({
       model: config.model,

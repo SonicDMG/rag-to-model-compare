@@ -64,6 +64,13 @@ export const OLLAMA_MODEL_CONFIGS: Record<string, OllamaModelConfig> = {
     supportsImages: false,
     family: 'qwen',
     defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
+  },
+  'qwen3.5': {
+    name: 'Qwen 3.5',
+    contextWindow: 128000,
+    supportsImages: false,
+    family: 'qwen',
+    defaultParams: { temperature: 0.7, top_p: 0.9, top_k: 40 }
   }
 };
 
@@ -72,9 +79,21 @@ export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 
 /**
  * Get model configuration by model identifier
+ * Handles both base model names (e.g., 'llama3.2') and tagged versions (e.g., 'llama3.2:3b')
  */
 export function getOllamaModelConfig(modelId: string): OllamaModelConfig | undefined {
-  return OLLAMA_MODEL_CONFIGS[modelId];
+  // First try exact match
+  if (OLLAMA_MODEL_CONFIGS[modelId]) {
+    return OLLAMA_MODEL_CONFIGS[modelId];
+  }
+  
+  // If not found, try stripping the tag (everything after ':')
+  const baseModelId = modelId.split(':')[0];
+  if (baseModelId !== modelId && OLLAMA_MODEL_CONFIGS[baseModelId]) {
+    return OLLAMA_MODEL_CONFIGS[baseModelId];
+  }
+  
+  return undefined;
 }
 
 /**
