@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { DetailedMetricsBreakdown } from '@/types/rag-comparison';
 import { TimingBreakdownView } from './breakdown/TimingBreakdownView';
 import { TokenBreakdownView } from './breakdown/TokenBreakdownView';
@@ -21,8 +20,7 @@ export function MetricsBreakdownPanel({
   pipelineType,
   documentTokens: _documentTokens
 }: MetricsBreakdownPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const { activeTab, setActiveTab } = useMetricsTab();
+  const { activeTab, setActiveTab, isExpanded, setIsExpanded } = useMetricsTab();
 
   const isRAG = pipelineType === 'rag';
 
@@ -44,7 +42,7 @@ export function MetricsBreakdownPanel({
       >
         <div className="flex items-center gap-3">
           <svg
-            className={`w-5 h-5 text-unkey-gray-400 transition-transform duration-300 ${
+            className={`w-5 h-5 text-unkey-gray-400 transition-transform duration-300 flex-shrink-0 ${
               isExpanded ? 'rotate-90' : ''
             }`}
             fill="none"
@@ -58,7 +56,7 @@ export function MetricsBreakdownPanel({
               d="M9 5l7 7-7 7"
             />
           </svg>
-          <h3 className="text-lg font-bold text-white">
+          <h3 className="text-lg font-bold text-white m-0 leading-5">
             Detailed Metrics Breakdown
           </h3>
         </div>

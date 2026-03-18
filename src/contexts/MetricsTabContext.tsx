@@ -7,15 +7,18 @@ type TabType = 'timing' | 'tokens' | 'cost' | 'context';
 interface MetricsTabContextType {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
+  isExpanded: boolean;
+  setIsExpanded: (expanded: boolean) => void;
 }
 
 const MetricsTabContext = createContext<MetricsTabContextType | undefined>(undefined);
 
 export function MetricsTabProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTab] = useState<TabType>('timing');
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <MetricsTabContext.Provider value={{ activeTab, setActiveTab }}>
+    <MetricsTabContext.Provider value={{ activeTab, setActiveTab, isExpanded, setIsExpanded }}>
       {children}
     </MetricsTabContext.Provider>
   );

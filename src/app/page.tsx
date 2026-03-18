@@ -197,7 +197,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="relative border-b border-unkey-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center space-y-4 animate-fadeIn">
             {/* Title with Glow Effect */}
             <div className="relative inline-block">
@@ -215,12 +215,12 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
+      <main className="relative max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
         {/* Introduction */}
         <section className="animate-slideUp">
           <div className="bg-unkey-gray-900/50 backdrop-blur-sm rounded-xl border border-unkey-gray-800 p-6 sm:p-8">
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6">How It Works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-unkey-teal to-unkey-cyan rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-unkey-teal/20">
@@ -269,22 +269,22 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Upload and Model Configuration Section - 3 Column Layout */}
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-6 animate-slideUp" style={{ animationDelay: '0.1s' }}>
-          <div className="xl:col-span-2">
-            <DocumentUpload
-              onUploadComplete={handleUploadComplete}
-              onUploadResult={handleUploadResult}
-            />
-          </div>
-          <div className="xl:col-span-1">
-            <ModelConfigSection
-              selectedModel={ollamaModel}
-              onModelChange={setOllamaModel}
-              isOllamaAvailable={isOllamaAvailable}
-              availableModels={availableOllamaModels}
-            />
-          </div>
+        {/* Model Configuration Section - Full Width */}
+        <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
+          <ModelConfigSection
+            selectedModel={ollamaModel}
+            onModelChange={setOllamaModel}
+            isOllamaAvailable={isOllamaAvailable}
+            availableModels={availableOllamaModels}
+          />
+        </section>
+
+        {/* Document Upload Section - Full Width */}
+        <section className="animate-slideUp" style={{ animationDelay: '0.15s' }}>
+          <DocumentUpload
+            onUploadComplete={handleUploadComplete}
+            onUploadResult={handleUploadResult}
+          />
         </section>
 
         {/* Upload Results - Side by Side */}
@@ -379,7 +379,7 @@ export default function Home() {
               When to Use Each Approach
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* RAG Benefits */}
               <div className="bg-gradient-to-br from-unkey-teal/10 to-unkey-cyan/10 rounded-xl p-6 border border-unkey-teal/20 hover:border-unkey-teal/40 transition-colors">
                 <h3 className="text-lg font-bold text-unkey-teal mb-4 flex items-center gap-2">
@@ -476,7 +476,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="relative mt-16 border-t border-unkey-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center space-y-2">
             <p className="text-sm text-unkey-gray-400">
               RAG Comparison Tool - Evaluate which approach works best for your use case

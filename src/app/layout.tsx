@@ -15,7 +15,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className="antialiased bg-unkey-black text-white font-sans" suppressHydrationWarning>
         <div className="min-h-screen">
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <main className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {children}
           </main>
         </div>

@@ -708,7 +708,6 @@ export async function query(
         timestamp: new Date(),
         notes: [
           'Ollama query uses full document context without retrieval',
-          'Cost is $0 (local model)',
           'Token counts from Ollama API when available, estimated otherwise'
         ]
       }
