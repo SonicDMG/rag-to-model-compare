@@ -5,6 +5,7 @@
  * for RAG-based retrieval and generation following OWASP security standards.
  */
 
+import path from 'path';
 import {
   OpenRAGClient,
   OpenRAGError,
@@ -664,9 +665,10 @@ export async function indexDocument(
 
     // Upload document using OpenRAG SDK
     // The SDK handles parsing, chunking, and embedding automatically
+    // Extract just the filename (without directory path) for OpenRAG
     const result = await client.documents.ingest({
       file,
-      filename: metadata.filename,
+      filename: path.basename(metadata.filename),
       wait: true, // Wait for ingestion to complete
     });
 
@@ -705,12 +707,14 @@ export async function indexDocument(
             const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
             
             // Add new filename if not already present
-            if (!currentDataSources.includes(metadata.filename)) {
-              console.log(`📎 Associating "${metadata.filename}" with filter ${knowledgeFilterId}`);
-              await updateFilterWithRetry(client, knowledgeFilterId, [...currentDataSources, metadata.filename]);
+            // Use basename to match what was sent to OpenRAG during ingestion
+            const baseFilename = path.basename(metadata.filename);
+            if (!currentDataSources.includes(baseFilename)) {
+              console.log(`📎 Associating "${baseFilename}" with filter ${knowledgeFilterId}`);
+              await updateFilterWithRetry(client, knowledgeFilterId, [...currentDataSources, baseFilename]);
               console.log(`✅ File associated with filter`);
             } else {
-              console.log(`ℹ️  Filename "${metadata.filename}" already associated with filter`);
+              console.log(`ℹ️  Filename "${baseFilename}" already associated with filter`);
             }
           }
         } catch (error) {
@@ -722,7 +726,8 @@ export async function indexDocument(
       }
     } else {
       // No filter provided - create or find one (legacy single-file path)
-      filterId = await createKnowledgeFilter(documentId, metadata.filename);
+      // Use basename to match what was sent to OpenRAG during ingestion
+      filterId = await createKnowledgeFilter(documentId, path.basename(metadata.filename));
     }
 
     const endTime = performance.now();

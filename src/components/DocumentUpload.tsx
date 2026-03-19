@@ -160,6 +160,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     if (collectedFiles.length > 0) {
       setFiles(collectedFiles);
       setUploadStatus({ status: 'idle' });
+      setIsUploading(false); // Reset uploading state when new files are added
     } else {
       setUploadStatus({
         status: 'error',
@@ -171,10 +172,25 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (selectedFiles && selectedFiles.length > 0) {
-      const fileArray = Array.from(selectedFiles).filter(isValidFileType);
+      const fileArray = Array.from(selectedFiles)
+        .filter(isValidFileType)
+        .map(file => {
+          // Preserve webkitRelativePath for folder uploads
+          const originalPath = (file as any).webkitRelativePath;
+          if (originalPath) {
+            // Explicitly set webkitRelativePath using the same approach as drag-and-drop
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: originalPath,
+              writable: false,
+              configurable: true
+            });
+          }
+          return file;
+        });
       if (fileArray.length > 0) {
         setFiles(fileArray);
         setUploadStatus({ status: 'idle' });
+        setIsUploading(false); // Reset uploading state when new files are added
       } else {
         setUploadStatus({
           status: 'error',
