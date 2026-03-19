@@ -28,6 +28,9 @@ interface UnifiedQuerySectionProps {
   ollamaModel?: string;
   availableOllamaModels?: OllamaModelInfo[];
   isOllamaAvailable?: boolean;
+  ollamaResult?: OllamaResult | null;
+  isOllamaQuerying?: boolean;
+  ollamaError?: string | null;
   // Processing events for real-time timeline updates
   ragProcessingEvents?: ProcessingEvent[];
   directProcessingEvents?: ProcessingEvent[];
@@ -48,6 +51,9 @@ export function UnifiedQuerySection({
   ollamaModel = 'llama3.2',
   availableOllamaModels = [],
   isOllamaAvailable = false,
+  ollamaResult = null,
+  isOllamaQuerying = false,
+  ollamaError = null,
   ragProcessingEvents = [],
   directProcessingEvents = [],
   ollamaProcessingEvents = []
@@ -57,113 +63,14 @@ export function UnifiedQuerySection({
   const [maxTokens, setMaxTokens] = useState(1000);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Ollama result state (still managed here)
-  const [ollamaResult, setOllamaResult] = useState<OllamaResult | null>(null);
-  const [isOllamaQuerying, setIsOllamaQuerying] = useState(false);
-  const [ollamaError, setOllamaError] = useState<string | null>(null);
-  
-  // Local Ollama processing events (for events streamed in this component)
-  const [localOllamaProcessingEvents, setLocalOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!query.trim() || !documentId) return;
 
-    // Reset Ollama state
-    setIsOllamaQuerying(true);
-    setOllamaError(null);
-    setOllamaResult(null);
-    setLocalOllamaProcessingEvents([]);
-
-    // Call parent's query handler for RAG and Direct
+    // Call parent's query handler for ALL THREE pipelines (RAG, Direct, and Ollama)
+    // The parent handles the single API call that executes all pipelines via SSE streaming
     await onQueryBoth(query.trim(), temperature, maxTokens);
-
-    // Query Ollama if available
-    if (isOllamaAvailable && ollamaModel) {
-      try {
-        const response = await fetch('/api/rag-comparison/query', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: query.trim(),
-            documentId,
-            temperature,
-            maxTokens,
-            ollamaModel,
-            ollamaTemperature: temperature,
-            ollamaMaxTokens: maxTokens
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Ollama query failed');
-        }
-
-        // Handle Server-Sent Events stream for Ollama
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-
-        if (!reader) {
-          throw new Error('Response body is not readable');
-        }
-
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const messages = buffer.split('\n\n');
-          buffer = messages.pop() || '';
-
-          for (const message of messages) {
-            if (!message.trim() || !message.startsWith('data: ')) {
-              continue;
-            }
-
-            try {
-              const data = JSON.parse(message.substring(6));
-
-              // Handle real-time processing events for Ollama
-              if (data.type === 'processing_event' && data.pipeline === 'ollama') {
-                const { event } = data;
-                setLocalOllamaProcessingEvents(prev => {
-                  const existingIndex = prev.findIndex(e => e.id === event.id);
-                  if (existingIndex >= 0) {
-                    const updated = [...prev];
-                    updated[existingIndex] = event;
-                    return updated;
-                  }
-                  return [...prev, event];
-                });
-              }
-              // Handle final Ollama result
-              else if (data.type === 'ollama') {
-                if (data.success) {
-                  console.log('✅ Ollama result received');
-                  setOllamaResult(data.data);
-                  setIsOllamaQuerying(false);
-                } else {
-                  console.error('❌ Ollama error:', data.error);
-                  setOllamaError(data.error);
-                  setIsOllamaQuerying(false);
-                }
-              }
-            } catch (parseError) {
-              console.error('Failed to parse Ollama SSE message:', parseError);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Ollama query error:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Ollama query failed';
-        setOllamaError(errorMessage);
-        setIsOllamaQuerying(false);
-      }
-    }
   };
 
   const isDisabled = !documentId || isLoading;
@@ -305,7 +212,7 @@ export function UnifiedQuerySection({
           documentTokens={documentTokens}
           ragProcessingEvents={ragProcessingEvents}
           directProcessingEvents={directProcessingEvents}
-          ollamaProcessingEvents={localOllamaProcessingEvents.length > 0 ? localOllamaProcessingEvents : ollamaProcessingEvents}
+          ollamaProcessingEvents={ollamaProcessingEvents}
         />
       )}
     </div>

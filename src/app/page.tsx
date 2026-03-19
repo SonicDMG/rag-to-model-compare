@@ -34,12 +34,17 @@ export default function Home() {
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
 
+  // Ollama state
+  const [ollamaResult, setOllamaResult] = useState<any>(null);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
+  const [isOllamaQuerying, setIsOllamaQuerying] = useState(false);
+
   // Processing events state for real-time timeline updates
   const [ragProcessingEvents, setRagProcessingEvents] = useState<ProcessingEvent[]>([]);
   const [directProcessingEvents, setDirectProcessingEvents] = useState<ProcessingEvent[]>([]);
   const [ollamaProcessingEvents, setOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
 
-  // Ollama state (lifted from UnifiedQuerySection)
+  // Ollama configuration state
   const [ollamaModel, setOllamaModel] = useState<string>('llama3.2');
   const [availableOllamaModels, setAvailableOllamaModels] = useState<OllamaModelInfo[]>([]);
   const [isOllamaAvailable, setIsOllamaAvailable] = useState<boolean>(false);
@@ -85,10 +90,13 @@ export default function Home() {
     setIsQuerying(true);
     setIsRagQuerying(true);
     setIsDirectQuerying(true);
+    setIsOllamaQuerying(true);
     setRagError(null);
     setDirectError(null);
+    setOllamaError(null);
     setRagResult(null);
     setDirectResult(null);
+    setOllamaResult(null);
     
     // Reset processing events for real-time updates
     setRagProcessingEvents([]);
@@ -107,6 +115,9 @@ export default function Home() {
           temperature,
           maxTokens,
           model: DEFAULT_MODEL,
+          ollamaModel,
+          ollamaTemperature: temperature,
+          ollamaMaxTokens: maxTokens,
         }),
       });
 
@@ -206,6 +217,16 @@ export default function Home() {
                 setDirectError(data.error);
                 setIsDirectQuerying(false);
               }
+            } else if (data.type === 'ollama') {
+              if (data.success) {
+                console.log('✅ Ollama result received and rendering');
+                setOllamaResult(data.data);
+                setIsOllamaQuerying(false);
+              } else {
+                console.error('❌ Ollama error received:', data.error);
+                setOllamaError(data.error);
+                setIsOllamaQuerying(false);
+              }
             } else if (data.type === 'complete') {
               console.log('✅ Stream complete');
               setIsQuerying(false);
@@ -220,18 +241,21 @@ export default function Home() {
       setIsQuerying(false);
       setIsRagQuerying(false);
       setIsDirectQuerying(false);
+      setIsOllamaQuerying(false);
 
     } catch (err) {
       console.error('Query error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       
-      // Set error for both if the request itself failed
+      // Set error for all pipelines if the request itself failed
       setRagError(errorMessage);
       setDirectError(errorMessage);
+      setOllamaError(errorMessage);
       
       setIsQuerying(false);
       setIsRagQuerying(false);
       setIsDirectQuerying(false);
+      setIsOllamaQuerying(false);
     }
   };
 
@@ -382,6 +406,9 @@ export default function Home() {
               ollamaModel={ollamaModel}
               availableOllamaModels={availableOllamaModels}
               isOllamaAvailable={isOllamaAvailable}
+              ollamaResult={ollamaResult}
+              isOllamaQuerying={isOllamaQuerying}
+              ollamaError={ollamaError}
               ragProcessingEvents={ragProcessingEvents}
               directProcessingEvents={directProcessingEvents}
               ollamaProcessingEvents={ollamaProcessingEvents}
