@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
 
 /**
  * Maximum duration for this API route in seconds
@@ -209,45 +210,175 @@ function validateMultiFileUpload(files: File[]): { valid: boolean; error?: strin
  * @returns Promise resolving to the filter ID
  * @throws Error if filter creation/retrieval fails
  */
+// Global lock to prevent race conditions when multiple requests try to create the filter
+let filterCreationLock: Promise<string> | null = null;
+let cachedFilterId: string | null = null;
+const CACHE_TTL = 60000; // Cache for 60 seconds
+let cacheTimestamp: number = 0;
+
+// Batch filter update mechanism for concurrent single-file uploads
+let pendingFilterUpdates: Set<string> = new Set();
+let filterUpdateTimer: NodeJS.Timeout | null = null;
+const FILTER_UPDATE_DELAY = 2000; // Wait 2 seconds after last file before updating filter
+
+/**
+ * Schedule a batch filter update with all pending filenames
+ * Uses a debounce mechanism to wait for all concurrent uploads to complete
+ */
+async function scheduleBatchFilterUpdate(filterId: string, filename: string): Promise<void> {
+  // Add filename to pending updates
+  pendingFilterUpdates.add(filename);
+  console.log(`📎 Scheduled filter update for: ${filename} (${pendingFilterUpdates.size} pending)`);
+  
+  // Clear existing timer
+  if (filterUpdateTimer) {
+    clearTimeout(filterUpdateTimer);
+  }
+  
+  // Set new timer - will execute after FILTER_UPDATE_DELAY ms of inactivity
+  filterUpdateTimer = setTimeout(async () => {
+    const filenamesToUpdate = Array.from(pendingFilterUpdates);
+    pendingFilterUpdates.clear();
+    filterUpdateTimer = null;
+    
+    if (filenamesToUpdate.length === 0) {
+      return;
+    }
+    
+    console.log(`\n📎 Executing batch filter update for ${filenamesToUpdate.length} file(s)`);
+    console.log(`📎 Files: [${filenamesToUpdate.join(', ')}]`);
+    
+    try {
+      const { getOpenRAGClient } = await import('@/lib/rag-comparison/rag-pipeline');
+      const client = getOpenRAGClient();
+      
+      // Get current filter state
+      const filterResponse = await client.knowledgeFilters.get(filterId);
+      
+      if (filterResponse) {
+        const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
+        
+        // Merge new filenames with existing ones (avoid duplicates)
+        const allDataSources = [...new Set([...currentDataSources, ...filenamesToUpdate])];
+        
+        console.log(`📎 Current data_sources: [${currentDataSources.join(', ')}]`);
+        console.log(`📎 Adding: [${filenamesToUpdate.join(', ')}]`);
+        console.log(`📎 Final data_sources: [${allDataSources.join(', ')}]`);
+        
+        // Single atomic update with all filenames
+        await client.knowledgeFilters.update(filterId, {
+          queryData: {
+            filters: {
+              data_sources: allDataSources
+            }
+          }
+        });
+        
+        console.log(`✅ Batch filter update successful - ${filenamesToUpdate.length} new files, ${allDataSources.length} total`);
+      }
+    } catch (error) {
+      console.error(`❌ Batch filter update failed:`, error);
+      // Don't throw - documents are already indexed
+    }
+  }, FILTER_UPDATE_DELAY);
+}
+
 async function ensureKnowledgeFilter(): Promise<string> {
   try {
-    console.log('🔍 Ensuring "Compare" knowledge filter exists...');
+    const now = Date.now();
+    const callId = `call-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
     
-    // Get OpenRAG client
-    const client = new OpenRAGClient({
-      apiKey: process.env.OPENRAG_API_KEY!,
-      baseUrl: process.env.OPENRAG_URL!,
-    });
+    console.log(`\n🔍 [${callId}] ========================================`);
+    console.log(`🔍 [${callId}] ensureKnowledgeFilter() called`);
+    console.log(`🔍 [${callId}] Cache valid: ${cachedFilterId && (now - cacheTimestamp) < CACHE_TTL}`);
+    console.log(`🔍 [${callId}] Lock active: ${!!filterCreationLock}`);
     
-    const filterName = 'Compare';
-    
-    // Search for existing filter
-    const existingFilters = await client.knowledgeFilters.search(filterName, 1);
-    
-    if (existingFilters && existingFilters.length > 0) {
-      const filterId = existingFilters[0].id;
-      console.log(`✅ Found existing "${filterName}" filter with ID: ${filterId}`);
-      return filterId;
+    // Return cached filter ID if still valid
+    if (cachedFilterId && (now - cacheTimestamp) < CACHE_TTL) {
+      console.log(`✅ [${callId}] Using cached "Compare" filter ID: ${cachedFilterId} (age: ${now - cacheTimestamp}ms)`);
+      console.log(`🔍 [${callId}] ========================================\n`);
+      return cachedFilterId;
     }
     
-    // Create new filter if it doesn't exist
-    console.log(`📝 Creating new "${filterName}" filter...`);
-    const result = await client.knowledgeFilters.create({
-      name: filterName,
-      description: 'Filter for document comparison',
-      queryData: {
-        filters: {
-          data_sources: [] // Start with empty array, files will add themselves
+    // If another request is already creating/finding the filter, wait for it
+    if (filterCreationLock) {
+      console.log(`⏳ [${callId}] Another request is creating filter, waiting for lock...`);
+      const waitStart = Date.now();
+      const result = await filterCreationLock;
+      const waitTime = Date.now() - waitStart;
+      console.log(`✅ [${callId}] Got filter ID from concurrent request after ${waitTime}ms: ${result}`);
+      console.log(`🔍 [${callId}] ========================================\n`);
+      return result;
+    }
+    
+    // Create a new lock for this operation
+    console.log(`🔒 [${callId}] Acquiring filter creation lock (no other requests active)...`);
+    filterCreationLock = (async () => {
+      try {
+        console.log(`🔍 [${callId}] Inside lock - searching for "Compare" knowledge filter...`);
+        
+        // Get OpenRAG client
+        const client = new OpenRAGClient({
+          apiKey: process.env.OPENRAG_API_KEY!,
+          baseUrl: process.env.OPENRAG_URL!,
+        });
+        
+        const filterName = 'Compare';
+        
+        // Search for existing filter with exact name match
+        console.log(`🔍 [${callId}] Calling knowledgeFilters.search("${filterName}", 10)...`);
+        const searchStart = Date.now();
+        const existingFilters = await client.knowledgeFilters.search(filterName, 10);
+        const searchTime = Date.now() - searchStart;
+        console.log(`🔍 [${callId}] Search completed in ${searchTime}ms, returned ${existingFilters?.length || 0} filters`);
+        
+        // Find exact match (search might return partial matches)
+        const exactMatch = existingFilters?.find(f => f.name === filterName);
+        
+        if (exactMatch) {
+          console.log(`✅ [${callId}] Found existing "${filterName}" filter with ID: ${exactMatch.id}`);
+          console.log(`✅ [${callId}] Caching filter ID for ${CACHE_TTL}ms`);
+          cachedFilterId = exactMatch.id;
+          cacheTimestamp = Date.now();
+          console.log(`✅ [${callId}] Returning filter ID: ${exactMatch.id}`);
+          return exactMatch.id;
         }
+        
+        // Create new filter if it doesn't exist
+        console.log(`📝 [${callId}] No existing filter found, creating new "${filterName}" filter...`);
+        const createStart = Date.now();
+        const result = await client.knowledgeFilters.create({
+          name: filterName,
+          description: 'Filter for document comparison',
+          queryData: {
+            filters: {
+              data_sources: [] // Start with empty array, files will add themselves
+            }
+          }
+        });
+        const createTime = Date.now() - createStart;
+        
+        if (!result.success || !result.id) {
+          console.error(`❌ [${callId}] Filter creation failed after ${createTime}ms:`, result);
+          throw new Error('Failed to create knowledge filter');
+        }
+        
+        console.log(`✅ [${callId}] Created "${filterName}" filter in ${createTime}ms with ID: ${result.id}`);
+        console.log(`✅ [${callId}] Caching filter ID for ${CACHE_TTL}ms`);
+        cachedFilterId = result.id;
+        cacheTimestamp = Date.now();
+        console.log(`✅ [${callId}] Returning filter ID: ${result.id}`);
+        return result.id;
+        
+      } finally {
+        // Release the lock
+        console.log(`🔓 [${callId}] Releasing filter creation lock`);
+        console.log(`🔓 [${callId}] Cache state - ID: ${cachedFilterId}, Age: ${Date.now() - cacheTimestamp}ms`);
+        filterCreationLock = null;
       }
-    });
+    })();
     
-    if (!result.success || !result.id) {
-      throw new Error('Failed to create knowledge filter');
-    }
-    
-    console.log(`✅ Created "${filterName}" filter with ID: ${result.id}`);
-    return result.id;
+    return await filterCreationLock;
     
   } catch (error) {
     console.error('❌ Failed to ensure knowledge filter:', error);
@@ -601,12 +732,26 @@ export async function POST(
     // ============================================================
     // ENSURE KNOWLEDGE FILTER EXISTS (Once for all uploads)
     // ============================================================
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    console.log(`\n🔵 [${requestId}] Starting upload request with ${files.length} file(s)`);
+    
     let knowledgeFilterId: string | undefined;
     try {
+      console.log(`🔵 [${requestId}] Calling ensureKnowledgeFilter()...`);
+      const filterStart = Date.now();
       knowledgeFilterId = await ensureKnowledgeFilter();
-      console.log(`✅ Knowledge filter ready: ${knowledgeFilterId}`);
+      const filterTime = Date.now() - filterStart;
+      
+      // Validate that we got a valid filter ID
+      if (!knowledgeFilterId || typeof knowledgeFilterId !== 'string' || knowledgeFilterId.trim() === '') {
+        throw new Error('ensureKnowledgeFilter returned invalid filter ID');
+      }
+      
+      console.log(`✅ [${requestId}] Knowledge filter ready in ${filterTime}ms: ${knowledgeFilterId}`);
+      console.log(`✅ [${requestId}] All ${files.length} file(s) will use filter ID: ${knowledgeFilterId}`);
+      console.log(`✅ [${requestId}] Starting file processing with shared filter...`);
     } catch (error) {
-      console.error('❌ Failed to ensure knowledge filter:', error);
+      console.error(`❌ [${requestId}] Failed to ensure knowledge filter:`, error);
       return NextResponse.json(
         {
           success: false,
@@ -709,11 +854,14 @@ export async function POST(
 
         // Send raw file to OpenRAG SDK for ingestion
         // OpenRAG handles parsing, chunking, and embedding automatically
+        // ALWAYS skip individual filter updates to prevent race conditions
+        // The filter will be updated in a batch after all concurrent uploads complete
         const ragResult = await ragIndexDocument(
           file, // Send the raw file, not parsed chunks
           documentId,
           ragMetadata,
-          knowledgeFilterId // Pass the pre-created filter ID
+          knowledgeFilterId, // Pass the pre-created filter ID
+          true // skipFilterUpdate - prevent race conditions on concurrent uploads
         );
 
         // Store the filter ID for later use in queries
@@ -763,6 +911,14 @@ export async function POST(
             console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
             console.log('[DEBUG] Storage state after RAG storage:');
             debugStorage();
+            
+            // Schedule batch filter update (debounced to handle concurrent uploads)
+            if (knowledgeFilterId) {
+              const baseFilename = path.basename(file.name);
+              scheduleBatchFilterUpdate(knowledgeFilterId, baseFilename).catch(err => {
+                console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
+              });
+            }
           } catch (storageError) {
             console.error('[RAG] ❌ Failed to store document:', storageError);
             // Don't fail RAG processing if storage fails
@@ -1071,9 +1227,11 @@ export async function POST(
       results.push(result);
       
       // Track successfully indexed filenames for batch filter update
+      // Use path.basename to match what was sent to OpenRAG during ingestion
       if (result.rag.status === 'success') {
-        successfulFilenames.push(file.name);
-        console.log(`📄 File ${i + 1}/${files.length} indexed successfully: ${file.name}`);
+        const baseFilename = path.basename(file.name);
+        successfulFilenames.push(baseFilename);
+        console.log(`📄 File ${i + 1}/${files.length} indexed successfully: ${baseFilename}`);
       } else {
         console.log(`📄 File ${i + 1}/${files.length} failed to index: ${file.name}`);
       }
@@ -1084,6 +1242,9 @@ export async function POST(
     // ============================================================
     if (successfulFilenames.length > 0 && knowledgeFilterId) {
       console.log(`\n📎 Batch associating ${successfulFilenames.length} files with filter ${knowledgeFilterId}`);
+      console.log(`📎 Successfully indexed files: [${successfulFilenames.join(', ')}]`);
+      console.log(`📎 Total results: ${results.length}, Successful: ${successfulFilenames.length}`);
+      
       try {
         const { getOpenRAGClient } = await import('@/lib/rag-comparison/rag-pipeline');
         const client = getOpenRAGClient();
@@ -1097,12 +1258,12 @@ export async function POST(
           // Merge new filenames with existing ones (avoid duplicates)
           const allDataSources = [...new Set([...currentDataSources, ...successfulFilenames])];
           
-          console.log(`📎 Current data_sources: [${currentDataSources.join(', ')}]`);
+          console.log(`📎 Current data_sources in filter: [${currentDataSources.join(', ')}]`);
           console.log(`📎 Adding filenames: [${successfulFilenames.join(', ')}]`);
-          console.log(`📎 Final data_sources: [${allDataSources.join(', ')}]`);
+          console.log(`📎 Final data_sources to update: [${allDataSources.join(', ')}]`);
           
           // Single atomic update with all filenames
-          await client.knowledgeFilters.update(knowledgeFilterId, {
+          const updateResult = await client.knowledgeFilters.update(knowledgeFilterId, {
             queryData: {
               filters: {
                 data_sources: allDataSources
@@ -1110,7 +1271,16 @@ export async function POST(
             }
           });
           
-          console.log(`✅ Batch filter update successful - ${successfulFilenames.length} files associated`);
+          console.log(`✅ Batch filter update successful - ${successfulFilenames.length} new files, ${allDataSources.length} total`);
+          console.log(`📎 Update result:`, updateResult);
+          
+          // Verify the update by fetching the filter again
+          const verifyResponse = await client.knowledgeFilters.get(knowledgeFilterId);
+          if (verifyResponse) {
+            const verifiedDataSources = verifyResponse.queryData?.filters?.data_sources || [];
+            console.log(`📎 Verified data_sources after update: [${verifiedDataSources.join(', ')}]`);
+            console.log(`📎 Expected ${allDataSources.length}, got ${verifiedDataSources.length}`);
+          }
         }
       } catch (error) {
         console.error(`❌ Batch filter update failed:`, error);

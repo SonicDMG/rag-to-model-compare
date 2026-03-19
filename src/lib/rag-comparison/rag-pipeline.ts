@@ -376,8 +376,7 @@ async function updateFilterWithRetry(
 
 export async function createKnowledgeFilter(
   documentId: string,
-  filename: string,
-  existingFilterId?: string
+  filename: string
 ): Promise<string> {
   try {
     // Validate inputs
@@ -402,44 +401,13 @@ export async function createKnowledgeFilter(
     // Use the constant "Compare" as the filter name
     const filterName = KNOWLEDGE_FILTER_ID;
     
-    // If existingFilterId is provided, use it directly without searching
-    // The filter was already created/found upfront for multi-file uploads
-    if (existingFilterId) {
-      console.log(`✅ Using pre-created filter ID: ${existingFilterId} for ${filename}`);
-      
-      try {
-        // Get current filter state by ID (not by search)
-        const filterResponse = await client.knowledgeFilters.get(existingFilterId);
-        
-        if (!filterResponse) {
-          console.warn(`⚠️  Filter ${existingFilterId} not found, returning ID anyway`);
-          return existingFilterId;
-        }
-        
-        const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
-        
-        // Add new filename if not already present
-        if (!currentDataSources.includes(filename)) {
-          console.log(`Adding filename "${filename}" to filter ${existingFilterId}`);
-          await updateFilterWithRetry(client, existingFilterId, [...currentDataSources, filename]);
-          console.log(`✅ Updated filter with new filename`);
-        } else {
-          console.log(`ℹ️  Filename "${filename}" already in filter`);
-        }
-        
-        return existingFilterId;
-      } catch (error) {
-        // If update fails, log but don't fail the entire upload
-        console.warn(`⚠️  Failed to update filter ${existingFilterId} with ${filename}:`, error);
-        return existingFilterId; // Return the filter ID anyway
-      }
-    }
+    // Check if "Compare" filter already exists with exact name match
+    const existingFilters = await client.knowledgeFilters.search(filterName, 10); // Get more results to find exact match
     
-    // Check if "Compare" filter already exists
-    const existingFilters = await client.knowledgeFilters.search(filterName, 1);
+    // Find exact match (search might return partial matches)
+    const existingFilter = existingFilters?.find(f => f.name === filterName);
     
-    if (existingFilters && existingFilters.length > 0) {
-      const existingFilter = existingFilters[0];
+    if (existingFilter) {
       console.log(`Knowledge filter "${filterName}" already exists with ID: ${existingFilter.id}`);
       
       // Get current data sources
@@ -696,9 +664,12 @@ export async function indexDocument(
       console.log(`✅ Using pre-created filter ID: ${knowledgeFilterId} for ${metadata.filename}`);
       filterId = knowledgeFilterId;
       
-      // CRITICAL: Associate the file with the filter by adding filename to data_sources
-      // For multi-file uploads, skip individual updates and do batch update after all files
-      if (!skipFilterUpdate) {
+      // For multi-file uploads with skipFilterUpdate=true, skip all filter operations
+      // The batch update will happen after all files are processed
+      if (skipFilterUpdate) {
+        console.log(`ℹ️  Skipping individual filter update - will be done in batch`);
+      } else {
+        // Single file upload path - associate this file with the filter
         try {
           const client = getOpenRAGClient();
           const filterResponse = await client.knowledgeFilters.get(knowledgeFilterId);
@@ -721,8 +692,6 @@ export async function indexDocument(
           // Log warning but don't fail the upload - the document is already indexed
           console.warn(`⚠️  Failed to associate file with filter ${knowledgeFilterId}:`, error);
         }
-      } else {
-        console.log(`ℹ️  Skipping individual filter update - will be done in batch`);
       }
     } else {
       // No filter provided - create or find one (legacy single-file path)
