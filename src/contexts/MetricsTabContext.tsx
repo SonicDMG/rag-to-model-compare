@@ -9,6 +9,8 @@ interface MetricsTabContextType {
   setActiveTab: (tab: TabType) => void;
   isExpanded: boolean;
   setIsExpanded: (expanded: boolean) => void;
+  isTimelineExpanded: boolean;
+  setIsTimelineExpanded: (expanded: boolean) => void;
 }
 
 const MetricsTabContext = createContext<MetricsTabContextType | undefined>(undefined);
@@ -16,9 +18,17 @@ const MetricsTabContext = createContext<MetricsTabContextType | undefined>(undef
 export function MetricsTabProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTab] = useState<TabType>('timing');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
 
   return (
-    <MetricsTabContext.Provider value={{ activeTab, setActiveTab, isExpanded, setIsExpanded }}>
+    <MetricsTabContext.Provider value={{
+      activeTab,
+      setActiveTab,
+      isExpanded,
+      setIsExpanded,
+      isTimelineExpanded,
+      setIsTimelineExpanded
+    }}>
       {children}
     </MetricsTabContext.Provider>
   );

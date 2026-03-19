@@ -1,28 +1,29 @@
 /**
  * Processing Timeline Component
- * 
+ *
  * Displays real-time processing events from RAG, Direct, and Ollama pipelines.
  * Shows operation names, durations, and status with color coding.
  * Highlights operations taking >100ms for easy identification of bottlenecks.
+ *
+ * Uses synchronized expand/collapse state via MetricsTabContext - when one timeline
+ * is expanded/collapsed, all three timelines sync together.
  */
 
 'use client';
 
-import { useState } from 'react';
 import {
   ProcessingEvent,
   ProcessingEventStatus,
   ProcessingEventType,
   PipelineType
 } from '@/types/processing-events';
+import { useMetricsTab } from '@/contexts/MetricsTabContext';
 
 interface ProcessingTimelineProps {
   /** Pipeline identifier (rag, direct, or ollama) */
   pipeline: PipelineType;
   /** Array of processing events */
   events: ProcessingEvent[];
-  /** Whether to show the timeline expanded by default */
-  defaultExpanded?: boolean;
 }
 
 /**
@@ -122,10 +123,9 @@ function formatDuration(ms: number | null): string {
  */
 export function ProcessingTimeline({
   pipeline,
-  events,
-  defaultExpanded = false
+  events
 }: ProcessingTimelineProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const { isTimelineExpanded, setIsTimelineExpanded } = useMetricsTab();
   
   // Calculate total time
   const totalTime = events.length > 0 && events[events.length - 1].endTime
@@ -144,7 +144,7 @@ export function ProcessingTimeline({
     <div className="border border-unkey-gray-700 rounded-unkey-lg overflow-hidden bg-unkey-gray-900 shadow-unkey-card">
       {/* Header */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-unkey-gray-800/50 transition-colors"
       >
         <div className="flex items-center gap-3">
@@ -181,7 +181,7 @@ export function ProcessingTimeline({
           
           {/* Expand/collapse icon */}
           <svg
-            className={`w-5 h-5 text-unkey-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-5 h-5 text-unkey-gray-400 transition-transform ${isTimelineExpanded ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -192,7 +192,7 @@ export function ProcessingTimeline({
       </button>
       
       {/* Timeline */}
-      {isExpanded && (
+      {isTimelineExpanded && (
         <div className="border-t border-unkey-gray-700 bg-unkey-gray-800/30">
           <div className="p-4 space-y-2">
             {events.length === 0 ? (

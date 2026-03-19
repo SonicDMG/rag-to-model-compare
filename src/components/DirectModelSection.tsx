@@ -40,7 +40,6 @@ export function DirectModelSection({
         <ProcessingTimeline
           pipeline={PipelineType.DIRECT}
           events={processingEvents}
-          defaultExpanded={false}
         />
       )}
 

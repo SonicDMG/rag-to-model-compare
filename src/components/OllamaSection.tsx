@@ -73,7 +73,6 @@ export function OllamaSection({
         <ProcessingTimeline
           pipeline={PipelineType.OLLAMA}
           events={processingEvents}
-          defaultExpanded={false}
         />
       )}
 

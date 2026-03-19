@@ -40,7 +40,6 @@ export function RagSection({
         <ProcessingTimeline
           pipeline={PipelineType.RAG}
           events={processingEvents}
-          defaultExpanded={false}
         />
       )}
 
