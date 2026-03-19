@@ -204,26 +204,93 @@ function validateMultiFileUpload(files: File[]): { valid: boolean; error?: strin
   return { valid: true };
 }
 /**
- * Ensure the "Compare" knowledge filter exists before processing files
- * This prevents race conditions when multiple files are uploaded simultaneously
- * 
- * @returns Promise resolving to the filter ID
- * @throws Error if filter creation/retrieval fails
+ * ============================================================================
+ * CRITICAL: FILTER RACE CONDITION PREVENTION
+ * ============================================================================
+ *
+ * This section implements a sophisticated locking mechanism to prevent race
+ * conditions when multiple file uploads occur simultaneously. This bug has
+ * been fixed multiple times and MUST NOT be broken again.
+ *
+ * THE PROBLEM:
+ * When multiple files are uploaded concurrently (e.g., folder upload), each
+ * upload would independently call ensureKnowledgeFilter(). Without proper
+ * synchronization, this would result in:
+ * - Multiple "Compare" filters being created
+ * - Files being associated with different filter IDs
+ * - Query results being incomplete (missing files from other filters)
+ * - Data inconsistency across the application
+ *
+ * THE SOLUTION:
+ * 1. LOCK MECHANISM: filterCreationLock ensures only ONE request searches/creates
+ *    the filter at a time. Other concurrent requests WAIT for the first one.
+ *
+ * 2. CACHE MECHANISM: cachedFilterId stores the filter ID for 60 seconds to
+ *    avoid repeated API calls for subsequent uploads.
+ *
+ * 3. DEBOUNCED BATCH UPDATES: pendingFilterUpdates collects filenames from
+ *    concurrent uploads and updates the filter ONCE after all uploads complete.
+ *
+ * ⚠️  WARNING: DO NOT MODIFY THIS SECTION WITHOUT:
+ * 1. Reading docs/FILTER_MANAGEMENT_ARCHITECTURE.md
+ * 2. Running src/__tests__/filter-race-condition.test.ts
+ * 3. Understanding the race condition issue completely
+ * 4. Testing with concurrent uploads (5+ files simultaneously)
+ *
+ * TESTING:
+ * Run: npx ts-node src/__tests__/filter-race-condition.test.ts
+ * This test MUST pass before deploying any changes to this section.
+ *
+ * DOCUMENTATION:
+ * See docs/FILTER_MANAGEMENT_ARCHITECTURE.md for detailed explanation.
+ * ============================================================================
  */
+
 // Global lock to prevent race conditions when multiple requests try to create the filter
+// This MUST be a module-level variable to work across concurrent requests
 let filterCreationLock: Promise<string> | null = null;
+
+// Cached filter ID to avoid repeated API calls
 let cachedFilterId: string | null = null;
 const CACHE_TTL = 60000; // Cache for 60 seconds
 let cacheTimestamp: number = 0;
 
 // Batch filter update mechanism for concurrent single-file uploads
+// Collects filenames and updates filter once after all uploads complete
 let pendingFilterUpdates: Set<string> = new Set();
 let filterUpdateTimer: NodeJS.Timeout | null = null;
 const FILTER_UPDATE_DELAY = 2000; // Wait 2 seconds after last file before updating filter
 
 /**
- * Schedule a batch filter update with all pending filenames
- * Uses a debounce mechanism to wait for all concurrent uploads to complete
+ * ============================================================================
+ * CRITICAL FUNCTION: scheduleBatchFilterUpdate
+ * ============================================================================
+ *
+ * Schedule a batch filter update with all pending filenames.
+ * Uses a debounce mechanism to wait for all concurrent uploads to complete.
+ *
+ * WHY THIS EXISTS:
+ * When multiple files are uploaded concurrently, we can't update the filter
+ * immediately for each file because:
+ * 1. It would cause race conditions (concurrent updates overwriting each other)
+ * 2. It would be inefficient (N API calls instead of 1)
+ * 3. It could result in incomplete data_sources arrays
+ *
+ * HOW IT WORKS:
+ * 1. Each file upload calls this function with its filename
+ * 2. The filename is added to pendingFilterUpdates Set
+ * 3. A timer is set/reset for FILTER_UPDATE_DELAY ms
+ * 4. When the timer fires (no new uploads for 2 seconds), all pending
+ *    filenames are batched into a SINGLE atomic filter update
+ *
+ * ⚠️  WARNING: DO NOT:
+ * - Remove the debounce mechanism
+ * - Update the filter immediately for each file
+ * - Modify the timer logic without understanding the race condition
+ *
+ * @param filterId - The filter ID to update (must be the shared filter)
+ * @param filename - The filename to add to the filter's data_sources
+ * ============================================================================
  */
 async function scheduleBatchFilterUpdate(filterId: string, filename: string): Promise<void> {
   // Add filename to pending updates
@@ -283,6 +350,51 @@ async function scheduleBatchFilterUpdate(filterId: string, filename: string): Pr
   }, FILTER_UPDATE_DELAY);
 }
 
+/**
+ * ============================================================================
+ * CRITICAL FUNCTION: ensureKnowledgeFilter
+ * ============================================================================
+ *
+ * Ensures the "Compare" knowledge filter exists, creating it if necessary.
+ * This function MUST be called ONCE per upload request BEFORE processing files.
+ *
+ * RACE CONDITION PREVENTION:
+ * This function uses a sophisticated locking mechanism to prevent multiple
+ * concurrent requests from creating duplicate filters:
+ *
+ * 1. CACHE CHECK: If we have a cached filter ID that's still valid (< 60s old),
+ *    return it immediately. This is the fast path for most requests.
+ *
+ * 2. LOCK CHECK: If another request is currently creating/finding the filter,
+ *    WAIT for it to complete and return its result. This prevents duplicate
+ *    filter creation during concurrent uploads.
+ *
+ * 3. LOCK ACQUISITION: If no cache and no lock, acquire the lock and search
+ *    for existing filter or create new one. Other concurrent requests will
+ *    wait at step 2.
+ *
+ * CRITICAL INVARIANTS:
+ * - Only ONE "Compare" filter should exist in the system
+ * - All files must use the SAME filter ID
+ * - The filter ID must be determined BEFORE any file processing begins
+ * - The lock MUST be released in the finally block
+ *
+ * ⚠️  DANGER ZONE - DO NOT:
+ * - Remove the filterCreationLock mechanism
+ * - Remove the cache mechanism
+ * - Call this function multiple times per upload request
+ * - Modify the lock without understanding the race condition
+ * - Skip the cache validation check
+ * - Remove the finally block that releases the lock
+ *
+ * TESTING:
+ * Any changes to this function MUST be tested with:
+ * npx ts-node src/__tests__/filter-race-condition.test.ts
+ *
+ * @returns Promise resolving to the filter ID
+ * @throws Error if filter creation/retrieval fails
+ * ============================================================================
+ */
 async function ensureKnowledgeFilter(): Promise<string> {
   try {
     const now = Date.now();
@@ -293,14 +405,15 @@ async function ensureKnowledgeFilter(): Promise<string> {
     console.log(`🔍 [${callId}] Cache valid: ${cachedFilterId && (now - cacheTimestamp) < CACHE_TTL}`);
     console.log(`🔍 [${callId}] Lock active: ${!!filterCreationLock}`);
     
-    // Return cached filter ID if still valid
+    // STEP 1: Return cached filter ID if still valid (FAST PATH)
     if (cachedFilterId && (now - cacheTimestamp) < CACHE_TTL) {
       console.log(`✅ [${callId}] Using cached "Compare" filter ID: ${cachedFilterId} (age: ${now - cacheTimestamp}ms)`);
       console.log(`🔍 [${callId}] ========================================\n`);
       return cachedFilterId;
     }
     
-    // If another request is already creating/finding the filter, wait for it
+    // STEP 2: If another request is already creating/finding the filter, WAIT for it
+    // This is the KEY to preventing race conditions during concurrent uploads
     if (filterCreationLock) {
       console.log(`⏳ [${callId}] Another request is creating filter, waiting for lock...`);
       const waitStart = Date.now();
@@ -311,7 +424,8 @@ async function ensureKnowledgeFilter(): Promise<string> {
       return result;
     }
     
-    // Create a new lock for this operation
+    // STEP 3: Create a new lock for this operation (SLOW PATH)
+    // All other concurrent requests will wait at STEP 2
     console.log(`🔒 [${callId}] Acquiring filter creation lock (no other requests active)...`);
     filterCreationLock = (async () => {
       try {
@@ -371,7 +485,8 @@ async function ensureKnowledgeFilter(): Promise<string> {
         return result.id;
         
       } finally {
-        // Release the lock
+        // CRITICAL: Release the lock so other requests can proceed
+        // If this is not executed, all future requests will hang forever
         console.log(`🔓 [${callId}] Releasing filter creation lock`);
         console.log(`🔓 [${callId}] Cache state - ID: ${cachedFilterId}, Age: ${Date.now() - cacheTimestamp}ms`);
         filterCreationLock = null;
@@ -911,6 +1026,24 @@ export async function POST(
             console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
             console.log('[DEBUG] Storage state after RAG storage:');
             debugStorage();
+            
+            // ============================================================
+            // RUNTIME VALIDATION: Verify filter ID consistency
+            // ============================================================
+            // This catches cases where different files somehow got different filter IDs
+            // which would indicate a race condition or logic error
+            if (filterIdForStorage !== knowledgeFilterId) {
+              const errorMsg = `CRITICAL: Filter ID mismatch detected!\n` +
+                `  Expected (from ensureKnowledgeFilter): ${knowledgeFilterId}\n` +
+                `  Got (stored with document): ${filterIdForStorage}\n` +
+                `  File: ${file.name}\n` +
+                `  This indicates a race condition or logic error!`;
+              console.error(`❌ [RAG] ${errorMsg}`);
+              console.error(`❌ [RAG] ⚠️  RACE CONDITION WARNING - See docs/FILTER_MANAGEMENT_ARCHITECTURE.md`);
+              // Don't throw - document is already stored, but log loudly for investigation
+            } else {
+              console.log(`✅ [RAG] Filter ID validation passed: ${filterIdForStorage}`);
+            }
             
             // Schedule batch filter update (debounced to handle concurrent uploads)
             if (knowledgeFilterId) {
