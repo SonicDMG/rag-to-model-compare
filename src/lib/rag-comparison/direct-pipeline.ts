@@ -38,7 +38,8 @@ import type {
 import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
-  ProcessingEventType
+  ProcessingEventType,
+  ProcessingEvent
 } from '@/types/processing-events';
 
 /**
@@ -737,10 +738,11 @@ export async function query(
   documentId: string,
   content: string,
   query: string,
-  config: DirectConfig
+  config: DirectConfig,
+  eventCallback?: (event: ProcessingEvent) => void
 ): Promise<DirectResult> {
-  // Initialize event tracker
-  const eventTracker = new ProcessingEventTracker();
+  // Initialize event tracker with optional callback for real-time streaming
+  const eventTracker = new ProcessingEventTracker(eventCallback);
   
   try {
     // Track initialization

@@ -2,6 +2,7 @@
 
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { OllamaResult } from '@/types/ollama';
+import { ProcessingEvent } from '@/types/processing-events';
 import { RagSection } from './RagSection';
 import { DirectModelSection } from './DirectModelSection';
 import { OllamaSection } from './OllamaSection';
@@ -33,6 +34,11 @@ interface ComparisonResultsProps {
   
   // Shared props
   documentTokens?: number;
+  
+  // Real-time processing events
+  ragProcessingEvents?: ProcessingEvent[];
+  directProcessingEvents?: ProcessingEvent[];
+  ollamaProcessingEvents?: ProcessingEvent[];
 }
 
 export function ComparisonResults({
@@ -49,7 +55,10 @@ export function ComparisonResults({
   availableOllamaModels,
   onOllamaModelChange,
   isOllamaAvailable,
-  documentTokens
+  documentTokens,
+  ragProcessingEvents = [],
+  directProcessingEvents = [],
+  ollamaProcessingEvents = []
 }: ComparisonResultsProps) {
   
   return (
@@ -63,7 +72,7 @@ export function ComparisonResults({
             isQuerying={isRagQuerying}
             error={ragError}
             documentTokens={documentTokens}
-            processingEvents={ragResult?.processingEvents}
+            processingEvents={ragProcessingEvents.length > 0 ? ragProcessingEvents : ragResult?.processingEvents}
           />
           
           {/* Direct Model Section */}
@@ -72,7 +81,7 @@ export function ComparisonResults({
             isQuerying={isDirectQuerying}
             error={directError}
             documentTokens={documentTokens}
-            processingEvents={directResult?.processingEvents}
+            processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
           />
           
           {/* Ollama Section */}
@@ -85,7 +94,7 @@ export function ComparisonResults({
             availableModels={availableOllamaModels}
             onModelChange={onOllamaModelChange}
             isOllamaAvailable={isOllamaAvailable}
-            processingEvents={ollamaResult?.processingEvents}
+            processingEvents={ollamaProcessingEvents.length > 0 ? ollamaProcessingEvents : ollamaResult?.processingEvents}
           />
         </div>
       </div>

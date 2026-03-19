@@ -266,36 +266,41 @@ export async function POST(request: NextRequest): Promise<Response> {
         console.log('⚡ EXECUTING PIPELINES INDEPENDENTLY');
         console.log('========================================\n');
 
-        // Helper function to stream processing events
-        const streamProcessingEvents = (
-          pipeline: PipelineType,
-          events: any[]
-        ) => {
-          events.forEach((event) => {
+        // Track start times for cumulative time calculation
+        const pipelineStartTimes = {
+          [PipelineType.RAG]: Date.now(),
+          [PipelineType.DIRECT]: Date.now(),
+          [PipelineType.OLLAMA]: Date.now()
+        };
+
+        // Helper function to create event callback for real-time streaming
+        const createEventCallback = (pipeline: PipelineType) => {
+          return (event: any) => {
+            const cumulativeTime = Date.now() - pipelineStartTimes[pipeline];
             const eventData = JSON.stringify({
               type: 'processing_event',
               pipeline,
               event,
-              cumulativeTime: new Date(event.startTime).getTime() - new Date(events[0].startTime).getTime()
+              cumulativeTime
             });
             controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
-          });
+          };
         };
 
-        // Execute all three pipelines independently - store promises to avoid duplicate execution
+        // Execute all three pipelines independently with real-time event callbacks
         // RAG pipeline
-        const ragPromise = ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig);
+        const ragPromise = ragQuery(
+          sanitizedDocumentId,
+          sanitizedQuery,
+          ragConfig,
+          createEventCallback(PipelineType.RAG)
+        );
         
         ragPromise
           .then((ragResult) => {
             console.log('🔵 RAG pipeline completed successfully');
             
-            // Stream processing events first
-            if (ragResult.processingEvents && ragResult.processingEvents.length > 0) {
-              streamProcessingEvents(PipelineType.RAG, ragResult.processingEvents);
-            }
-            
-            // Then stream the result
+            // Stream the final result
             const data = JSON.stringify({
               type: 'rag',
               success: true,
@@ -315,19 +320,20 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         // Direct pipeline
         const directPromise = storedDoc
-          ? directQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, directConfig)
+          ? directQuery(
+              sanitizedDocumentId,
+              storedDoc.content,
+              sanitizedQuery,
+              directConfig,
+              createEventCallback(PipelineType.DIRECT)
+            )
           : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
 
         directPromise
           .then((directResult) => {
             console.log('🟢 Direct pipeline completed successfully');
             
-            // Stream processing events first
-            if (directResult.processingEvents && directResult.processingEvents.length > 0) {
-              streamProcessingEvents(PipelineType.DIRECT, directResult.processingEvents);
-            }
-            
-            // Then stream the result
+            // Stream the final result
             const data = JSON.stringify({
               type: 'direct',
               success: true,
@@ -347,19 +353,21 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         // Ollama pipeline
         const ollamaPromise = storedDoc
-          ? ollamaQuery(sanitizedDocumentId, storedDoc.content, sanitizedQuery, ollamaConfig)
+          ? ollamaQuery(
+              sanitizedDocumentId,
+              storedDoc.content,
+              sanitizedQuery,
+              ollamaConfig,
+              createEventCallback(PipelineType.OLLAMA),
+              undefined // images parameter
+            )
           : Promise.reject(new Error('Document not found for Ollama pipeline'));
 
         ollamaPromise
           .then((ollamaResult) => {
             console.log('🟣 Ollama pipeline completed successfully');
             
-            // Stream processing events first
-            if (ollamaResult.processingEvents && ollamaResult.processingEvents.length > 0) {
-              streamProcessingEvents(PipelineType.OLLAMA, ollamaResult.processingEvents);
-            }
-            
-            // Then stream the result
+            // Stream the final result
             const data = JSON.stringify({
               type: 'ollama',
               success: true,

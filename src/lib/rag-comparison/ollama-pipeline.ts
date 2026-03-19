@@ -22,7 +22,8 @@ import {
 import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
-  ProcessingEventType
+  ProcessingEventType,
+  ProcessingEvent
 } from '@/types/processing-events';
 
 /**
@@ -581,13 +582,14 @@ export async function query(
   content: string,
   query: string,
   config: OllamaConfig,
+  eventCallback?: (event: ProcessingEvent) => void,
   images?: string[]
 ): Promise<OllamaResult> {
   // Start total timer BEFORE any processing to capture true total time
   const totalStartTime = performance.now();
   
-  // Initialize event tracker
-  const eventTracker = new ProcessingEventTracker();
+  // Initialize event tracker with optional callback for real-time streaming
+  const eventTracker = new ProcessingEventTracker(eventCallback);
   
   try {
     // Track initialization

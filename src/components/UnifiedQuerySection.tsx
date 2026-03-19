@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ComparisonResults } from './ComparisonResults';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { OllamaResult } from '@/types/ollama';
+import { ProcessingEvent } from '@/types/processing-events';
 
 interface OllamaModelInfo {
   name: string;
@@ -27,6 +28,10 @@ interface UnifiedQuerySectionProps {
   ollamaModel?: string;
   availableOllamaModels?: OllamaModelInfo[];
   isOllamaAvailable?: boolean;
+  // Processing events for real-time timeline updates
+  ragProcessingEvents?: ProcessingEvent[];
+  directProcessingEvents?: ProcessingEvent[];
+  ollamaProcessingEvents?: ProcessingEvent[];
 }
 
 export function UnifiedQuerySection({
@@ -42,7 +47,10 @@ export function UnifiedQuerySection({
   documentTokens,
   ollamaModel = 'llama3.2',
   availableOllamaModels = [],
-  isOllamaAvailable = false
+  isOllamaAvailable = false,
+  ragProcessingEvents = [],
+  directProcessingEvents = [],
+  ollamaProcessingEvents = []
 }: UnifiedQuerySectionProps) {
   const [query, setQuery] = useState('');
   const [temperature, setTemperature] = useState(0.7);
@@ -53,6 +61,9 @@ export function UnifiedQuerySection({
   const [ollamaResult, setOllamaResult] = useState<OllamaResult | null>(null);
   const [isOllamaQuerying, setIsOllamaQuerying] = useState(false);
   const [ollamaError, setOllamaError] = useState<string | null>(null);
+  
+  // Local Ollama processing events (for events streamed in this component)
+  const [localOllamaProcessingEvents, setLocalOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +74,7 @@ export function UnifiedQuerySection({
     setIsOllamaQuerying(true);
     setOllamaError(null);
     setOllamaResult(null);
+    setLocalOllamaProcessingEvents([]);
 
     // Call parent's query handler for RAG and Direct
     await onQueryBoth(query.trim(), temperature, maxTokens);
@@ -115,7 +127,21 @@ export function UnifiedQuerySection({
             try {
               const data = JSON.parse(message.substring(6));
 
-              if (data.type === 'ollama') {
+              // Handle real-time processing events for Ollama
+              if (data.type === 'processing_event' && data.pipeline === 'ollama') {
+                const { event } = data;
+                setLocalOllamaProcessingEvents(prev => {
+                  const existingIndex = prev.findIndex(e => e.id === event.id);
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = event;
+                    return updated;
+                  }
+                  return [...prev, event];
+                });
+              }
+              // Handle final Ollama result
+              else if (data.type === 'ollama') {
                 if (data.success) {
                   console.log('✅ Ollama result received');
                   setOllamaResult(data.data);
@@ -277,6 +303,9 @@ export function UnifiedQuerySection({
           onOllamaModelChange={undefined}
           isOllamaAvailable={isOllamaAvailable}
           documentTokens={documentTokens}
+          ragProcessingEvents={ragProcessingEvents}
+          directProcessingEvents={directProcessingEvents}
+          ollamaProcessingEvents={localOllamaProcessingEvents.length > 0 ? localOllamaProcessingEvents : ollamaProcessingEvents}
         />
       )}
     </div>

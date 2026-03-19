@@ -105,14 +105,21 @@ export interface StreamedProcessingEvent {
 }
 
 /**
- * Helper class for tracking processing events
+ * Callback function type for real-time event emission
+ */
+export type EventCallback = (event: ProcessingEvent) => void;
+
+/**
+ * Helper class for tracking processing events with real-time streaming support
  */
 export class ProcessingEventTracker {
   private events: ProcessingEvent[] = [];
   private startTime: number;
+  private eventCallback?: EventCallback;
   
-  constructor() {
+  constructor(eventCallback?: EventCallback) {
     this.startTime = Date.now();
+    this.eventCallback = eventCallback;
   }
   
   /**
@@ -132,6 +139,12 @@ export class ProcessingEventTracker {
     };
     
     this.events.push(event);
+    
+    // Emit event immediately if callback is provided
+    if (this.eventCallback) {
+      this.eventCallback(event);
+    }
+    
     return id;
   }
   
@@ -150,6 +163,11 @@ export class ProcessingEventTracker {
     if (metadata) {
       event.metadata = { ...event.metadata, ...metadata };
     }
+    
+    // Emit updated event immediately if callback is provided
+    if (this.eventCallback) {
+      this.eventCallback(event);
+    }
   }
   
   /**
@@ -164,6 +182,11 @@ export class ProcessingEventTracker {
     event.duration = new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
     event.status = ProcessingEventStatus.FAILED;
     event.error = error;
+    
+    // Emit updated event immediately if callback is provided
+    if (this.eventCallback) {
+      this.eventCallback(event);
+    }
   }
   
   /**

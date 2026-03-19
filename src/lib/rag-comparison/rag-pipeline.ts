@@ -30,7 +30,8 @@ import type {
 } from '@/types/rag-comparison';
 import {
   ProcessingEventTracker,
-  ProcessingEventType
+  ProcessingEventType,
+  ProcessingEvent
 } from '@/types/processing-events';
 
 /**
@@ -793,15 +794,16 @@ export async function indexDocument(
 export async function query(
   documentId: string,
   query: string,
-  config: RAGConfig
+  config: RAGConfig,
+  eventCallback?: (event: ProcessingEvent) => void
 ): Promise<RAGResult> {
   console.log('=== RAG Pipeline Query Start ===');
   console.log('Document ID:', documentId);
   console.log('Query:', query);
   console.log('Config:', JSON.stringify(config, null, 2));
   
-  // Initialize event tracker
-  const eventTracker = new ProcessingEventTracker();
+  // Initialize event tracker with optional callback for real-time streaming
+  const eventTracker = new ProcessingEventTracker(eventCallback);
   
   try {
     // Track initialization

@@ -9,6 +9,7 @@ import { ModelConfigSection } from '@/components/ModelConfigSection';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
+import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 
 interface OllamaModelInfo {
   name: string;
@@ -32,6 +33,11 @@ export default function Home() {
   const [directResult, setDirectResult] = useState<DirectResult | null>(null);
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
+
+  // Processing events state for real-time timeline updates
+  const [ragProcessingEvents, setRagProcessingEvents] = useState<ProcessingEvent[]>([]);
+  const [directProcessingEvents, setDirectProcessingEvents] = useState<ProcessingEvent[]>([]);
+  const [ollamaProcessingEvents, setOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
 
   // Ollama state (lifted from UnifiedQuerySection)
   const [ollamaModel, setOllamaModel] = useState<string>('llama3.2');
@@ -75,7 +81,7 @@ export default function Home() {
   const handleQueryBoth = async (query: string, temperature: number, maxTokens: number) => {
     if (!documentId) return;
 
-    // Reset state for both pipelines
+    // Reset state for all pipelines
     setIsQuerying(true);
     setIsRagQuerying(true);
     setIsDirectQuerying(true);
@@ -83,6 +89,11 @@ export default function Home() {
     setDirectError(null);
     setRagResult(null);
     setDirectResult(null);
+    
+    // Reset processing events for real-time updates
+    setRagProcessingEvents([]);
+    setDirectProcessingEvents([]);
+    setOllamaProcessingEvents([]);
 
     try {
       const response = await fetch('/api/rag-comparison/query', {
@@ -136,7 +147,46 @@ export default function Home() {
           try {
             const data = JSON.parse(message.substring(6)); // Remove 'data: ' prefix
 
-            if (data.type === 'rag') {
+            // Handle real-time processing events
+            if (data.type === 'processing_event') {
+              const { pipeline, event } = data;
+              
+              // Update the appropriate pipeline's events array
+              if (pipeline === PipelineType.RAG) {
+                setRagProcessingEvents(prev => {
+                  // Check if event already exists (update) or is new (append)
+                  const existingIndex = prev.findIndex(e => e.id === event.id);
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = event;
+                    return updated;
+                  }
+                  return [...prev, event];
+                });
+              } else if (pipeline === PipelineType.DIRECT) {
+                setDirectProcessingEvents(prev => {
+                  const existingIndex = prev.findIndex(e => e.id === event.id);
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = event;
+                    return updated;
+                  }
+                  return [...prev, event];
+                });
+              } else if (pipeline === PipelineType.OLLAMA) {
+                setOllamaProcessingEvents(prev => {
+                  const existingIndex = prev.findIndex(e => e.id === event.id);
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = event;
+                    return updated;
+                  }
+                  return [...prev, event];
+                });
+              }
+            }
+            // Handle final results
+            else if (data.type === 'rag') {
               if (data.success) {
                 console.log('✅ RAG result received and rendering');
                 setRagResult(data.data);
@@ -332,6 +382,9 @@ export default function Home() {
               ollamaModel={ollamaModel}
               availableOllamaModels={availableOllamaModels}
               isOllamaAvailable={isOllamaAvailable}
+              ragProcessingEvents={ragProcessingEvents}
+              directProcessingEvents={directProcessingEvents}
+              ollamaProcessingEvents={ollamaProcessingEvents}
             />
           </section>
         )}
