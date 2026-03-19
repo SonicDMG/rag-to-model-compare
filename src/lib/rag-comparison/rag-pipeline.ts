@@ -874,12 +874,12 @@ export async function query(
     console.log('Using knowledge filter ID:', filterId);
     console.log('Filter data sources:', existingFilters[0].queryData?.filters?.data_sources);
 
-    // Track retrieval time
+    // Track RAG query time (single API call performs both retrieval and generation)
     const retrievalStartTime = performance.now();
     const retrievalEventId = eventTracker.startEvent(
       ProcessingEventType.VECTOR_SEARCH,
-      'Execute RAG query with vector search',
-      { topK: config.topK, filterId }
+      'RAG Query (Retrieval + Generation)',
+      { topK: config.topK, filterId, model: config.model }
     );
     console.log('OpenRAG client obtained');
     console.log('[DEBUG] Client config:', {
@@ -890,12 +890,7 @@ export async function query(
     });
 
     // Execute RAG query using OpenRAG SDK chat method
-    const apiCallEventId = eventTracker.startEvent(
-      ProcessingEventType.API_CALL,
-      'Call OpenRAG chat API',
-      { model: config.model, topK: config.topK }
-    );
-    
+    // This single API call performs both vector search/retrieval AND generation
     const chatRequest = {
       message: sanitizedQuery,
       limit: config.topK,
@@ -908,11 +903,6 @@ export async function query(
     
     const response = await client.chat.create(chatRequest);
     
-    eventTracker.completeEvent(apiCallEventId, {
-      sourcesRetrieved: response?.sources?.length || 0,
-      responseLength: response?.response?.length || 0
-    });
-    
     console.log('Response received from OpenRAG');
     console.log('Response type:', typeof response);
     console.log('Response keys:', response ? Object.keys(response) : 'null');
@@ -921,8 +911,12 @@ export async function query(
 
     const retrievalEndTime = performance.now();
     const retrievalTime = Math.round(retrievalEndTime - retrievalStartTime);
-    eventTracker.completeEvent(retrievalEventId, { retrievalTime });
-    console.log('Retrieval time:', retrievalTime, 'ms');
+    eventTracker.completeEvent(retrievalEventId, {
+      retrievalTime,
+      sourcesRetrieved: response?.sources?.length || 0,
+      responseLength: response?.response?.length || 0
+    });
+    console.log('RAG query completed in:', retrievalTime, 'ms');
 
     // Track generation time (estimate as 60% of total time)
     const generationTime = Math.round(retrievalTime * 0.6);
