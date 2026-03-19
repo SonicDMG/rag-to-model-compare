@@ -63,6 +63,7 @@ export function ComparisonResults({
             isQuerying={isRagQuerying}
             error={ragError}
             documentTokens={documentTokens}
+            processingEvents={ragResult?.processingEvents}
           />
           
           {/* Direct Model Section */}
@@ -71,6 +72,7 @@ export function ComparisonResults({
             isQuerying={isDirectQuerying}
             error={directError}
             documentTokens={documentTokens}
+            processingEvents={directResult?.processingEvents}
           />
           
           {/* Ollama Section */}
@@ -83,6 +85,7 @@ export function ComparisonResults({
             availableModels={availableOllamaModels}
             onModelChange={onOllamaModelChange}
             isOllamaAvailable={isOllamaAvailable}
+            processingEvents={ollamaResult?.processingEvents}
           />
         </div>
       </div>

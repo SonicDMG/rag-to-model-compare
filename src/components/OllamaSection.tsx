@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { OllamaResult } from '@/types/ollama';
+import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
+import { ProcessingTimeline } from './ProcessingTimeline';
 
 interface OllamaSectionProps {
   ollamaResult: OllamaResult | null;
@@ -18,6 +20,7 @@ interface OllamaSectionProps {
   }>;
   onModelChange?: (model: string) => void;
   isOllamaAvailable?: boolean;
+  processingEvents?: ProcessingEvent[];
 }
 
 export function OllamaSection({
@@ -28,7 +31,8 @@ export function OllamaSection({
   selectedModel,
   availableModels,
   onModelChange,
-  isOllamaAvailable = true
+  isOllamaAvailable = true,
+  processingEvents
 }: OllamaSectionProps) {
   const [recheckAttempted, setRecheckAttempted] = useState(false);
 
@@ -63,6 +67,15 @@ export function OllamaSection({
           Local LLM inference with full document context - no API costs, complete privacy
         </p>
       </div>
+
+      {/* Processing Timeline */}
+      {processingEvents && processingEvents.length > 0 && (
+        <ProcessingTimeline
+          pipeline={PipelineType.OLLAMA}
+          events={processingEvents}
+          defaultExpanded={false}
+        />
+      )}
 
       {/* Ollama Not Available Warning */}
       {!isOllamaAvailable && (

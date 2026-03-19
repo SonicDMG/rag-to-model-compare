@@ -117,8 +117,9 @@ function validateFile(file: File): void {
     );
   }
 
-  // Check for path traversal in filename
-  if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+  // Check for path traversal in filename (only reject parent directory references)
+  // Allow forward/back slashes as they're used in webkitRelativePath for folder uploads
+  if (file.name.includes('..')) {
     throw new Error('Invalid filename: contains path traversal characters');
   }
 
@@ -300,7 +301,8 @@ async function processSingleFile(
   folderMetadata?: FolderMetadata,
   isMultiFile: boolean = false,
   sharedDirectDocumentId?: string,
-  knowledgeFilterId?: string
+  knowledgeFilterId?: string,
+  skipFilterUpdate: boolean = false
 ): Promise<FileUploadResult> {
   // Use shared document ID for Direct pipeline in multi-file uploads
   const directDocId = isMultiFile && sharedDirectDocumentId ? sharedDirectDocumentId : documentId;
@@ -357,7 +359,7 @@ async function processSingleFile(
       folderContext: folderMetadata
     };
 
-    const ragResult = await ragIndexDocument(file, documentId, ragMetadata, knowledgeFilterId);
+    const ragResult = await ragIndexDocument(file, documentId, ragMetadata, knowledgeFilterId, skipFilterUpdate);
 
     let filterIdForStorage: string | undefined = undefined;
     if (ragResult.success && ragResult.filterId) {
@@ -597,6 +599,24 @@ export async function POST(
     }
 
     // ============================================================
+    // ENSURE KNOWLEDGE FILTER EXISTS (Once for all uploads)
+    // ============================================================
+    let knowledgeFilterId: string | undefined;
+    try {
+      knowledgeFilterId = await ensureKnowledgeFilter();
+      console.log(`✅ Knowledge filter ready: ${knowledgeFilterId}`);
+    } catch (error) {
+      console.error('❌ Failed to ensure knowledge filter:', error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Failed to create knowledge filter: ${error instanceof Error ? error.message : 'Unknown error'}`
+        },
+        { status: 500 }
+      );
+    }
+
+    // ============================================================
     // SINGLE FILE UPLOAD (Backward Compatibility)
     // ============================================================
     if (files.length === 1) {
@@ -692,7 +712,8 @@ export async function POST(
         const ragResult = await ragIndexDocument(
           file, // Send the raw file, not parsed chunks
           documentId,
-          ragMetadata
+          ragMetadata,
+          knowledgeFilterId // Pass the pre-created filter ID
         );
 
         // Store the filter ID for later use in queries
@@ -1013,20 +1034,12 @@ export async function POST(
     const sharedDocumentId = `batch-${uploadBatchId}`;
     console.log(`📁 Shared Document ID for Direct pipeline: ${sharedDocumentId}`);
 
-    // Ensure knowledge filter exists BEFORE processing any files
-    // This prevents race conditions when multiple files try to create/update the filter simultaneously
-    let knowledgeFilterId: string | undefined;
-    try {
-      knowledgeFilterId = await ensureKnowledgeFilter();
-      console.log(`✅ Knowledge filter ready: ${knowledgeFilterId}`);
-    } catch (error) {
-      console.error('❌ Failed to ensure knowledge filter:', error);
-      // Continue without pre-created filter - files will try to create/find it individually
-      // This maintains backward compatibility
-    }
+    // Filter was already created at the top of POST handler
+    // knowledgeFilterId is already available from line 607
 
     // Process files sequentially
     const results: FileUploadResult[] = [];
+    const successfulFilenames: string[] = [];
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -1043,19 +1056,66 @@ export async function POST(
       
       // Process the file with multi-file flag enabled
       // Pass both RAG document ID (unique per file) and shared Direct document ID
-      // Also pass the pre-created knowledge filter ID to avoid race conditions
+      // Pass knowledgeFilterId but DON'T let individual files update it
+      // We'll do a batch update after all files are processed
       const result = await processSingleFile(
         file,
         ragDocumentId,
         folderMetadata,
         true,
         sharedDocumentId,
-        knowledgeFilterId
+        knowledgeFilterId,
+        true // skipFilterUpdate flag - new parameter
       );
       
       results.push(result);
       
-      console.log(`📄 File ${i + 1}/${files.length} complete: ${file.name}`);
+      // Track successfully indexed filenames for batch filter update
+      if (result.rag.status === 'success') {
+        successfulFilenames.push(file.name);
+        console.log(`📄 File ${i + 1}/${files.length} indexed successfully: ${file.name}`);
+      } else {
+        console.log(`📄 File ${i + 1}/${files.length} failed to index: ${file.name}`);
+      }
+    }
+
+    // ============================================================
+    // BATCH UPDATE FILTER WITH ALL FILENAMES (Once, after all files processed)
+    // ============================================================
+    if (successfulFilenames.length > 0 && knowledgeFilterId) {
+      console.log(`\n📎 Batch associating ${successfulFilenames.length} files with filter ${knowledgeFilterId}`);
+      try {
+        const { getOpenRAGClient } = await import('@/lib/rag-comparison/rag-pipeline');
+        const client = getOpenRAGClient();
+        
+        // Get current filter state
+        const filterResponse = await client.knowledgeFilters.get(knowledgeFilterId);
+        
+        if (filterResponse) {
+          const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
+          
+          // Merge new filenames with existing ones (avoid duplicates)
+          const allDataSources = [...new Set([...currentDataSources, ...successfulFilenames])];
+          
+          console.log(`📎 Current data_sources: [${currentDataSources.join(', ')}]`);
+          console.log(`📎 Adding filenames: [${successfulFilenames.join(', ')}]`);
+          console.log(`📎 Final data_sources: [${allDataSources.join(', ')}]`);
+          
+          // Single atomic update with all filenames
+          await client.knowledgeFilters.update(knowledgeFilterId, {
+            queryData: {
+              filters: {
+                data_sources: allDataSources
+              }
+            }
+          });
+          
+          console.log(`✅ Batch filter update successful - ${successfulFilenames.length} files associated`);
+        }
+      } catch (error) {
+        console.error(`❌ Batch filter update failed:`, error);
+        // Don't fail the entire upload - documents are already indexed
+      }
     }
 
     // Calculate summary statistics

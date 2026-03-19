@@ -2,6 +2,8 @@
  * Ollama-specific type definitions
  */
 
+import type { ProcessingEvent } from './processing-events';
+
 export interface OllamaConfig {
   model: string;
   temperature?: number;
@@ -20,6 +22,8 @@ export interface OllamaResult {
     contextWindowUsage: number;
     breakdown?: any; // Will be properly typed later
   };
+  /** Array of processing events with timing information */
+  processingEvents: ProcessingEvent[];
 }
 
 export interface OllamaError {

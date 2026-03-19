@@ -28,6 +28,10 @@ import type {
   RAGConfig,
   RAGResult
 } from '@/types/rag-comparison';
+import {
+  ProcessingEventTracker,
+  ProcessingEventType
+} from '@/types/processing-events';
 
 /**
  * OpenRAG client instance
@@ -39,7 +43,7 @@ let openragClient: OpenRAGClient | null = null;
  * Get or create OpenRAG client instance
  * @throws {RAGPipelineError} If environment variables are not configured
  */
-function getOpenRAGClient(): OpenRAGClient {
+export function getOpenRAGClient(): OpenRAGClient {
   if (!openragClient) {
     // Validate environment variables
     if (!process.env.OPENRAG_API_KEY) {
@@ -396,35 +400,37 @@ export async function createKnowledgeFilter(
     // Use the constant "Compare" as the filter name
     const filterName = KNOWLEDGE_FILTER_ID;
     
-    // If existingFilterId is provided, ONLY attempt update - never create
+    // If existingFilterId is provided, use it directly without searching
+    // The filter was already created/found upfront for multi-file uploads
     if (existingFilterId) {
-      console.log(`Using pre-existing filter ID: ${existingFilterId}`);
+      console.log(`✅ Using pre-created filter ID: ${existingFilterId} for ${filename}`);
       
-      // Get the filter to check current data sources
-      const existingFilters = await client.knowledgeFilters.search(filterName, 1);
-      
-      if (!existingFilters || existingFilters.length === 0) {
-        throw new RAGPipelineError(
-          `Filter ${existingFilterId} not found - cannot update non-existent filter`,
-          'FILTER_NOT_FOUND',
-          { filterId: existingFilterId, filterName }
-        );
+      try {
+        // Get current filter state by ID (not by search)
+        const filterResponse = await client.knowledgeFilters.get(existingFilterId);
+        
+        if (!filterResponse) {
+          console.warn(`⚠️  Filter ${existingFilterId} not found, returning ID anyway`);
+          return existingFilterId;
+        }
+        
+        const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
+        
+        // Add new filename if not already present
+        if (!currentDataSources.includes(filename)) {
+          console.log(`Adding filename "${filename}" to filter ${existingFilterId}`);
+          await updateFilterWithRetry(client, existingFilterId, [...currentDataSources, filename]);
+          console.log(`✅ Updated filter with new filename`);
+        } else {
+          console.log(`ℹ️  Filename "${filename}" already in filter`);
+        }
+        
+        return existingFilterId;
+      } catch (error) {
+        // If update fails, log but don't fail the entire upload
+        console.warn(`⚠️  Failed to update filter ${existingFilterId} with ${filename}:`, error);
+        return existingFilterId; // Return the filter ID anyway
       }
-      
-      const existingFilter = existingFilters[0];
-      const currentDataSources = existingFilter.queryData?.filters?.data_sources || [];
-      
-      // Add new filename if not already present
-      if (!currentDataSources.includes(filename)) {
-        console.log(`Adding filename "${filename}" to existing filter`);
-        // updateFilterWithRetry will throw if all retries fail
-        await updateFilterWithRetry(client, existingFilter.id, [...currentDataSources, filename]);
-        console.log(`✅ Updated filter with new filename`);
-      } else {
-        console.log(`ℹ️  Filename "${filename}" already in filter`);
-      }
-      
-      return existingFilter.id;
     }
     
     // Check if "Compare" filter already exists
@@ -621,7 +627,8 @@ export async function indexDocument(
   file: File,
   documentId: string,
   metadata: DocumentMetadata,
-  knowledgeFilterId?: string
+  knowledgeFilterId?: string,
+  skipFilterUpdate: boolean = false
 ): Promise<IndexResult> {
   const startTime = performance.now();
 
@@ -677,10 +684,45 @@ export async function indexDocument(
       );
     }
 
-    // Create or update knowledge filter for this document after successful ingestion
-    // This filter will scope retrieval to only this document
-    // If knowledgeFilterId is provided, use it to avoid race conditions
-    const filterId = await createKnowledgeFilter(documentId, metadata.filename, knowledgeFilterId);
+    // Use the provided knowledge filter ID or create/update one
+    // If knowledgeFilterId is provided (from upload route), use it directly without additional operations
+    // This avoids race conditions and duplicate filter operations during multi-file uploads
+    let filterId: string;
+    if (knowledgeFilterId) {
+      // Filter was already created/found by the upload route - use it directly
+      console.log(`✅ Using pre-created filter ID: ${knowledgeFilterId} for ${metadata.filename}`);
+      filterId = knowledgeFilterId;
+      
+      // CRITICAL: Associate the file with the filter by adding filename to data_sources
+      // For multi-file uploads, skip individual updates and do batch update after all files
+      if (!skipFilterUpdate) {
+        try {
+          const client = getOpenRAGClient();
+          const filterResponse = await client.knowledgeFilters.get(knowledgeFilterId);
+          
+          if (filterResponse) {
+            const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
+            
+            // Add new filename if not already present
+            if (!currentDataSources.includes(metadata.filename)) {
+              console.log(`📎 Associating "${metadata.filename}" with filter ${knowledgeFilterId}`);
+              await updateFilterWithRetry(client, knowledgeFilterId, [...currentDataSources, metadata.filename]);
+              console.log(`✅ File associated with filter`);
+            } else {
+              console.log(`ℹ️  Filename "${metadata.filename}" already associated with filter`);
+            }
+          }
+        } catch (error) {
+          // Log warning but don't fail the upload - the document is already indexed
+          console.warn(`⚠️  Failed to associate file with filter ${knowledgeFilterId}:`, error);
+        }
+      } else {
+        console.log(`ℹ️  Skipping individual filter update - will be done in batch`);
+      }
+    } else {
+      // No filter provided - create or find one (legacy single-file path)
+      filterId = await createKnowledgeFilter(documentId, metadata.filename);
+    }
 
     const endTime = performance.now();
     const indexTime = Math.round(endTime - startTime);
@@ -758,12 +800,28 @@ export async function query(
   console.log('Query:', query);
   console.log('Config:', JSON.stringify(config, null, 2));
   
+  // Initialize event tracker
+  const eventTracker = new ProcessingEventTracker();
+  
   try {
+    // Track initialization
+    const initEventId = eventTracker.startEvent(
+      ProcessingEventType.INITIALIZATION,
+      'Initialize RAG pipeline',
+      { documentId, model: config.model }
+    );
+    
     // Validate inputs
+    const validationEventId = eventTracker.startEvent(
+      ProcessingEventType.VALIDATION,
+      'Validate inputs (documentId, query, config)'
+    );
+    
     validateDocumentId(documentId);
     validateQuery(query);
 
     if (!config || typeof config !== 'object') {
+      eventTracker.failEvent(validationEventId, 'Invalid RAG configuration');
       throw new RAGPipelineError(
         'RAG configuration is required',
         'INVALID_CONFIG',
@@ -774,24 +832,34 @@ export async function query(
     // Validate model
     const pricing = getModelPricing(config.model);
     if (!pricing) {
+      eventTracker.failEvent(validationEventId, `Unsupported model: ${config.model}`);
       throw new RAGPipelineError(
         `Unsupported model: ${config.model}`,
         'UNSUPPORTED_MODEL',
         { model: config.model }
       );
     }
+    
+    eventTracker.completeEvent(validationEventId);
+    eventTracker.completeEvent(initEventId);
 
     const sanitizedQuery = sanitizeInput(query);
     console.log('Sanitized query:', sanitizedQuery);
 
-    // Get the "Compare" knowledge filter ID from OpenRAG
-    // RAG pipeline is independent - it doesn't need local storage
+    // Track filter lookup
+    const filterLookupEventId = eventTracker.startEvent(
+      ProcessingEventType.FILTER_LOOKUP,
+      'Retrieve knowledge filter from OpenRAG',
+      { filterName: KNOWLEDGE_FILTER_ID }
+    );
+    
     console.log('Retrieving "Compare" knowledge filter from OpenRAG...');
     const client = getOpenRAGClient();
     
     const existingFilters = await client.knowledgeFilters.search(KNOWLEDGE_FILTER_ID, 1);
     
     if (!existingFilters || existingFilters.length === 0) {
+      eventTracker.failEvent(filterLookupEventId, 'Knowledge filter not found');
       throw new RAGPipelineError(
         `Knowledge filter "${KNOWLEDGE_FILTER_ID}" not found. Please ensure the document was uploaded successfully.`,
         'FILTER_NOT_FOUND',
@@ -800,11 +868,17 @@ export async function query(
     }
     
     const filterId = existingFilters[0].id;
+    eventTracker.completeEvent(filterLookupEventId, { filterId });
     console.log('Using knowledge filter ID:', filterId);
     console.log('Filter data sources:', existingFilters[0].queryData?.filters?.data_sources);
 
     // Track retrieval time
     const retrievalStartTime = performance.now();
+    const retrievalEventId = eventTracker.startEvent(
+      ProcessingEventType.VECTOR_SEARCH,
+      'Execute RAG query with vector search',
+      { topK: config.topK, filterId }
+    );
     console.log('OpenRAG client obtained');
     console.log('[DEBUG] Client config:', {
       hasApiKey: !!process.env.OPENRAG_API_KEY,
@@ -814,20 +888,28 @@ export async function query(
     });
 
     // Execute RAG query using OpenRAG SDK chat method
-    // The SDK automatically handles retrieval and generation
-    // IMPORTANT: Set stream: false to get complete response instead of streaming
-    // IMPORTANT: Use filterId to scope retrieval to the specific document via knowledge filter
+    const apiCallEventId = eventTracker.startEvent(
+      ProcessingEventType.API_CALL,
+      'Call OpenRAG chat API',
+      { model: config.model, topK: config.topK }
+    );
+    
     const chatRequest = {
       message: sanitizedQuery,
       limit: config.topK,
-      scoreThreshold: 0.5, // Reasonable default
-      stream: false as const, // Disable streaming to get complete response (literal type)
-      filterId: filterId, // Use knowledge filter to scope retrieval to this document
+      scoreThreshold: 0.5,
+      stream: false as const,
+      filterId: filterId,
     };
     console.log('Chat request:', JSON.stringify(chatRequest, null, 2));
     console.log('Calling client.chat.create() with knowledge filter...');
     
     const response = await client.chat.create(chatRequest);
+    
+    eventTracker.completeEvent(apiCallEventId, {
+      sourcesRetrieved: response?.sources?.length || 0,
+      responseLength: response?.response?.length || 0
+    });
     
     console.log('Response received from OpenRAG');
     console.log('Response type:', typeof response);
@@ -837,17 +919,22 @@ export async function query(
 
     const retrievalEndTime = performance.now();
     const retrievalTime = Math.round(retrievalEndTime - retrievalStartTime);
+    eventTracker.completeEvent(retrievalEventId, { retrievalTime });
     console.log('Retrieval time:', retrievalTime, 'ms');
 
     // Track generation time (estimate as 60% of total time)
     const generationTime = Math.round(retrievalTime * 0.6);
     console.log('Generation time (estimated):', generationTime, 'ms');
 
-    // Extract answer from response
+    // Track context assembly
+    const contextAssemblyEventId = eventTracker.startEvent(
+      ProcessingEventType.CONTEXT_ASSEMBLY,
+      'Assemble context from retrieved sources'
+    );
+    
     const answer = response.response || '';
     console.log('Answer extracted, length:', answer.length);
 
-    // Extract sources from response
     const sdkSources = response.sources || [];
     console.log('SDK sources count:', sdkSources.length);
     
@@ -862,22 +949,35 @@ export async function query(
         sourceId: source.filename
       }
     }));
+    
+    eventTracker.completeEvent(contextAssemblyEventId, {
+      chunksCreated: sourceChunks.length
+    });
     console.log('Source chunks created:', sourceChunks.length);
 
-    // Calculate token usage
-    // Input tokens = system prompt + query + retrieved chunks
+    // Track token estimation
+    const tokenEstimationEventId = eventTracker.startEvent(
+      ProcessingEventType.TOKEN_ESTIMATION,
+      'Estimate token usage for all components'
+    );
+    
     const systemPromptTokens = estimateTokens(RAG_SYSTEM_PROMPT);
     const queryTokens = estimateTokens(sanitizedQuery);
     const retrievedContent = sdkSources.map(s => s.text).join('\n\n');
     const contextTokens = estimateTokens(retrievedContent);
     const inputTokens = systemPromptTokens + queryTokens + contextTokens;
+    const outputTokens = estimateTokens(answer);
+    
+    eventTracker.completeEvent(tokenEstimationEventId, {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens
+    });
+    
     console.log('Input tokens:', inputTokens);
     console.log('  - System prompt:', systemPromptTokens);
     console.log('  - Query:', queryTokens);
     console.log('  - Context:', contextTokens);
-    
-    // Output tokens = generated response
-    const outputTokens = estimateTokens(answer);
     console.log('Output tokens:', outputTokens);
 
     // Calculate per-source token breakdown
@@ -886,7 +986,12 @@ export async function query(
       tokens: chunk.tokenCount
     }));
 
-    // Calculate metrics
+    // Track metrics calculation
+    const metricsCalcEventId = eventTracker.startEvent(
+      ProcessingEventType.METRICS_CALCULATION,
+      'Calculate performance metrics and breakdowns'
+    );
+    
     const metrics = calculateMetrics(
       retrievalTime,
       generationTime,
@@ -896,7 +1001,6 @@ export async function query(
     );
     console.log('Metrics calculated:', JSON.stringify(metrics, null, 2));
 
-    // Calculate detailed breakdown
     const timingBreakdown = calculateTimingBreakdown(retrievalTime, generationTime);
     const tokenBreakdown = calculateTokenBreakdown(
       systemPromptTokens,
@@ -909,7 +1013,7 @@ export async function query(
       config.model,
       inputTokens,
       outputTokens,
-      true // Include embedding cost estimate for RAG
+      true
     );
     const contextWindowBreakdown = calculateContextWindowBreakdown(
       config.model,
@@ -932,6 +1036,11 @@ export async function query(
         ]
       }
     };
+    
+    eventTracker.completeEvent(metricsCalcEventId, {
+      cost: metrics.cost,
+      totalTokens: metrics.totalTokens
+    });
 
     const result = {
       answer,
@@ -942,7 +1051,8 @@ export async function query(
         tokens: metrics.totalTokens,
         cost: metrics.cost,
         breakdown
-      }
+      },
+      processingEvents: eventTracker.getEvents()
     };
     
     console.log('=== RAG Pipeline Query Complete ===');

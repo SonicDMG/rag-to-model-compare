@@ -19,6 +19,11 @@ import {
   calculateCostBreakdown,
   calculateContextWindowBreakdown
 } from './metrics-calculator';
+import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
+import {
+  ProcessingEventTracker,
+  ProcessingEventType
+} from '@/types/processing-events';
 
 /**
  * Result from document loading operation
@@ -56,18 +61,6 @@ export interface ContextCheck {
   warnings: string[];
 }
 
-/**
- * System prompt for Ollama queries
- */
-const OLLAMA_SYSTEM_PROMPT = `You are a helpful AI assistant that answers questions based on the provided document.
-
-Instructions:
-- Read and understand the entire document provided below
-- Answer the question using ONLY the information from the document
-- If the document doesn't contain enough information to answer the question, say so clearly
-- Be thorough and accurate in your response
-- Cite specific parts of the document when relevant
-- Do not make up information or use knowledge outside the provided document`;
 
 /**
  * Ollama client instance
@@ -302,42 +295,29 @@ function generateWarnings(tokenCount: number, contextLimit: number): string[] {
 
 /**
  * Builds the prompt for Ollama
- * 
- * Assembles the full context including system prompt, document content,
- * and user query in the proper format for the LLM.
- * 
+ * @deprecated Use buildPrompt from shared-prompt-builder instead
  * @param content - Full document content
  * @param query - User query
  * @returns Complete prompt string
  */
 export function buildOllamaPrompt(content: string, query: string): string {
-  const sanitizedContent = sanitizeInput(content);
-  const sanitizedQuery = sanitizeInput(query);
-  
-  return `${OLLAMA_SYSTEM_PROMPT}
-
-=== DOCUMENT START ===
-
-${sanitizedContent}
-
-=== DOCUMENT END ===
-
-User Question: ${sanitizedQuery}
-
-Please provide a clear and accurate answer based on the document above.`;
+  return buildPrompt(content, query);
 }
 
 /**
- * Checks if content fits within model's context window limit
- * 
- * @param content - Document content
- * @param query - User query
+ * Checks if content fits within model's context window limit (optimized version)
+ *
+ * This optimized version accepts pre-built prompt and pre-calculated token count
+ * to avoid redundant prompt building and token estimation.
+ *
+ * @param _fullPrompt - Pre-built complete prompt string (unused, kept for API compatibility)
+ * @param estimatedTokens - Pre-calculated token count
  * @param model - Model identifier
  * @returns Context validation result
  */
-export function checkContextLimit(
-  content: string,
-  query: string,
+export function checkContextLimitOptimized(
+  _fullPrompt: string,
+  estimatedTokens: number,
   model: string
 ): ContextCheck {
   const modelConfig = getOllamaModelConfig(model);
@@ -345,8 +325,7 @@ export function checkContextLimit(
   // Use sensible defaults for unknown models instead of throwing
   const contextWindow = modelConfig?.contextWindow || 128000; // Default to 128K
   
-  const fullPrompt = buildOllamaPrompt(content, query);
-  const totalTokens = estimateTokens(fullPrompt);
+  const totalTokens = estimatedTokens;
   const usage = (totalTokens / contextWindow) * 100;
   const withinLimit = totalTokens <= contextWindow;
   
@@ -370,6 +349,25 @@ export function checkContextLimit(
     usage,
     warnings
   };
+}
+
+/**
+ * Checks if content fits within model's context window limit (legacy version)
+ *
+ * @deprecated Use checkContextLimitOptimized() instead for better performance
+ * @param content - Document content
+ * @param query - User query
+ * @param model - Model identifier
+ * @returns Context validation result
+ */
+export function checkContextLimit(
+  content: string,
+  query: string,
+  model: string
+): ContextCheck {
+  const fullPrompt = buildOllamaPrompt(content, query);
+  const totalTokens = estimateTokens(fullPrompt);
+  return checkContextLimitOptimized(fullPrompt, totalTokens, model);
 }
 
 /**
@@ -560,8 +558,16 @@ export async function loadDocument(
 }
 
 /**
- * Executes a query using Ollama pipeline
- * 
+ * Executes a query using Ollama pipeline (OPTIMIZED)
+ *
+ * Performance optimizations:
+ * - Build prompt ONCE at the beginning
+ * - Estimate tokens ONCE on the full prompt
+ * - Pass pre-built prompt and tokens to optimized context check
+ * - Move timer to capture true total time (before context checking)
+ * - Make debug logging conditional via OLLAMA_DEBUG_LOGGING env var
+ * - Reuse token estimates instead of recalculating
+ *
  * @param documentId - Document identifier
  * @param content - Full document content
  * @param query - User query string
@@ -577,13 +583,32 @@ export async function query(
   config: OllamaConfig,
   images?: string[]
 ): Promise<OllamaResult> {
+  // Start total timer BEFORE any processing to capture true total time
+  const totalStartTime = performance.now();
+  
+  // Initialize event tracker
+  const eventTracker = new ProcessingEventTracker();
+  
   try {
+    // Track initialization
+    const initEventId = eventTracker.startEvent(
+      ProcessingEventType.INITIALIZATION,
+      'Initialize Ollama pipeline',
+      { documentId, model: config.model }
+    );
+    
     // Validate inputs
+    const validationEventId = eventTracker.startEvent(
+      ProcessingEventType.VALIDATION,
+      'Validate inputs (documentId, content, query, config, images)'
+    );
+    
     validateDocumentId(documentId);
     validateContent(content);
     validateQuery(query);
 
     if (!config || typeof config !== 'object') {
+      eventTracker.failEvent(validationEventId, 'Invalid Ollama configuration');
       throw new OllamaPipelineError(
         'Ollama configuration is required',
         'INVALID_CONFIG',
@@ -594,25 +619,66 @@ export async function query(
     if (images && images.length > 0) {
       validateImages(images);
     }
+    
+    eventTracker.completeEvent(validationEventId);
+    eventTracker.completeEvent(initEventId);
 
     const sanitizedContent = sanitizeInput(content);
     const sanitizedQuery = sanitizeInput(query);
     
-    console.log('\n[Ollama Pipeline Query] Starting query execution');
-    console.log('[Ollama Pipeline Query] Document ID:', documentId);
-    console.log('[Ollama Pipeline Query] Content length:', content.length);
-    console.log('[Ollama Pipeline Query] Model:', config.model);
-
-    // Validate context doesn't exceed model's limit
-    const contextCheck = checkContextLimit(sanitizedContent, sanitizedQuery, config.model);
+    const debugLogging = OLLAMA_CONFIG.debugLogging;
     
-    // Log warnings but don't fail for unknown models
+    if (debugLogging) {
+      console.log('\n[Ollama Pipeline Query] Starting query execution');
+      console.log('[Ollama Pipeline Query] Document ID:', documentId);
+      console.log('[Ollama Pipeline Query] Content length:', content.length);
+      console.log('[Ollama Pipeline Query] Model:', config.model);
+    }
+
+    // Track prompt building
+    const promptBuildEventId = eventTracker.startEvent(
+      ProcessingEventType.PROMPT_BUILDING,
+      'Build complete prompt with document and query'
+    );
+    
+    const fullPrompt = buildPrompt(sanitizedContent, sanitizedQuery);
+    
+    eventTracker.completeEvent(promptBuildEventId, {
+      promptLength: fullPrompt.length
+    });
+    
+    // Track token estimation
+    const tokenEstimationEventId = eventTracker.startEvent(
+      ProcessingEventType.TOKEN_ESTIMATION,
+      'Estimate token count for full prompt'
+    );
+    
+    const estimatedTokens = estimateTokens(fullPrompt);
+    
+    eventTracker.completeEvent(tokenEstimationEventId, {
+      estimatedTokens
+    });
+    
+    if (debugLogging) {
+      console.log('[Ollama Pipeline Query] Full prompt length:', fullPrompt.length);
+      console.log('[Ollama Pipeline Query] Estimated input tokens:', estimatedTokens);
+    }
+
+    // Track context check
+    const contextCheckEventId = eventTracker.startEvent(
+      ProcessingEventType.CONTEXT_CHECK,
+      'Validate context fits within model limits',
+      { model: config.model }
+    );
+    
+    const contextCheck = checkContextLimitOptimized(fullPrompt, estimatedTokens, config.model);
+    
     if (contextCheck.warnings.length > 0) {
       console.warn('[Ollama Pipeline Query] Warnings:', contextCheck.warnings);
     }
     
-    // Only fail if truly over limit
     if (!contextCheck.withinLimit) {
+      eventTracker.failEvent(contextCheckEventId, 'Context exceeds model limit');
       throw new OllamaPipelineError(
         `Content exceeds model context window: ${contextCheck.totalTokens.toLocaleString()} tokens > ${contextCheck.contextWindow.toLocaleString()} tokens`,
         'CONTEXT_LIMIT_EXCEEDED',
@@ -623,41 +689,54 @@ export async function query(
         }
       );
     }
-
-    // Build full prompt
-    const fullPrompt = buildOllamaPrompt(sanitizedContent, sanitizedQuery);
     
-    console.log('[Ollama Pipeline Query] Full prompt length:', fullPrompt.length);
-    console.log('[Ollama Pipeline Query] Estimated input tokens:', estimateTokens(fullPrompt));
-
-    // Track generation time
-    const generationStartTime = performance.now();
-
-    // Get Ollama client
-    const client = getOllamaClient();
-
-    // Log the exact request being sent to Ollama API (similar to Direct pipeline logging)
-    console.log('\n[Ollama Pipeline Query] ===== OLLAMA API REQUEST DEBUG =====');
-    console.log('[Ollama Pipeline Query] Model:', config.model);
-    console.log('[Ollama Pipeline Query] Request format: Using prompt (not messages array)');
-    console.log('[Ollama Pipeline Query] COMPLETE FULL PROMPT:');
-    console.log(fullPrompt);
-    console.log('[Ollama Pipeline Query] Full prompt character count:', fullPrompt.length);
-    console.log('[Ollama Pipeline Query] System prompt tokens:', estimateTokens(OLLAMA_SYSTEM_PROMPT));
-    console.log('[Ollama Pipeline Query] Query tokens:', estimateTokens(sanitizedQuery));
-    console.log('[Ollama Pipeline Query] Document tokens (estimated):',
-      estimateTokens(fullPrompt) - estimateTokens(OLLAMA_SYSTEM_PROMPT) - estimateTokens(sanitizedQuery));
-    console.log('[Ollama Pipeline Query] Request parameters:', {
-      model: config.model,
-      temperature: config.temperature,
-      top_p: config.top_p,
-      top_k: config.top_k,
-      num_predict: config.maxTokens,
-      has_images: images && images.length > 0
+    eventTracker.completeEvent(contextCheckEventId, {
+      totalTokens: contextCheck.totalTokens,
+      contextWindow: contextCheck.contextWindow,
+      usage: contextCheck.usage
     });
-    console.log('[Ollama Pipeline Query] ===== END OLLAMA API REQUEST DEBUG =====\n');
 
-    // Call Ollama with full context
+    // Track connection check
+    const connectionCheckEventId = eventTracker.startEvent(
+      ProcessingEventType.CONNECTION_CHECK,
+      'Get Ollama client connection'
+    );
+    
+    const client = getOllamaClient();
+    
+    eventTracker.completeEvent(connectionCheckEventId);
+
+    // OPTIMIZATION: Conditional debug logging
+    if (debugLogging) {
+      console.log('\n[Ollama Pipeline Query] ===== OLLAMA API REQUEST DEBUG =====');
+      console.log('[Ollama Pipeline Query] Model:', config.model);
+      console.log('[Ollama Pipeline Query] Request format: Using prompt (not messages array)');
+      console.log('[Ollama Pipeline Query] COMPLETE FULL PROMPT:');
+      console.log(fullPrompt);
+      console.log('[Ollama Pipeline Query] Full prompt character count:', fullPrompt.length);
+      console.log('[Ollama Pipeline Query] System prompt tokens:', estimateTokens(SYSTEM_PROMPT));
+      console.log('[Ollama Pipeline Query] Query tokens:', estimateTokens(sanitizedQuery));
+      console.log('[Ollama Pipeline Query] Document tokens (estimated):',
+        estimatedTokens - estimateTokens(SYSTEM_PROMPT) - estimateTokens(sanitizedQuery));
+      console.log('[Ollama Pipeline Query] Request parameters:', {
+        model: config.model,
+        temperature: config.temperature,
+        top_p: config.top_p,
+        top_k: config.top_k,
+        num_predict: config.maxTokens,
+        has_images: images && images.length > 0
+      });
+      console.log('[Ollama Pipeline Query] ===== END OLLAMA API REQUEST DEBUG =====\n');
+    }
+
+    // Track API call
+    const generationStartTime = performance.now();
+    const apiCallEventId = eventTracker.startEvent(
+      ProcessingEventType.API_CALL,
+      'Call Ollama API with full document context',
+      { model: config.model, hasImages: !!(images && images.length > 0) }
+    );
+
     const response = await client.generate({
       model: config.model,
       prompt: fullPrompt,
@@ -672,27 +751,53 @@ export async function query(
 
     const generationEndTime = performance.now();
     const generationTime = Math.round(generationEndTime - generationStartTime);
+    
+    eventTracker.completeEvent(apiCallEventId, {
+      generationTime,
+      responseLength: response.response?.length || 0,
+      actualInputTokens: response.prompt_eval_count,
+      actualOutputTokens: response.eval_count
+    });
 
-    console.log('[Ollama Pipeline Query] ✅ Response received');
-    console.log('[Ollama Pipeline Query] Generation time:', generationTime, 'ms');
+    if (debugLogging) {
+      console.log('[Ollama Pipeline Query] ✅ Response received');
+      console.log('[Ollama Pipeline Query] Generation time:', generationTime, 'ms');
+    }
 
-    // Extract answer
+    // Track response parsing
+    const responseParsingEventId = eventTracker.startEvent(
+      ProcessingEventType.RESPONSE_PARSING,
+      'Parse Ollama response and extract tokens'
+    );
+    
     const answer = response.response || '';
-
-    // Calculate token usage
-    // Use actual tokens from Ollama if available, otherwise estimate
-    const inputTokens = response.prompt_eval_count || estimateTokens(fullPrompt);
+    const inputTokens = response.prompt_eval_count || estimatedTokens;
     const outputTokens = response.eval_count || estimateTokens(answer);
     
-    console.log('[Ollama Pipeline Query] Input tokens:', inputTokens);
-    console.log('[Ollama Pipeline Query] Output tokens:', outputTokens);
+    eventTracker.completeEvent(responseParsingEventId, {
+      inputTokens,
+      outputTokens
+    });
+    
+    if (debugLogging) {
+      console.log('[Ollama Pipeline Query] Input tokens:', inputTokens);
+      console.log('[Ollama Pipeline Query] Output tokens:', outputTokens);
+    }
 
     // Calculate component tokens for breakdown
-    const systemPromptTokens = estimateTokens(OLLAMA_SYSTEM_PROMPT);
+    const systemPromptTokens = estimateTokens(SYSTEM_PROMPT);
     const queryTokens = estimateTokens(sanitizedQuery);
     const documentTokens = inputTokens - systemPromptTokens - queryTokens;
 
-    // Calculate metrics
+    const totalEndTime = performance.now();
+    const totalTime = Math.round(totalEndTime - totalStartTime);
+
+    // Track metrics calculation
+    const metricsCalcEventId = eventTracker.startEvent(
+      ProcessingEventType.METRICS_CALCULATION,
+      'Calculate performance metrics and breakdowns'
+    );
+    
     const metrics = calculateMetrics(
       generationTime,
       inputTokens,
@@ -700,7 +805,6 @@ export async function query(
       config.model
     );
 
-    // Calculate detailed breakdown
     const timingBreakdown = calculateTimingBreakdown(undefined, generationTime);
     const tokenBreakdown = calculateTokenBreakdown(
       systemPromptTokens,
@@ -729,10 +833,22 @@ export async function query(
         timestamp: new Date(),
         notes: [
           'Ollama query uses full document context without retrieval',
-          'Token counts from Ollama API when available, estimated otherwise'
+          'Token counts from Ollama API when available, estimated otherwise',
+          'Optimized: Single prompt build, single token estimation, conditional debug logging'
         ]
       }
     };
+    
+    eventTracker.completeEvent(metricsCalcEventId, {
+      cost: metrics.cost,
+      totalTokens: metrics.totalTokens
+    });
+
+    if (debugLogging) {
+      console.log('[Ollama Pipeline Query] Total time (including overhead):', totalTime, 'ms');
+      console.log('[Ollama Pipeline Query] Generation time (API only):', generationTime, 'ms');
+      console.log('[Ollama Pipeline Query] Overhead time:', totalTime - generationTime, 'ms');
+    }
 
     return {
       answer,
@@ -742,7 +858,8 @@ export async function query(
         cost: metrics.cost,
         contextWindowUsage: metrics.contextWindowUsage,
         breakdown
-      }
+      },
+      processingEvents: eventTracker.getEvents()
     };
 
   } catch (error) {

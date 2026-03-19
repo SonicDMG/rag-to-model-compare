@@ -1,0 +1,191 @@
+/**
+ * Processing Event Types
+ * 
+ * Defines types for tracking real-time processing events across all pipelines.
+ * Used to instrument and monitor every operation with millisecond precision.
+ */
+
+/**
+ * Enum of all possible processing event types across RAG, Direct, and Ollama pipelines
+ */
+export enum ProcessingEventType {
+  // Common events
+  VALIDATION = 'validation',
+  PROMPT_BUILDING = 'prompt_building',
+  CONTEXT_CHECK = 'context_check',
+  TOKEN_ESTIMATION = 'token_estimation',
+  API_CALL = 'api_call',
+  METRICS_CALCULATION = 'metrics_calculation',
+  
+  // RAG-specific events
+  FILTER_LOOKUP = 'filter_lookup',
+  DOCUMENT_RETRIEVAL = 'document_retrieval',
+  EMBEDDING_GENERATION = 'embedding_generation',
+  VECTOR_SEARCH = 'vector_search',
+  CONTEXT_ASSEMBLY = 'context_assembly',
+  
+  // Direct-specific events
+  CONTEXT_BUILDING = 'context_building',
+  DOCUMENT_LOADING = 'document_loading',
+  
+  // Ollama-specific events
+  MODEL_DETECTION = 'model_detection',
+  CONNECTION_CHECK = 'connection_check',
+  STREAM_SETUP = 'stream_setup',
+  RESPONSE_PARSING = 'response_parsing',
+  
+  // General overhead
+  INITIALIZATION = 'initialization',
+  CLEANUP = 'cleanup',
+  ERROR_HANDLING = 'error_handling',
+}
+
+/**
+ * Status of a processing event
+ */
+export enum ProcessingEventStatus {
+  STARTED = 'started',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+/**
+ * Individual processing event with timing information
+ */
+export interface ProcessingEvent {
+  /** Unique identifier for this event */
+  id: string;
+  
+  /** Type of operation being performed */
+  type: ProcessingEventType;
+  
+  /** Human-readable operation name */
+  operationName: string;
+  
+  /** ISO timestamp when operation started */
+  startTime: string;
+  
+  /** ISO timestamp when operation ended (null if still in progress) */
+  endTime: string | null;
+  
+  /** Duration in milliseconds (null if still in progress) */
+  duration: number | null;
+  
+  /** Current status of the operation */
+  status: ProcessingEventStatus;
+  
+  /** Optional error message if status is FAILED */
+  error?: string;
+  
+  /** Optional metadata about the operation */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Pipeline identifier for event tracking
+ */
+export enum PipelineType {
+  RAG = 'rag',
+  DIRECT = 'direct',
+  OLLAMA = 'ollama',
+}
+
+/**
+ * Event emitted during streaming for real-time updates
+ */
+export interface StreamedProcessingEvent {
+  /** Which pipeline this event belongs to */
+  pipeline: PipelineType;
+  
+  /** The processing event data */
+  event: ProcessingEvent;
+  
+  /** Cumulative time elapsed since pipeline start (ms) */
+  cumulativeTime: number;
+}
+
+/**
+ * Helper class for tracking processing events
+ */
+export class ProcessingEventTracker {
+  private events: ProcessingEvent[] = [];
+  private startTime: number;
+  
+  constructor() {
+    this.startTime = Date.now();
+  }
+  
+  /**
+   * Start tracking a new operation
+   */
+  startEvent(type: ProcessingEventType, operationName: string, metadata?: Record<string, any>): string {
+    const id = `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const event: ProcessingEvent = {
+      id,
+      type,
+      operationName,
+      startTime: new Date().toISOString(),
+      endTime: null,
+      duration: null,
+      status: ProcessingEventStatus.STARTED,
+      metadata,
+    };
+    
+    this.events.push(event);
+    return id;
+  }
+  
+  /**
+   * Mark an operation as completed
+   */
+  completeEvent(id: string, metadata?: Record<string, any>): void {
+    const event = this.events.find(e => e.id === id);
+    if (!event) return;
+    
+    const endTime = new Date();
+    event.endTime = endTime.toISOString();
+    event.duration = new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
+    event.status = ProcessingEventStatus.COMPLETED;
+    
+    if (metadata) {
+      event.metadata = { ...event.metadata, ...metadata };
+    }
+  }
+  
+  /**
+   * Mark an operation as failed
+   */
+  failEvent(id: string, error: string): void {
+    const event = this.events.find(e => e.id === id);
+    if (!event) return;
+    
+    const endTime = new Date();
+    event.endTime = endTime.toISOString();
+    event.duration = new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
+    event.status = ProcessingEventStatus.FAILED;
+    event.error = error;
+  }
+  
+  /**
+   * Get all tracked events
+   */
+  getEvents(): ProcessingEvent[] {
+    return [...this.events];
+  }
+  
+  /**
+   * Get cumulative time since tracker creation
+   */
+  getCumulativeTime(): number {
+    return Date.now() - this.startTime;
+  }
+  
+  /**
+   * Get the most recent event
+   */
+  getLastEvent(): ProcessingEvent | null {
+    return this.events.length > 0 ? this.events[this.events.length - 1] : null;
+  }
+}
+
+// Made with Bob

@@ -1,22 +1,26 @@
 'use client';
 
 import { DirectResult } from '@/types/rag-comparison';
+import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 import { ModelInfoBadge } from './ModelInfoBadge';
+import { ProcessingTimeline } from './ProcessingTimeline';
 
 interface DirectModelSectionProps {
   directResult: DirectResult | null;
   isQuerying: boolean;
   error: string | null;
   documentTokens?: number;
+  processingEvents?: ProcessingEvent[];
 }
 
 export function DirectModelSection({
   directResult,
   isQuerying,
   error,
-  documentTokens
+  documentTokens,
+  processingEvents
 }: DirectModelSectionProps) {
 
   return (
@@ -30,6 +34,15 @@ export function DirectModelSection({
           Full document is provided directly in the context window without chunking or retrieval
         </p>
       </div>
+
+      {/* Processing Timeline */}
+      {processingEvents && processingEvents.length > 0 && (
+        <ProcessingTimeline
+          pipeline={PipelineType.DIRECT}
+          events={processingEvents}
+          defaultExpanded={false}
+        />
+      )}
 
       {/* Error Display */}
       {error && (

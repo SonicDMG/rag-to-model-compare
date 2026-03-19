@@ -1,22 +1,26 @@
 'use client';
 
 import { RAGResult } from '@/types/rag-comparison';
+import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { ExpandableText } from './ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
 import { ModelInfoBadge } from './ModelInfoBadge';
+import { ProcessingTimeline } from './ProcessingTimeline';
 
 interface RagSectionProps {
   ragResult: RAGResult | null;
   isQuerying: boolean;
   error: string | null;
   documentTokens?: number;
+  processingEvents?: ProcessingEvent[];
 }
 
 export function RagSection({
   ragResult,
   isQuerying,
   error,
-  documentTokens
+  documentTokens,
+  processingEvents
 }: RagSectionProps) {
 
   return (
@@ -30,6 +34,15 @@ export function RagSection({
           Retrieval-Augmented Generation: Document is chunked and relevant pieces are retrieved for context
         </p>
       </div>
+
+      {/* Processing Timeline */}
+      {processingEvents && processingEvents.length > 0 && (
+        <ProcessingTimeline
+          pipeline={PipelineType.RAG}
+          events={processingEvents}
+          defaultExpanded={false}
+        />
+      )}
 
       {/* Error Display */}
       {error && (

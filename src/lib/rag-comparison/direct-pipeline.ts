@@ -35,6 +35,11 @@ import type {
   DirectConfig,
   DirectResult
 } from '@/types/rag-comparison';
+import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
+import {
+  ProcessingEventTracker,
+  ProcessingEventType
+} from '@/types/processing-events';
 
 /**
  * Result from document loading operation
@@ -92,18 +97,6 @@ export interface DirectMetrics {
   contextWindowUsage: number;
 }
 
-/**
- * System prompt for direct queries
- */
-const DIRECT_SYSTEM_PROMPT = `You are a helpful AI assistant that answers questions based on the provided document.
-
-Instructions:
-- Read and understand the entire document provided below
-- Answer the question using ONLY the information from the document
-- If the document doesn't contain enough information to answer the question, say so clearly
-- Be thorough and accurate in your response
-- Cite specific parts of the document when relevant
-- Do not make up information or use knowledge outside the provided document`;
 
 /**
  * Custom error class for direct pipeline errors
@@ -343,16 +336,16 @@ function validateContent(content: string): void {
 
 /**
  * Builds the system prompt for direct queries
- * 
+ * @deprecated Use SYSTEM_PROMPT from shared-prompt-builder instead
  * @returns System prompt string
- * 
+ *
  * @example
  * ```typescript
  * const prompt = buildSystemPrompt();
  * ```
  */
 export function buildSystemPrompt(): string {
-  return DIRECT_SYSTEM_PROMPT;
+  return SYSTEM_PROMPT;
 }
 
 /**
@@ -413,34 +406,22 @@ export function generateWarnings(tokenCount: number, contextLimit: number): stri
 
 /**
  * Builds complete context for direct query
- * 
+ * @deprecated Use buildPrompt from shared-prompt-builder instead
+ *
  * Assembles the full context including system prompt, document content,
  * and user query in the proper format for the LLM.
- * 
+ *
  * @param content - Full document content
  * @param query - User query
  * @returns Complete context string
- * 
+ *
  * @example
  * ```typescript
  * const context = buildDirectContext(documentContent, "What is the main topic?");
  * ```
  */
 export function buildDirectContext(content: string, query: string): string {
-  const sanitizedContent = sanitizeInput(content);
-  const sanitizedQuery = sanitizeInput(query);
-  
-  return `${DIRECT_SYSTEM_PROMPT}
-
-=== DOCUMENT START ===
-
-${sanitizedContent}
-
-=== DOCUMENT END ===
-
-User Question: ${sanitizedQuery}
-
-Please provide a clear and accurate answer based on the document above.`;
+  return buildPrompt(content, query);
 }
 
 /**
@@ -477,7 +458,8 @@ export function checkContextLimit(
     );
   }
 
-  const fullContext = buildDirectContext(content, query);
+  // Use shared prompt builder for consistency
+  const fullContext = buildPrompt(content, query);
   const totalTokens = estimateTokens(fullContext);
   const usage = (totalTokens / limit) * 100;
   const valid = validateContextSize(totalTokens, limit);
@@ -757,13 +739,29 @@ export async function query(
   query: string,
   config: DirectConfig
 ): Promise<DirectResult> {
+  // Initialize event tracker
+  const eventTracker = new ProcessingEventTracker();
+  
   try {
+    // Track initialization
+    const initEventId = eventTracker.startEvent(
+      ProcessingEventType.INITIALIZATION,
+      'Initialize Direct pipeline',
+      { documentId, model: config.model }
+    );
+    
     // Validate inputs
+    const validationEventId = eventTracker.startEvent(
+      ProcessingEventType.VALIDATION,
+      'Validate inputs (documentId, content, query, config)'
+    );
+    
     validateDocumentId(documentId);
     validateContent(content);
     validateQuery(query);
 
     if (!config || typeof config !== 'object') {
+      eventTracker.failEvent(validationEventId, 'Invalid Direct configuration');
       throw new DirectPipelineError(
         'Direct configuration is required',
         'INVALID_CONFIG',
@@ -774,12 +772,16 @@ export async function query(
     // Validate model
     const pricing = getModelPricing(config.model);
     if (!pricing) {
+      eventTracker.failEvent(validationEventId, `Unsupported model: ${config.model}`);
       throw new DirectPipelineError(
         `Unsupported model: ${config.model}`,
         'UNSUPPORTED_MODEL',
         { model: config.model }
       );
     }
+    
+    eventTracker.completeEvent(validationEventId);
+    eventTracker.completeEvent(initEventId);
 
     const sanitizedContent = sanitizeInput(content);
     const sanitizedQuery = sanitizeInput(query);
@@ -812,10 +814,17 @@ export async function query(
       console.log('[Direct Pipeline Query] ⚠️  No document separators found - legacy format or single file');
     }
 
-    // Validate total context doesn't exceed model's context window
+    // Track context check
+    const contextCheckEventId = eventTracker.startEvent(
+      ProcessingEventType.CONTEXT_CHECK,
+      'Validate context fits within model limits',
+      { model: config.model }
+    );
+    
     const contextCheck = checkContextLimit(sanitizedContent, sanitizedQuery, config.model);
     
     if (!contextCheck.valid) {
+      eventTracker.failEvent(contextCheckEventId, 'Context exceeds model limit');
       throw new DirectPipelineError(
         `Context exceeds model's limit: ${contextCheck.totalTokens} tokens > ${contextCheck.limit} tokens`,
         'CONTEXT_LIMIT_EXCEEDED',
@@ -826,26 +835,25 @@ export async function query(
         }
       );
     }
+    
+    eventTracker.completeEvent(contextCheckEventId, {
+      totalTokens: contextCheck.totalTokens,
+      limit: contextCheck.limit,
+      usage: contextCheck.usage
+    });
 
-    // Track generation time
-    const generationStartTime = performance.now();
-
-    // Get OpenRAG client
+    // Track prompt building
+    const promptBuildEventId = eventTracker.startEvent(
+      ProcessingEventType.PROMPT_BUILDING,
+      'Build complete prompt with document and query'
+    );
+    
     const client = getOpenRAGClient();
-
-    // Build complete message with system prompt, document, and query
-    // Since SDK uses single message format, we combine everything
-    const fullMessage = `${buildSystemPrompt()}
-
-=== DOCUMENT START ===
-
-${sanitizedContent}
-
-=== DOCUMENT END ===
-
-User Question: ${sanitizedQuery}
-
-Please provide a clear and accurate answer based on the document above.`;
+    const fullMessage = buildPrompt(sanitizedContent, sanitizedQuery);
+    
+    eventTracker.completeEvent(promptBuildEventId, {
+      messageLength: fullMessage.length
+    });
 
     // Log the full message being sent to LLM
     console.log('[Direct Pipeline Query] Full message length:', fullMessage.length);
@@ -853,53 +861,67 @@ Please provide a clear and accurate answer based on the document above.`;
       fullMessage.substring(0, 1000));
     console.log('[Direct Pipeline Query] Sending to LLM with model:', config.model);
 
-    // Call LLM with full context using OpenRAG SDK
-    // Note: SDK doesn't support model/temperature/max_tokens parameters or disabling retrieval
-    // The model and settings are configured server-side in OpenRAG settings
+    // Track API call
+    const generationStartTime = performance.now();
+    const apiCallEventId = eventTracker.startEvent(
+      ProcessingEventType.API_CALL,
+      'Call OpenRAG API with full document context',
+      { model: config.model }
+    );
+    
     let responseData: ChatResponse;
     try {
       responseData = await client.chat.create({
         message: fullMessage,
-        // Set limit to 0 to minimize retrieval impact (SDK doesn't have use_retrieval parameter)
         limit: 0,
-        // Set high score threshold to minimize retrieval results
         scoreThreshold: 0.99
       });
       console.log('[Direct Pipeline Query] ✅ LLM response received');
+      
+      eventTracker.completeEvent(apiCallEventId, {
+        responseLength: responseData.response?.length || 0
+      });
     } catch (error) {
       console.error('[Direct Pipeline Query] ❌ LLM call failed:', error);
+      eventTracker.failEvent(apiCallEventId, error instanceof Error ? error.message : 'Unknown error');
       throw handleOpenRAGError(error);
     }
 
     const generationEndTime = performance.now();
     const generationTime = Math.round(generationEndTime - generationStartTime);
 
-    // Extract answer from SDK response
     const answer = responseData.response || '';
 
-    // Calculate token usage on ACTUAL content sent to API
-    // This is the key fix: count what we actually send, not estimates of components
-    // Input tokens = the exact fullMessage that was sent to the LLM
+    // Track token estimation
+    const tokenEstimationEventId = eventTracker.startEvent(
+      ProcessingEventType.TOKEN_ESTIMATION,
+      'Estimate token usage for input and output'
+    );
+    
     const inputTokens = estimateTokens(fullMessage);
+    const outputTokens = estimateTokens(answer);
+    const systemPromptTokens = estimateTokens(SYSTEM_PROMPT);
+    const queryTokens = estimateTokens(sanitizedQuery);
+    const documentTokens = inputTokens - systemPromptTokens - queryTokens;
+    
+    eventTracker.completeEvent(tokenEstimationEventId, {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens
+    });
     
     console.log('[Direct Pipeline Query] ✅ Token count calculated on ACTUAL message sent to API');
     console.log('[Direct Pipeline Query] Input tokens (actual):', inputTokens);
     console.log('[Direct Pipeline Query] Message character count:', fullMessage.length);
-    
-    // Output tokens = generated response
-    const outputTokens = estimateTokens(answer);
-    
-    // For breakdown display, calculate component tokens from the actual message
-    const systemPrompt = buildSystemPrompt();
-    const systemPromptTokens = estimateTokens(systemPrompt);
-    const queryTokens = estimateTokens(sanitizedQuery);
-    // Document tokens = total input minus system prompt and query
-    const documentTokens = inputTokens - systemPromptTokens - queryTokens;
 
-    // Get context window size for usage calculation
     const contextWindowSize = getContextWindowSize(config.model);
 
-    // Calculate comprehensive metrics
+    // Track metrics calculation
+    const metricsCalcEventId = eventTracker.startEvent(
+      ProcessingEventType.METRICS_CALCULATION,
+      'Calculate performance metrics and breakdowns'
+    );
+    
     const metrics = calculateMetrics(
       generationTime,
       inputTokens,
@@ -908,7 +930,6 @@ Please provide a clear and accurate answer based on the document above.`;
       config.model
     );
 
-    // Calculate detailed breakdown
     const timingBreakdown = calculateTimingBreakdown(undefined, generationTime);
     const tokenBreakdown = calculateTokenBreakdown(
       systemPromptTokens,
@@ -941,6 +962,11 @@ Please provide a clear and accurate answer based on the document above.`;
         ]
       }
     };
+    
+    eventTracker.completeEvent(metricsCalcEventId, {
+      cost: metrics.cost,
+      totalTokens: metrics.totalTokens
+    });
 
     return {
       answer,
@@ -950,7 +976,8 @@ Please provide a clear and accurate answer based on the document above.`;
         cost: metrics.cost,
         contextWindowUsage: metrics.contextWindowUsage,
         breakdown
-      }
+      },
+      processingEvents: eventTracker.getEvents()
     };
 
   } catch (error) {

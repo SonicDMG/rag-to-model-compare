@@ -3,6 +3,7 @@
  */
 
 import type { OllamaConfig, OllamaResult } from './ollama';
+import type { ProcessingEvent } from './processing-events';
 
 /**
  * Props for the ModelSelector component
@@ -234,6 +235,8 @@ export interface RAGResult {
     /** Detailed metrics breakdown (optional) */
     breakdown?: DetailedMetricsBreakdown;
   };
+  /** Array of processing events with timing information */
+  processingEvents: ProcessingEvent[];
 }
 
 /**
@@ -255,6 +258,8 @@ export interface DirectResult {
     /** Detailed metrics breakdown (optional) */
     breakdown?: DetailedMetricsBreakdown;
   };
+  /** Array of processing events with timing information */
+  processingEvents: ProcessingEvent[];
 }
 
 /**

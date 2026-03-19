@@ -31,6 +31,7 @@ import type {
   DirectConfig
 } from '@/types/rag-comparison';
 import type { OllamaConfig } from '@/types/ollama';
+import { PipelineType } from '@/types/processing-events';
 
 /**
  * Request validation schema using Zod
@@ -265,6 +266,22 @@ export async function POST(request: NextRequest): Promise<Response> {
         console.log('⚡ EXECUTING PIPELINES INDEPENDENTLY');
         console.log('========================================\n');
 
+        // Helper function to stream processing events
+        const streamProcessingEvents = (
+          pipeline: PipelineType,
+          events: any[]
+        ) => {
+          events.forEach((event) => {
+            const eventData = JSON.stringify({
+              type: 'processing_event',
+              pipeline,
+              event,
+              cumulativeTime: new Date(event.startTime).getTime() - new Date(events[0].startTime).getTime()
+            });
+            controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
+          });
+        };
+
         // Execute all three pipelines independently - store promises to avoid duplicate execution
         // RAG pipeline
         const ragPromise = ragQuery(sanitizedDocumentId, sanitizedQuery, ragConfig);
@@ -272,6 +289,13 @@ export async function POST(request: NextRequest): Promise<Response> {
         ragPromise
           .then((ragResult) => {
             console.log('🔵 RAG pipeline completed successfully');
+            
+            // Stream processing events first
+            if (ragResult.processingEvents && ragResult.processingEvents.length > 0) {
+              streamProcessingEvents(PipelineType.RAG, ragResult.processingEvents);
+            }
+            
+            // Then stream the result
             const data = JSON.stringify({
               type: 'rag',
               success: true,
@@ -297,6 +321,13 @@ export async function POST(request: NextRequest): Promise<Response> {
         directPromise
           .then((directResult) => {
             console.log('🟢 Direct pipeline completed successfully');
+            
+            // Stream processing events first
+            if (directResult.processingEvents && directResult.processingEvents.length > 0) {
+              streamProcessingEvents(PipelineType.DIRECT, directResult.processingEvents);
+            }
+            
+            // Then stream the result
             const data = JSON.stringify({
               type: 'direct',
               success: true,
@@ -322,6 +353,13 @@ export async function POST(request: NextRequest): Promise<Response> {
         ollamaPromise
           .then((ollamaResult) => {
             console.log('🟣 Ollama pipeline completed successfully');
+            
+            // Stream processing events first
+            if (ollamaResult.processingEvents && ollamaResult.processingEvents.length > 0) {
+              streamProcessingEvents(PipelineType.OLLAMA, ollamaResult.processingEvents);
+            }
+            
+            // Then stream the result
             const data = JSON.stringify({
               type: 'ollama',
               success: true,
