@@ -482,4 +482,37 @@ export interface MultiFileUploadResponse {
   }>;
 }
 
+/**
+ * Status for individual pipeline progress
+ */
+export type PipelineStatus = 'pending' | 'processing' | 'completed' | 'error';
+
+/**
+ * Progress information for a single pipeline (RAG or Direct)
+ */
+export interface PipelineProgress {
+  /** Current status of the pipeline */
+  status: PipelineStatus;
+  /** Progress percentage (0-100) */
+  progress: number;
+  /** Current processing stage description */
+  stage?: string;
+  /** Error message if status is 'error' */
+  error?: string;
+}
+
+/**
+ * Progress information for file processing across both pipelines
+ */
+export interface FileProcessingProgress {
+  /** Name of the file being processed */
+  filename: string;
+  /** Overall progress percentage across both pipelines (0-100) */
+  overallProgress: number;
+  /** RAG pipeline progress */
+  rag: PipelineProgress;
+  /** Direct pipeline progress */
+  direct: PipelineProgress;
+}
+
 // Made with Bob
