@@ -39,7 +39,8 @@ import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
   ProcessingEventType,
-  ProcessingEvent
+  ProcessingEvent,
+  PipelineType
 } from '@/types/processing-events';
 
 /**
@@ -142,6 +143,7 @@ function getOpenRAGClient(): OpenRAGClient {
     openragClient = new OpenRAGClient({
       apiKey: process.env.OPENRAG_API_KEY,
       baseUrl: process.env.OPENRAG_URL,
+      timeout: 180000, // 3 minutes timeout to prevent premature aborts
     });
   }
   return openragClient;
@@ -742,7 +744,7 @@ export async function query(
   eventCallback?: (event: ProcessingEvent) => void
 ): Promise<DirectResult> {
   // Initialize event tracker with optional callback for real-time streaming
-  const eventTracker = new ProcessingEventTracker(eventCallback);
+  const eventTracker = new ProcessingEventTracker(eventCallback, PipelineType.DIRECT);
   
   try {
     // Track initialization

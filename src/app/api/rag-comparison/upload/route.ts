@@ -548,7 +548,8 @@ async function processSingleFile(
   isMultiFile: boolean = false,
   sharedDirectDocumentId?: string,
   knowledgeFilterId?: string,
-  skipFilterUpdate: boolean = false
+  skipFilterUpdate: boolean = false,
+  skipRAG: boolean = false
 ): Promise<FileUploadResult> {
   // Use shared document ID for Direct pipeline in multi-file uploads
   const directDocId = isMultiFile && sharedDirectDocumentId ? sharedDirectDocumentId : documentId;
@@ -569,108 +570,120 @@ async function processSingleFile(
     }
   };
 
-  // Track if at least one processing method succeeds
-  let ragSuccess = false;
-  let directSuccess = false;
+  // ============================================================
+  // PARALLEL PIPELINE PROCESSING
+  // Both pipelines run independently and asynchronously
+  // ============================================================
   
-  // Parse document content once for both pipelines
-  let parsedContent: string | null = null;
-  let hasImages: boolean | undefined = undefined;
-  let imageCount: number | undefined = undefined;
-  try {
-    const parseResult = await parseDocument(file);
-    parsedContent = parseResult.content;
-    hasImages = parseResult.hasImages;
-    imageCount = parseResult.imageCount;
-    result.hasImages = hasImages || false;
-    result.imageCount = imageCount || 0;
-  } catch (parseError) {
-    console.error(`[Parse] Failed to parse ${file.name}:`, parseError);
-    // Continue - RAG might still work with raw file
-  }
-
-  // ============================================================
-  // RAG PIPELINE PROCESSING
-  // ============================================================
-  console.log(`\n[RAG] Processing ${file.name}...`);
-  try {
-    const ragMetadata: DocumentMetadata = {
-      filename: file.name,
-      size: file.size,
-      mimeType: file.type || 'text/plain',
-      uploadedAt: new Date(),
-      chunkCount: 0,
-      totalTokens: 0,
-      strategy: 'fixed',
-      folderContext: folderMetadata
-    };
-
-    const ragResult = await ragIndexDocument(file, documentId, ragMetadata, knowledgeFilterId, skipFilterUpdate);
-
-    let filterIdForStorage: string | undefined = undefined;
-    if (ragResult.success && ragResult.filterId) {
-      filterIdForStorage = ragResult.filterId;
+  // Define RAG pipeline function
+  const processRAG = async () => {
+    if (skipRAG) {
+      console.log(`\n[RAG] Skipping ${file.name} (already exists in OpenSearch)`);
+      return {
+        success: true,
+        rag: {
+          status: 'success' as const,
+          chunkCount: 0,
+          tokenCount: 0,
+          indexTime: 0,
+          error: 'Skipped - file already exists'
+        }
+      };
     }
 
-    result.rag = {
-      status: ragResult.success ? 'success' : 'error',
-      chunkCount: ragResult.chunkCount,
-      tokenCount: ragResult.tokenCount,
-      indexTime: ragResult.indexTime,
-      processedText: parsedContent || undefined,
-      error: ragResult.error
-    };
+    console.log(`\n[RAG] Processing ${file.name}...`);
+    try {
+      const ragMetadata: DocumentMetadata = {
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type || 'text/plain',
+        uploadedAt: new Date(),
+        chunkCount: 0,
+        totalTokens: 0,
+        strategy: 'fixed',
+        folderContext: folderMetadata
+      };
 
-    ragSuccess = ragResult.success;
-    
-    if (ragSuccess) {
-      console.log(`[RAG] ✅ ${file.name} indexed successfully`);
-      
-      try {
-        const ragStorageMetadata: DocumentMetadata = {
-          filename: file.name,
-          size: file.size,
-          mimeType: file.type || 'text/plain',
-          uploadedAt: new Date(),
-          chunkCount: ragResult.chunkCount,
-          totalTokens: ragResult.tokenCount,
-          strategy: 'fixed',
-          folderContext: folderMetadata
-        };
+      const ragResult = await ragIndexDocument(file, documentId, ragMetadata, knowledgeFilterId, skipFilterUpdate);
 
-        const contentToStore = parsedContent || '';
-        storeDocument(documentId, contentToStore, ragStorageMetadata, filterIdForStorage);
-        console.log(`[RAG] ✅ ${file.name} stored with filter ID`);
-      } catch (storageError) {
-        console.error(`[RAG] ❌ Failed to store ${file.name}:`, storageError);
+      let filterIdForStorage: string | undefined = undefined;
+      if (ragResult.success && ragResult.filterId) {
+        filterIdForStorage = ragResult.filterId;
       }
-    } else {
-      console.error(`[RAG] ❌ ${file.name} indexing failed: ${ragResult.error}`);
+
+      const ragSuccess = ragResult.success;
+      
+      if (ragSuccess) {
+        console.log(`[RAG] ✅ ${file.name} indexed successfully`);
+        console.log(`[RAG Upload] Document indexed successfully:`);
+        console.log(`  - OpenRAG Document ID: ${documentId}`);
+        console.log(`  - Filter ID: ${ragResult.filterId || 'N/A'}`);
+        console.log(`  - Chunks: ${ragResult.chunkCount}`);
+        console.log(`  - Tokens: ${ragResult.tokenCount}`);
+        console.log(`  - Index Time: ${ragResult.indexTime}ms`);
+        console.log(`  - Status: indexed`);
+        console.log(`  - Verification: passed`);
+        
+        try {
+          const ragStorageMetadata: DocumentMetadata = {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type || 'text/plain',
+            uploadedAt: new Date(),
+            chunkCount: ragResult.chunkCount,
+            totalTokens: ragResult.tokenCount,
+            strategy: 'fixed',
+            folderContext: folderMetadata
+          };
+
+          // RAG stores empty content - OpenRAG handles the actual content
+          storeDocument(documentId, '', ragStorageMetadata, filterIdForStorage);
+          console.log(`[RAG] ✅ ${file.name} stored with filter ID`);
+        } catch (storageError) {
+          console.error(`[RAG] ❌ Failed to store ${file.name}:`, storageError);
+        }
+      } else {
+        console.error(`[RAG] ❌ ${file.name} indexing failed: ${ragResult.error}`);
+      }
+
+      return {
+        success: ragSuccess,
+        rag: {
+          status: ragResult.success ? 'success' as const : 'error' as const,
+          chunkCount: ragResult.chunkCount,
+          tokenCount: ragResult.tokenCount,
+          indexTime: ragResult.indexTime,
+          error: ragResult.error
+        }
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[RAG] ❌ ${file.name} processing error:`, errorMessage);
+      return {
+        success: false,
+        rag: {
+          status: 'error' as const,
+          error: errorMessage
+        }
+      };
     }
+  };
 
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[RAG] ❌ ${file.name} processing error:`, errorMessage);
-    result.rag = {
-      status: 'error',
-      error: errorMessage
-    };
-    ragSuccess = false;
-  }
-
-  // ============================================================
-  // DIRECT PIPELINE PROCESSING
-  // ============================================================
-  console.log(`\n[Direct] Processing ${file.name}...`);
-  try {
-    let content: string;
-    if (parsedContent) {
-      content = parsedContent;
-    } else {
+  // Define Direct pipeline function
+  const processDirect = async () => {
+    console.log(`\n[Direct] Processing ${file.name}...`);
+    try {
+      // Parse document for Direct pipeline
+      let content: string;
+      let hasImages: boolean | undefined = undefined;
+      let imageCount: number | undefined = undefined;
+      
       try {
         const parseResult = await parseDocument(file);
         content = parseResult.content;
-        parsedContent = content;
+        hasImages = parseResult.hasImages;
+        imageCount = parseResult.imageCount;
       } catch (parseError) {
         const errorMsg = parseError instanceof DocumentProcessingError
           ? parseError.message
@@ -684,52 +697,40 @@ async function processSingleFile(
           { filename: file.name, originalError: errorMsg }
         );
       }
-    }
 
-    // Normalize content to remove extra whitespace and formatting artifacts
-    // This ensures consistent token counting between upload and query time
-    // The normalization matches what estimateTokens() does internally
-    const normalizedContent = content.trim().replace(/\s+/g, ' ');
+      // Normalize content to remove extra whitespace and formatting artifacts
+      // This ensures consistent token counting between upload and query time
+      // The normalization matches what estimateTokens() does internally
+      const normalizedContent = content.trim().replace(/\s+/g, ' ');
 
-    const directMetadata: DocumentMetadata = {
-      filename: file.name,
-      size: file.size,
-      mimeType: file.type || 'text/plain',
-      uploadedAt: new Date(),
-      chunkCount: 0,
-      totalTokens: 0,
-      strategy: 'fixed',
-      folderContext: folderMetadata
-    };
+      const directMetadata: DocumentMetadata = {
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type || 'text/plain',
+        uploadedAt: new Date(),
+        chunkCount: 0,
+        totalTokens: 0,
+        strategy: 'fixed',
+        folderContext: folderMetadata
+      };
 
-    // Pass normalized content to loadDocument for consistent token counting
-    const directResult = await directLoadDocument(
-      normalizedContent,
-      directDocId,
-      directMetadata,
-      isMultiFile,
-      file.name
-    );
+      // Pass normalized content to loadDocument for consistent token counting
+      const directResult = await directLoadDocument(
+        normalizedContent,
+        directDocId,
+        directMetadata,
+        isMultiFile,
+        file.name
+      );
 
-    result.direct = {
-      status: directResult.success ? 'success' : 'error',
-      tokenCount: directResult.tokenCount,
-      loadTime: directResult.loadTime,
-      withinLimit: directResult.withinLimit,
-      warnings: directResult.warnings,
-      processedText: normalizedContent || undefined, // Use normalized content for accurate token display
-      error: directResult.error
-    };
-
-    directSuccess = directResult.success;
-    
-    if (directSuccess) {
-      console.log(`[Direct] ✅ ${file.name} loaded successfully`);
+      const directSuccess = directResult.success;
       
-      // For multi-file uploads, storage is handled by loadDocument via appendToDocument
-      // For single-file uploads, we still need to store if RAG failed
-      if (!isMultiFile) {
-        if (directSuccess && !ragSuccess) {
+      if (directSuccess) {
+        console.log(`[Direct] ✅ ${file.name} loaded successfully`);
+        
+        // For multi-file uploads, storage is handled by loadDocument via appendToDocument
+        // For single-file uploads, we need to store the content
+        if (!isMultiFile) {
           try {
             const storageMetadata: DocumentMetadata = {
               filename: file.name,
@@ -742,49 +743,94 @@ async function processSingleFile(
               folderContext: folderMetadata
             };
 
-            // Store normalized content for consistency with token counting
-            storeDocument(directDocId, normalizedContent, storageMetadata);
-            console.log(`[Direct] ✅ ${file.name} stored (Direct-only)`);
+            // Check if we need to store or update
+            const existingDoc = getDocument(directDocId);
+            if (existingDoc) {
+              // Update existing document if it has no content
+              if (!existingDoc.content || existingDoc.content.length === 0) {
+                const updatedMetadata: DocumentMetadata = {
+                  ...existingDoc.metadata,
+                  totalTokens: directResult.tokenCount,
+                  folderContext: folderMetadata
+                };
+                storeDocument(directDocId, normalizedContent, updatedMetadata, existingDoc.filterId);
+                console.log(`[Direct] ✅ ${file.name} storage updated with content`);
+              }
+            } else {
+              // Store new document
+              storeDocument(directDocId, normalizedContent, storageMetadata);
+              console.log(`[Direct] ✅ ${file.name} stored`);
+            }
           } catch (error) {
             console.error(`[Direct] ❌ Failed to store ${file.name}:`, error);
           }
-        } else if (directSuccess && ragSuccess) {
-          try {
-            const existingDoc = getDocument(directDocId);
-            if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
-              const updatedMetadata: DocumentMetadata = {
-                ...existingDoc.metadata,
-                totalTokens: directResult.tokenCount,
-                folderContext: folderMetadata
-              };
-              // Store normalized content for consistency with token counting
-              storeDocument(directDocId, normalizedContent, updatedMetadata, existingDoc.filterId);
-              console.log(`[Direct] ✅ ${file.name} storage updated with content`);
-            }
-          } catch (error) {
-            console.error(`[Direct] ❌ Failed to update ${file.name}:`, error);
-          }
+        } else {
+          console.log(`[Direct] ℹ️  Multi-file upload - storage handled by loadDocument`);
         }
       } else {
-        console.log(`[Direct] ℹ️  Multi-file upload - storage handled by loadDocument`);
+        console.error(`[Direct] ❌ ${file.name} processing failed: ${directResult.error}`);
       }
-    } else {
-      console.error(`[Direct] ❌ ${file.name} processing failed: ${directResult.error}`);
-    }
 
-  } catch (error) {
-    const errorMessage = error instanceof DocumentProcessingError
-      ? error.message
-      : error instanceof Error
+      return {
+        success: directSuccess,
+        hasImages,
+        imageCount,
+        direct: {
+          status: directResult.success ? 'success' as const : 'error' as const,
+          tokenCount: directResult.tokenCount,
+          loadTime: directResult.loadTime,
+          withinLimit: directResult.withinLimit,
+          warnings: directResult.warnings,
+          processedText: normalizedContent || undefined, // Use normalized content for accurate token display
+          error: directResult.error
+        }
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof DocumentProcessingError
         ? error.message
-        : 'Unknown error';
-    
-    console.error(`[Direct] ❌ ${file.name} processing error:`, errorMessage);
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+      
+      console.error(`[Direct] ❌ ${file.name} processing error:`, errorMessage);
+      return {
+        success: false,
+        hasImages: false,
+        imageCount: 0,
+        direct: {
+          status: 'error' as const,
+          error: errorMessage
+        }
+      };
+    }
+  };
+
+  // Start both pipelines immediately and wait for both to complete
+  const [ragOutcome, directOutcome] = await Promise.allSettled([processRAG(), processDirect()]);
+
+  // Process RAG results
+  if (ragOutcome.status === 'fulfilled') {
+    result.rag = ragOutcome.value.rag;
+  } else {
+    console.error(`[RAG] ❌ ${file.name} promise rejected:`, ragOutcome.reason);
+    result.rag = {
+      status: 'error',
+      error: ragOutcome.reason instanceof Error ? ragOutcome.reason.message : 'Unknown error'
+    };
+  }
+
+  // Process Direct results
+  if (directOutcome.status === 'fulfilled') {
+    result.direct = directOutcome.value.direct;
+    result.hasImages = directOutcome.value.hasImages || false;
+    result.imageCount = directOutcome.value.imageCount || 0;
+  } else {
+    console.error(`[Direct] ❌ ${file.name} promise rejected:`, directOutcome.reason);
     result.direct = {
       status: 'error',
-      error: errorMessage
+      error: directOutcome.reason instanceof Error ? directOutcome.reason.message : 'Unknown error'
     };
-    directSuccess = false;
   }
 
   return result;
@@ -815,9 +861,14 @@ export async function POST(
     
     // Extract all files from FormData
     const files: File[] = [];
+    const skipRAGFiles: string[] = []; // Track which files should skip RAG
+    
     for (const [key, value] of formData.entries()) {
       if (key === 'files' && value instanceof File) {
         files.push(value);
+      } else if (key === 'skipRAG' && typeof value === 'string') {
+        // skipRAG is sent as comma-separated filenames
+        skipRAGFiles.push(...value.split(',').map(f => f.trim()).filter(f => f));
       }
     }
     
@@ -830,6 +881,11 @@ export async function POST(
         { status: 400 }
       );
     }
+    
+    // Debug: Log skipRAG parameter extraction
+    console.log(`\n🔍 [DEBUG] skipRAG extraction:`);
+    console.log(`🔍 [DEBUG] - skipRAGFiles array:`, skipRAGFiles);
+    console.log(`🔍 [DEBUG] - Number of files to skip: ${skipRAGFiles.length}`);
 
     // Validate model parameter
     try {
@@ -929,182 +985,177 @@ export async function POST(
       // Track if at least one processing method succeeds
       let ragSuccess = false;
       let directSuccess = false;
+
+      // ============================================================
+      // PARALLEL PIPELINE PROCESSING
+      // Both pipelines run independently and asynchronously
+      // ============================================================
       
-      // Parse document content once for both pipelines
-      let parsedContent: string | null = null;
-      let hasImages: boolean | undefined = undefined;
-      let imageCount: number | undefined = undefined;
-      try {
-        const parseResult = await parseDocument(file);
-        parsedContent = parseResult.content;
-        hasImages = parseResult.hasImages;
-        imageCount = parseResult.imageCount;
-      } catch (parseError) {
-        console.error('[Parse] Failed to parse document:', parseError);
-        // Continue - RAG might still work with raw file
-      }
-
-      // ============================================================
-      // RAG PIPELINE PROCESSING (Independent with own error handling)
-      // OpenRAG SDK handles all parsing, chunking, and embedding
-      // ============================================================
-      console.log('\n========================================');
-      console.log('🔵 RAG PIPELINE - START');
-      console.log('========================================');
-      try {
-        console.log(`[RAG] Document ID: ${documentId}`);
-        console.log(`[RAG] Filename: ${file.name}`);
-        console.log(`[RAG] Starting OpenRAG ingestion...`);
-        
-        // Create metadata for RAG
-        const ragMetadata: DocumentMetadata = {
-          filename: file.name,
-          size: file.size,
-          mimeType: file.type || 'text/plain',
-          uploadedAt: new Date(),
-          chunkCount: 0, // Will be set by OpenRAG
-          totalTokens: 0, // Will be set by OpenRAG
-          strategy: 'fixed'
-        };
-
-        // Send raw file to OpenRAG SDK for ingestion
-        // OpenRAG handles parsing, chunking, and embedding automatically
-        // ALWAYS skip individual filter updates to prevent race conditions
-        // The filter will be updated in a batch after all concurrent uploads complete
-        const ragResult = await ragIndexDocument(
-          file, // Send the raw file, not parsed chunks
-          documentId,
-          ragMetadata,
-          knowledgeFilterId, // Pass the pre-created filter ID
-          true // skipFilterUpdate - prevent race conditions on concurrent uploads
-        );
-
-        // Store the filter ID for later use in queries
-        let filterIdForStorage: string | undefined = undefined;
-        if (ragResult.success && ragResult.filterId) {
-          filterIdForStorage = ragResult.filterId;
-        }
-
-        // Update response with RAG results and image data
-        response.data!.rag = {
-          status: ragResult.success ? 'success' : 'error',
-          chunkCount: ragResult.chunkCount,
-          tokenCount: ragResult.tokenCount,
-          indexTime: ragResult.indexTime,
-          processedText: parsedContent || undefined,
-          error: ragResult.error
-        };
-        
-        // Add image data to response
-        if (hasImages !== undefined) {
-          response.data!.hasImages = hasImages;
-          response.data!.imageCount = imageCount;
-        }
-
-        ragSuccess = ragResult.success;
-        
-        if (ragSuccess) {
-          console.log(`[RAG] ✅ Successfully indexed document in ${ragResult.indexTime}ms`);
-          console.log(`[RAG] Chunks: ${ragResult.chunkCount}, Tokens: ${ragResult.tokenCount}`);
+      // Check if this file should skip RAG indexing
+      const shouldSkipRAG = skipRAGFiles.includes(file.name);
+      console.log(`\n🔍 [DEBUG] Single-file upload - checking skipRAG for: ${file.name}`);
+      console.log(`🔍 [DEBUG] - shouldSkipRAG: ${shouldSkipRAG}`);
+      console.log(`🔍 [DEBUG] - skipRAGFiles contains: [${skipRAGFiles.join(', ')}]`);
+      
+      // Define RAG pipeline function
+      const processRAG = async () => {
+        if (shouldSkipRAG) {
+          console.log('\n========================================');
+          console.log('🔵 RAG PIPELINE - SKIPPED');
+          console.log('========================================');
+          console.log(`[RAG] Skipping ${file.name} (already exists in OpenSearch)`);
           
-          // RAG PIPELINE: Store document metadata with filter ID for queries
-          // This is independent of Direct pipeline
-          try {
-            const ragStorageMetadata: DocumentMetadata = {
-              filename: file.name,
-              size: file.size,
-              mimeType: file.type || 'text/plain',
-              uploadedAt: new Date(),
-              chunkCount: ragResult.chunkCount,
-              totalTokens: ragResult.tokenCount,
-              strategy: 'fixed'
-            };
-
-            // Store with parsed content if available, otherwise empty string
-            const contentToStore = parsedContent || '';
-            storeDocument(documentId, contentToStore, ragStorageMetadata, filterIdForStorage);
-            console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
-            console.log('[DEBUG] Storage state after RAG storage:');
-            debugStorage();
-            
-            // ============================================================
-            // RUNTIME VALIDATION: Verify filter ID consistency
-            // ============================================================
-            // This catches cases where different files somehow got different filter IDs
-            // which would indicate a race condition or logic error
-            if (filterIdForStorage !== knowledgeFilterId) {
-              const errorMsg = `CRITICAL: Filter ID mismatch detected!\n` +
-                `  Expected (from ensureKnowledgeFilter): ${knowledgeFilterId}\n` +
-                `  Got (stored with document): ${filterIdForStorage}\n` +
-                `  File: ${file.name}\n` +
-                `  This indicates a race condition or logic error!`;
-              console.error(`❌ [RAG] ${errorMsg}`);
-              console.error(`❌ [RAG] ⚠️  RACE CONDITION WARNING - See docs/FILTER_MANAGEMENT_ARCHITECTURE.md`);
-              // Don't throw - document is already stored, but log loudly for investigation
-            } else {
-              console.log(`✅ [RAG] Filter ID validation passed: ${filterIdForStorage}`);
+          return {
+            success: true,
+            rag: {
+              status: 'success' as const,
+              chunkCount: 0,
+              tokenCount: 0,
+              indexTime: 0
             }
-            
-            // Schedule batch filter update (debounced to handle concurrent uploads)
-            if (knowledgeFilterId) {
-              const baseFilename = path.basename(file.name);
-              scheduleBatchFilterUpdate(knowledgeFilterId, baseFilename).catch(err => {
-                console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
-              });
-            }
-          } catch (storageError) {
-            console.error('[RAG] ❌ Failed to store document:', storageError);
-            // Don't fail RAG processing if storage fails
-          }
-        } else {
-          console.error(`[RAG] ❌ Indexing failed: ${ragResult.error}`);
+          };
         }
-        
-        console.log('========================================');
-        console.log('🔵 RAG PIPELINE - END');
-        console.log('========================================\n');
 
-      } catch (error) {
-        // RAG processing failed, but we continue with Direct processing
-        const errorMessage = error instanceof Error
-          ? error.message
-          : 'Unknown error during RAG processing';
-        
-        console.error('[RAG] ❌ Processing error:', errorMessage);
+        console.log('\n========================================');
+        console.log('🔵 RAG PIPELINE - START');
         console.log('========================================');
-        console.log('🔵 RAG PIPELINE - END (ERROR)');
-        console.log('========================================\n');
-        
-        response.data!.rag = {
-          status: 'error',
-          error: errorMessage
-        };
-        ragSuccess = false;
-      }
+        try {
+          console.log(`[RAG] Document ID: ${documentId}`);
+          console.log(`[RAG] Filename: ${file.name}`);
+          console.log(`[RAG] Starting OpenRAG ingestion...`);
+          
+          // Create metadata for RAG
+          const ragMetadata: DocumentMetadata = {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type || 'text/plain',
+            uploadedAt: new Date(),
+            chunkCount: 0,
+            totalTokens: 0,
+            strategy: 'fixed'
+          };
 
-      // ============================================================
-      // DIRECT PIPELINE PROCESSING (Independent with own error handling)
-      // Direct approach needs parsed text content
-      // ============================================================
-      console.log('\n========================================');
-      console.log('🟢 DIRECT PIPELINE - START');
-      console.log('========================================');
-      try {
-        console.log(`[Direct] Document ID: ${documentId}`);
-        console.log(`[Direct] Filename: ${file.name}`);
-        console.log(`[Direct] Starting direct context loading...`);
-        
-        // Use already parsed content or parse again if needed
-        let content: string;
-        if (parsedContent) {
-          content = parsedContent;
-        } else {
+          // Send raw file to OpenRAG SDK for ingestion
+          // OpenRAG handles parsing, chunking, and embedding automatically
+          const ragResult = await ragIndexDocument(
+            file,
+            documentId,
+            ragMetadata,
+            knowledgeFilterId,
+            true // skipFilterUpdate - prevent race conditions
+          );
+
+          let filterIdForStorage: string | undefined = undefined;
+          if (ragResult.success && ragResult.filterId) {
+            filterIdForStorage = ragResult.filterId;
+          }
+
+          const ragSuccess = ragResult.success;
+          
+          if (ragSuccess) {
+            console.log(`[RAG] ✅ Successfully indexed document in ${ragResult.indexTime}ms`);
+            console.log(`[RAG] Chunks: ${ragResult.chunkCount}, Tokens: ${ragResult.tokenCount}`);
+            
+            try {
+              const ragStorageMetadata: DocumentMetadata = {
+                filename: file.name,
+                size: file.size,
+                mimeType: file.type || 'text/plain',
+                uploadedAt: new Date(),
+                chunkCount: ragResult.chunkCount,
+                totalTokens: ragResult.tokenCount,
+                strategy: 'fixed'
+              };
+
+              // RAG stores empty content - OpenRAG handles the actual content
+              storeDocument(documentId, '', ragStorageMetadata, filterIdForStorage);
+              console.log(`[RAG] ✅ Document stored with filter ID: ${filterIdForStorage}`);
+              console.log('[DEBUG] Storage state after RAG storage:');
+              debugStorage();
+              
+              // Verify filter ID consistency
+              if (filterIdForStorage !== knowledgeFilterId) {
+                const errorMsg = `CRITICAL: Filter ID mismatch detected!\n` +
+                  `  Expected (from ensureKnowledgeFilter): ${knowledgeFilterId}\n` +
+                  `  Got (stored with document): ${filterIdForStorage}\n` +
+                  `  File: ${file.name}\n` +
+                  `  This indicates a race condition or logic error!`;
+                console.error(`❌ [RAG] ${errorMsg}`);
+                console.error(`❌ [RAG] ⚠️  RACE CONDITION WARNING - See docs/FILTER_MANAGEMENT_ARCHITECTURE.md`);
+              } else {
+                console.log(`✅ [RAG] Filter ID validation passed: ${filterIdForStorage}`);
+              }
+              
+              // Schedule batch filter update
+              if (knowledgeFilterId) {
+                const baseFilename = path.basename(file.name);
+                scheduleBatchFilterUpdate(knowledgeFilterId, baseFilename).catch(err => {
+                  console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
+                });
+              }
+            } catch (storageError) {
+              console.error('[RAG] ❌ Failed to store document:', storageError);
+            }
+          } else {
+            console.error(`[RAG] ❌ Indexing failed: ${ragResult.error}`);
+          }
+          
+          console.log('========================================');
+          console.log('🔵 RAG PIPELINE - END');
+          console.log('========================================\n');
+
+          return {
+            success: ragSuccess,
+            rag: {
+              status: ragResult.success ? 'success' as const : 'error' as const,
+              chunkCount: ragResult.chunkCount,
+              tokenCount: ragResult.tokenCount,
+              indexTime: ragResult.indexTime,
+              error: ragResult.error
+            }
+          };
+
+        } catch (error) {
+          const errorMessage = error instanceof Error
+            ? error.message
+            : 'Unknown error during RAG processing';
+          
+          console.error('[RAG] ❌ Processing error:', errorMessage);
+          console.log('========================================');
+          console.log('🔵 RAG PIPELINE - END (ERROR)');
+          console.log('========================================\n');
+          
+          return {
+            success: false,
+            rag: {
+              status: 'error' as const,
+              error: errorMessage
+            }
+          };
+        }
+      };
+
+      // Define Direct pipeline function
+      const processDirect = async () => {
+        console.log('\n========================================');
+        console.log('🟢 DIRECT PIPELINE - START');
+        console.log('========================================');
+        try {
+          console.log(`[Direct] Document ID: ${documentId}`);
+          console.log(`[Direct] Filename: ${file.name}`);
+          console.log(`[Direct] Starting direct context loading...`);
+          
+          // Parse document for Direct pipeline
+          let content: string;
+          let hasImages: boolean | undefined = undefined;
+          let imageCount: number | undefined = undefined;
+          
           try {
             const parseResult = await parseDocument(file);
             content = parseResult.content;
-            parsedContent = content; // Store for potential reuse
+            hasImages = parseResult.hasImages;
+            imageCount = parseResult.imageCount;
           } catch (parseError) {
-            // If parsing fails, throw a more specific error
             const errorMsg = parseError instanceof DocumentProcessingError
               ? parseError.message
               : parseError instanceof Error
@@ -1120,118 +1171,143 @@ export async function POST(
               }
             );
           }
-        }
 
-        // Create metadata for Direct pipeline
-        const directMetadata: DocumentMetadata = {
-          filename: file.name,
-          size: file.size,
-          mimeType: file.type || 'text/plain',
-          uploadedAt: new Date(),
-          chunkCount: 0, // Direct doesn't use chunks
-          totalTokens: 0, // Will be calculated by loadDocument
-          strategy: 'fixed', // Not used by Direct
-          folderContext: folderMetadata
-        };
+          // Create metadata for Direct pipeline
+          const directMetadata: DocumentMetadata = {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type || 'text/plain',
+            uploadedAt: new Date(),
+            chunkCount: 0,
+            totalTokens: 0,
+            strategy: 'fixed',
+            folderContext: folderMetadata
+          };
 
-        // Load document for Direct pipeline (validates and stores)
-        const directResult = await directLoadDocument(
-          content,
-          directDocumentId,
-          directMetadata,
-          isPartOfBatch,
-          file.name
-        );
+          // Load document for Direct pipeline
+          const directResult = await directLoadDocument(
+            content,
+            directDocumentId,
+            directMetadata,
+            isPartOfBatch,
+            file.name
+          );
 
-        // Update response with Direct results
-        response.data!.direct = {
-          status: directResult.success ? 'success' : 'error',
-          tokenCount: directResult.tokenCount,
-          loadTime: directResult.loadTime,
-          withinLimit: directResult.withinLimit,
-          warnings: directResult.warnings,
-          processedText: content,
-          error: directResult.error
-        };
-
-        directSuccess = directResult.success;
-        
-        if (directSuccess) {
-          console.log(`[Direct] ✅ Successfully loaded ${directResult.tokenCount} tokens in ${directResult.loadTime}ms`);
-          if (directResult.warnings.length > 0) {
-            console.warn(`[Direct] ⚠️  Warnings:`, directResult.warnings);
-          }
-        } else {
-          console.error(`[Direct] ❌ Processing failed: ${directResult.error}`);
-        }
-
-        // Handle storage based on whether this is part of a batch
-        if (!isPartOfBatch) {
-          // Single file upload - handle storage as before
-          if (directSuccess && !ragSuccess) {
-            try {
-              const storageMetadata: DocumentMetadata = {
-                filename: file.name,
-                size: file.size,
-                mimeType: file.type || 'text/plain',
-                uploadedAt: new Date(),
-                chunkCount: 0,
-                totalTokens: directResult.tokenCount,
-                strategy: 'fixed'
-              };
-
-              // Store document with Direct content (no filter ID since RAG didn't succeed)
-              storeDocument(directDocumentId, content, storageMetadata);
-              console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
-            } catch (error) {
-              console.error('[Direct] ❌ Failed to store document:', error);
-              // Don't fail the entire request if storage fails
+          const directSuccess = directResult.success;
+          
+          if (directSuccess) {
+            console.log(`[Direct] ✅ Successfully loaded ${directResult.tokenCount} tokens in ${directResult.loadTime}ms`);
+            if (directResult.warnings.length > 0) {
+              console.warn(`[Direct] ⚠️  Warnings:`, directResult.warnings);
             }
-          } else if (directSuccess && ragSuccess) {
-            // Both succeeded - RAG already stored the document with filter ID
-            // We need to update it with Direct's parsed content if RAG stored empty content
-            try {
-              const existingDoc = getDocument(documentId);
-              if (existingDoc && (!existingDoc.content || existingDoc.content.length === 0)) {
-                // Update with Direct's parsed content while preserving filter ID
-                const updatedMetadata: DocumentMetadata = {
-                  ...existingDoc.metadata,
-                  totalTokens: directResult.tokenCount // Update with Direct's token count
+          } else {
+            console.error(`[Direct] ❌ Processing failed: ${directResult.error}`);
+          }
+
+          // Handle storage based on whether this is part of a batch
+          if (!isPartOfBatch) {
+            if (directSuccess) {
+              try {
+                // Check if RAG already stored the document with a filter ID
+                const existingDoc = getDocument(documentId);
+                const filterIdToUse = existingDoc?.filterId;
+                
+                const storageMetadata: DocumentMetadata = {
+                  filename: file.name,
+                  size: file.size,
+                  mimeType: file.type || 'text/plain',
+                  uploadedAt: new Date(),
+                  chunkCount: 0,
+                  totalTokens: directResult.tokenCount,
+                  strategy: 'fixed'
                 };
-                storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
-                console.log(`[Direct] ✅ Updated storage with parsed content (preserving RAG filter ID)`);
-              } else {
-                console.log(`[Direct] ℹ️  Storage already has content from RAG`);
-              }
-            } catch (error) {
-              console.error('[Direct] ❌ Failed to update document storage:', error);
-            }
-          }
-        } else {
-          // Part of batch - storage is handled by loadDocument via appendToDocument
-          console.log(`[Direct] ℹ️  Batch upload - storage handled by loadDocument`);
-        }
-        
-        console.log('========================================');
-        console.log('🟢 DIRECT PIPELINE - END');
-        console.log('========================================\n');
 
-      } catch (error) {
-        // Direct processing failed, but RAG might have succeeded
-        const errorMessage = error instanceof DocumentProcessingError
-          ? error.message
-          : error instanceof Error
+                // Store document with Direct content, preserving RAG filter ID if it exists
+                storeDocument(directDocumentId, content, storageMetadata, filterIdToUse);
+                
+                if (filterIdToUse) {
+                  console.log(`[Direct] ✅ Document stored with RAG filter ID: ${filterIdToUse}`);
+                } else {
+                  console.log(`[Direct] ✅ Document stored (Direct-only, no RAG filter)`);
+                }
+              } catch (error) {
+                console.error('[Direct] ❌ Failed to store document:', error);
+              }
+            }
+          } else {
+            console.log(`[Direct] ℹ️  Batch upload - storage handled by loadDocument`);
+          }
+          
+          console.log('========================================');
+          console.log('🟢 DIRECT PIPELINE - END');
+          console.log('========================================\n');
+
+          return {
+            success: directSuccess,
+            hasImages,
+            imageCount,
+            direct: {
+              status: directResult.success ? 'success' as const : 'error' as const,
+              tokenCount: directResult.tokenCount,
+              loadTime: directResult.loadTime,
+              withinLimit: directResult.withinLimit,
+              warnings: directResult.warnings,
+              processedText: content,
+              error: directResult.error
+            }
+          };
+
+        } catch (error) {
+          const errorMessage = error instanceof DocumentProcessingError
             ? error.message
-            : 'Unknown error during Direct processing';
-        
-        console.error('[Direct] ❌ Processing error:', errorMessage);
-        console.log('========================================');
-        console.log('🟢 DIRECT PIPELINE - END (ERROR)');
-        console.log('========================================\n');
-        
+            : error instanceof Error
+              ? error.message
+              : 'Unknown error during Direct processing';
+          
+          console.error('[Direct] ❌ Processing error:', errorMessage);
+          console.log('========================================');
+          console.log('🟢 DIRECT PIPELINE - END (ERROR)');
+          console.log('========================================\n');
+          
+          return {
+            success: false,
+            hasImages: false,
+            imageCount: 0,
+            direct: {
+              status: 'error' as const,
+              error: errorMessage
+            }
+          };
+        }
+      };
+
+      // Start both pipelines immediately and wait for both to complete
+      const [ragOutcome, directOutcome] = await Promise.allSettled([processRAG(), processDirect()]);
+
+      // Process RAG results
+      if (ragOutcome.status === 'fulfilled') {
+        response.data!.rag = ragOutcome.value.rag;
+        ragSuccess = ragOutcome.value.success;
+      } else {
+        console.error(`[RAG] ❌ Promise rejected:`, ragOutcome.reason);
+        response.data!.rag = {
+          status: 'error',
+          error: ragOutcome.reason instanceof Error ? ragOutcome.reason.message : 'Unknown error'
+        };
+        ragSuccess = false;
+      }
+
+      // Process Direct results
+      if (directOutcome.status === 'fulfilled') {
+        response.data!.direct = directOutcome.value.direct;
+        response.data!.hasImages = directOutcome.value.hasImages || false;
+        response.data!.imageCount = directOutcome.value.imageCount || 0;
+        directSuccess = directOutcome.value.success;
+      } else {
+        console.error(`[Direct] ❌ Promise rejected:`, directOutcome.reason);
         response.data!.direct = {
           status: 'error',
-          error: errorMessage
+          error: directOutcome.reason instanceof Error ? directOutcome.reason.message : 'Unknown error'
         };
         directSuccess = false;
       }
@@ -1347,6 +1423,7 @@ export async function POST(
       // Pass both RAG document ID (unique per file) and shared Direct document ID
       // Pass knowledgeFilterId but DON'T let individual files update it
       // We'll do a batch update after all files are processed
+      const shouldSkipRAG = skipRAGFiles.includes(file.name);
       const result = await processSingleFile(
         file,
         ragDocumentId,
@@ -1354,7 +1431,8 @@ export async function POST(
         true,
         sharedDocumentId,
         knowledgeFilterId,
-        true // skipFilterUpdate flag - new parameter
+        true, // skipFilterUpdate flag
+        shouldSkipRAG // skipRAG flag - skip RAG if file already exists
       );
       
       results.push(result);

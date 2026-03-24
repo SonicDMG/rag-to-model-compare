@@ -13,6 +13,7 @@
  * Direct approach requires parsing for binary formats (PDF, DOCX).
  */
 
+import { randomUUID } from 'crypto';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import type { Chunk, ChunkStrategy } from '@/types/rag-comparison';
 
@@ -575,7 +576,7 @@ export function ensureChunkSize(chunks: Chunk[], maxSize: number): Chunk[] {
       const endChar = charOffset + subContent.length;
 
       result.push({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         content: subContent,
         tokenCount: subTokens,
         metadata: {
@@ -683,7 +684,7 @@ export function chunkDocument(
     charOffset = endChar;
 
     return {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       content: text,
       tokenCount,
       metadata: {

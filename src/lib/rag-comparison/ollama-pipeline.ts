@@ -23,7 +23,8 @@ import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
   ProcessingEventType,
-  ProcessingEvent
+  ProcessingEvent,
+  PipelineType
 } from '@/types/processing-events';
 
 /**
@@ -589,7 +590,7 @@ export async function query(
   const totalStartTime = performance.now();
   
   // Initialize event tracker with optional callback for real-time streaming
-  const eventTracker = new ProcessingEventTracker(eventCallback);
+  const eventTracker = new ProcessingEventTracker(eventCallback, PipelineType.OLLAMA);
   
   try {
     // Track initialization

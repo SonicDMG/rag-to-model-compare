@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useRef, DragEvent } from 'react';
+import { useState, useRef, DragEvent, useEffect } from 'react';
 import { ProcessingProgressIndicator } from './ProcessingProgressIndicator';
+import { DualPipelineUploadProgress, PipelineStatus } from './DualPipelineUploadProgress';
+import { ProcessingEvent, PipelineType } from '@/types/processing-events';
+import { RagUploadResult } from './RagUploadResult';
+import { DirectUploadResult } from './DirectUploadResult';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -9,11 +13,18 @@ interface UploadStatus {
   ragStatus?: 'success' | 'error';
   ragChunks?: number;
   ragTokens?: number;
+  ragIndexTime?: number;
+  ragProcessedText?: string;
   ragError?: string;
   directStatus?: 'success' | 'error';
   directTokens?: number;
+  directLoadTime?: number;
   directWarnings?: string[];
+  directProcessedText?: string;
   directError?: string;
+  hasImages?: boolean;
+  imageCount?: number;
+  fileSize?: number;
 }
 
 export interface UploadResultData {
@@ -54,8 +65,31 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: 'idle' });
   const [isUploading, setIsUploading] = useState(false);
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
+  
+  // Streaming upload state
+  const [streamingProgress, setStreamingProgress] = useState<{
+    isActive: boolean;
+    filename: string;
+    ragProgress: {
+      status: PipelineStatus;
+      currentOperation?: string;
+      events: ProcessingEvent[];
+      error?: string;
+      result?: any;
+    };
+    directProgress: {
+      status: PipelineStatus;
+      currentOperation?: string;
+      events: ProcessingEvent[];
+      error?: string;
+      result?: any;
+    };
+  } | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   // Helper function to validate file types
   const isValidFileType = (file: File): boolean => {
@@ -70,6 +104,249 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Upload single file with streaming progress
+  const uploadSingleFileWithStreaming = async (file: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // Initialize streaming progress
+      setStreamingProgress({
+        isActive: true,
+        filename: file.name,
+        ragProgress: {
+          status: 'idle',
+          events: [],
+        },
+        directProgress: {
+          status: 'idle',
+          events: [],
+        },
+      });
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Use fetch to POST the file, then connect EventSource
+      fetch('/api/rag-comparison/upload-stream', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+          }
+
+          // Get the response as a stream
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+
+          if (!reader) {
+            throw new Error('No response body');
+          }
+
+          let buffer = '';
+          let documentId: string | null = null;
+          let ragResult: any = null;
+          let directResult: any = null;
+          let ragSuccess = false;
+          let directSuccess = false;
+
+          const processStream = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                  // Stream complete
+                  if (documentId) {
+                    // Create upload result data
+                    const uploadResultData: UploadResultData = {
+                      ragStatus: ragSuccess ? 'success' : 'error',
+                      ragChunks: ragResult?.chunkCount,
+                      ragTokens: ragResult?.tokenCount,
+                      ragIndexTime: ragResult?.indexTime,
+                      ragError: ragResult?.error,
+                      directStatus: directSuccess ? 'success' : 'error',
+                      directTokens: directResult?.tokenCount,
+                      directLoadTime: directResult?.loadTime,
+                      directWarnings: directResult?.warnings,
+                      directError: directResult?.error,
+                      hasImages: directResult?.hasImages,
+                      imageCount: directResult?.imageCount,
+                      fileSize: file.size,
+                    };
+
+                    // Call callbacks
+                    if (onUploadComplete && (ragSuccess || directSuccess)) {
+                      onUploadComplete(documentId);
+                    }
+                    if (onUploadResult) {
+                      onUploadResult(uploadResultData);
+                    }
+
+                    // Update upload status
+                    setUploadStatus({
+                      status: ragSuccess && directSuccess ? 'success' : ragSuccess || directSuccess ? 'partial' : 'error',
+                      message: ragSuccess && directSuccess
+                        ? 'File processed successfully!'
+                        : ragSuccess || directSuccess
+                        ? 'File partially processed'
+                        : 'File processing failed',
+                      ...uploadResultData,
+                    });
+                  }
+                  
+                  resolve();
+                  break;
+                }
+
+                // Decode chunk and add to buffer
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.slice(6));
+                      
+                      // Handle different event types
+                      if (data.type === 'processing_event') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const event = data.event as ProcessingEvent;
+                        
+                        setStreamingProgress(prev => {
+                          if (!prev) return prev;
+                          
+                          if (pipeline === PipelineType.RAG) {
+                            // Check if event already exists (same ID), update it; otherwise append
+                            const existingIndex = prev.ragProgress.events.findIndex(e => e.id === event.id);
+                            const updatedEvents = existingIndex >= 0
+                              ? prev.ragProgress.events.map((e, i) => i === existingIndex ? event : e)
+                              : [...prev.ragProgress.events, event];
+                            
+                            return {
+                              ...prev,
+                              ragProgress: {
+                                ...prev.ragProgress,
+                                status: 'processing',
+                                currentOperation: event.operationName,
+                                events: updatedEvents,
+                              },
+                            };
+                          } else if (pipeline === PipelineType.DIRECT) {
+                            // Check if event already exists (same ID), update it; otherwise append
+                            const existingIndex = prev.directProgress.events.findIndex(e => e.id === event.id);
+                            const updatedEvents = existingIndex >= 0
+                              ? prev.directProgress.events.map((e, i) => i === existingIndex ? event : e)
+                              : [...prev.directProgress.events, event];
+                            
+                            return {
+                              ...prev,
+                              directProgress: {
+                                ...prev.directProgress,
+                                status: 'processing',
+                                currentOperation: event.operationName,
+                                events: updatedEvents,
+                              },
+                            };
+                          }
+                          return prev;
+                        });
+                      } else if (data.type === 'pipeline_complete') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const result = data.result;
+                        
+                        if (pipeline === PipelineType.RAG) {
+                          ragResult = result;
+                          ragSuccess = true;
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            ragProgress: {
+                              ...prev.ragProgress,
+                              status: 'complete',
+                              result,
+                            },
+                          } : prev);
+                        } else if (pipeline === PipelineType.DIRECT) {
+                          directResult = result;
+                          directSuccess = true;
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            directProgress: {
+                              ...prev.directProgress,
+                              status: 'complete',
+                              result,
+                            },
+                          } : prev);
+                        }
+                      } else if (data.type === 'pipeline_error') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const error = data.error;
+                        
+                        if (pipeline === PipelineType.RAG) {
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            ragProgress: {
+                              ...prev.ragProgress,
+                              status: 'error',
+                              error,
+                            },
+                          } : prev);
+                        } else if (pipeline === PipelineType.DIRECT) {
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            directProgress: {
+                              ...prev.directProgress,
+                              status: 'error',
+                              error,
+                            },
+                          } : prev);
+                        }
+                      } else if (data.type === 'upload_complete') {
+                        documentId = data.documentId;
+                        ragSuccess = data.ragSuccess;
+                        directSuccess = data.directSuccess;
+                      } else if (data.type === 'error') {
+                        throw new Error(data.error);
+                      }
+                    } catch (parseError) {
+                      console.error('Error parsing SSE data:', parseError);
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Stream processing error:', error);
+              reject(error);
+            }
+          };
+
+          processStream();
+        })
+        .catch(error => {
+          console.error('Upload error:', error);
+          setStreamingProgress(prev => prev ? {
+            ...prev,
+            ragProgress: { ...prev.ragProgress, status: 'error', error: error.message },
+            directProgress: { ...prev.directProgress, status: 'error', error: error.message },
+          } : prev);
+          reject(error);
+        });
+    });
   };
 
   // Recursive folder traversal for drag & drop
@@ -160,7 +437,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     if (collectedFiles.length > 0) {
       setFiles(collectedFiles);
       setUploadStatus({ status: 'idle' });
-      setIsUploading(false); // Reset uploading state when new files are added
     } else {
       setUploadStatus({
         status: 'error',
@@ -172,25 +448,10 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (selectedFiles && selectedFiles.length > 0) {
-      const fileArray = Array.from(selectedFiles)
-        .filter(isValidFileType)
-        .map(file => {
-          // Preserve webkitRelativePath for folder uploads
-          const originalPath = (file as any).webkitRelativePath;
-          if (originalPath) {
-            // Explicitly set webkitRelativePath using the same approach as drag-and-drop
-            Object.defineProperty(file, 'webkitRelativePath', {
-              value: originalPath,
-              writable: false,
-              configurable: true
-            });
-          }
-          return file;
-        });
+      const fileArray = Array.from(selectedFiles).filter(isValidFileType);
       if (fileArray.length > 0) {
         setFiles(fileArray);
         setUploadStatus({ status: 'idle' });
-        setIsUploading(false); // Reset uploading state when new files are added
       } else {
         setUploadStatus({
           status: 'error',
@@ -204,7 +465,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   const uploadSingleFile = async (
     file: File,
     index: number,
-    sharedDocumentId?: string
+    sharedDocumentId?: string,
+    skipRAG: boolean = false
   ): Promise<any> => {
     // Mark as processing
     setFileStatuses(prev => {
@@ -219,6 +481,11 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     // If this is part of a multi-file upload, include the shared document ID
     if (sharedDocumentId) {
       formData.append('sharedDocumentId', sharedDocumentId);
+    }
+    
+    // If this file should skip RAG, include it in the skipRAG parameter
+    if (skipRAG) {
+      formData.append('skipRAG', file.name);
     }
 
     const response = await fetch('/api/rag-comparison/upload', {
@@ -300,7 +567,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
   };
 
   // Upload files in parallel with concurrency limit
-  const uploadFilesInParallel = async (files: File[], concurrency: number = 4) => {
+  const uploadFilesInParallel = async (files: File[], concurrency: number = 4, filesToSkipRAG: string[] = []) => {
     const results: any[] = [];
     let successCount = 0;
     let partialCount = 0;
@@ -318,9 +585,10 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
       const batch = files.slice(i, i + concurrency);
 
       // Upload batch in parallel, passing shared document ID for multi-file uploads
-      const batchPromises = batch.map((file, batchIndex) =>
-        uploadSingleFile(file, i + batchIndex, sharedDocumentId)
-      );
+      const batchPromises = batch.map((file, batchIndex) => {
+        const shouldSkipRAG = filesToSkipRAG.includes(file.name);
+        return uploadSingleFile(file, i + batchIndex, sharedDocumentId, shouldSkipRAG);
+      });
 
       const batchResults = await Promise.allSettled(batchPromises);
 
@@ -419,46 +687,126 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
     };
   };
 
+  // Check if a filename already exists in OpenSearch
+  const checkFilenameExists = async (filename: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/rag-comparison/check-filename?filename=${encodeURIComponent(filename)}`);
+      if (!response.ok) {
+        console.error(`Failed to check filename: ${response.statusText}`);
+        return false; // If check fails, assume file doesn't exist to allow upload
+      }
+      const data = await response.json();
+      return data.exists;
+    } catch (error) {
+      console.error('Error checking filename:', error);
+      return false; // If check fails, assume file doesn't exist to allow upload
+    }
+  };
+
+  // Check all filenames for existence before uploading
+  const checkFilenamesInParallel = async (files: File[]): Promise<{ filesToSkipRAG: string[] }> => {
+    const filesToSkipRAG: string[] = [];
+
+    // Check all files in parallel
+    const checkPromises = files.map(async (file) => {
+      const exists = await checkFilenameExists(file.name);
+      return { file, exists };
+    });
+
+    const results = await Promise.all(checkPromises);
+
+    // Mark files for RAG skipping based on overwrite setting
+    for (const { file, exists } of results) {
+      if (exists && !overwriteExisting) {
+        filesToSkipRAG.push(file.name);
+      }
+    }
+
+    return { filesToSkipRAG };
+  };
+
   const handleUpload = async () => {
     if (files.length === 0) return;
 
     setIsUploading(true);
-    setUploadStatus({ status: 'uploading', message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...` });
-
-    // Initialize all files as pending
-    const initialStatuses: FileStatus[] = files.map(file => ({
-      file,
-      status: 'pending' as const,
-    }));
-    setFileStatuses(initialStatuses);
+    setSkippedFiles([]);
+    setUploadStatus({ status: 'uploading', message: `Checking files...` });
 
     try {
-      // Upload files in parallel (4 at a time)
+      // For single file uploads, use streaming
+      if (files.length === 1) {
+        setUploadStatus({ status: 'uploading', message: 'Starting upload...' });
+        
+        try {
+          await uploadSingleFileWithStreaming(files[0]);
+        } catch (error) {
+          setUploadStatus({
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Upload failed',
+          });
+        } finally {
+          setIsUploading(false);
+        }
+        return;
+      }
+
+      // For multi-file uploads, use the existing batch upload logic
+      // Check for existing filenames first
+      const { filesToSkipRAG } = await checkFilenamesInParallel(files);
+      
+      // Update skipped files state (files that will skip RAG but still process Direct)
+      setSkippedFiles(filesToSkipRAG);
+
+      // Show upload status with skipped RAG count if any
+      const uploadMessage = filesToSkipRAG.length > 0
+        ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''} (${filesToSkipRAG.length} skipping RAG indexing)...`
+        : `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`;
+      
+      setUploadStatus({ status: 'uploading', message: uploadMessage });
+
+      // Initialize file statuses for all files
+      const initialStatuses: FileStatus[] = files.map(file => ({
+        file,
+        status: 'pending' as const,
+      }));
+      setFileStatuses(initialStatuses);
+
+      // Upload all files, passing skipRAG info
       const {
         successCount,
         partialCount,
         firstSuccessfulDocumentId,
         firstSuccessfulResult,
         aggregatedResult
-      } = await uploadFilesInParallel(files, 4);
+      } = await uploadFilesInParallel(files, 4, filesToSkipRAG);
 
       // Determine overall status
+      const skippedRAGCount = filesToSkipRAG.length;
       const totalFiles = files.length;
       let overallStatus: 'success' | 'partial' | 'error';
       let message: string;
 
-      if (successCount === totalFiles) {
+      if (successCount === totalFiles && totalFiles > 0) {
         overallStatus = 'success';
         message = `All ${totalFiles} file${totalFiles > 1 ? 's' : ''} processed successfully!`;
+        if (skippedRAGCount > 0) {
+          message += ` (${skippedRAGCount} file${skippedRAGCount > 1 ? 's' : ''} skipped RAG indexing - already exist)`;
+        }
       } else if (successCount + partialCount > 0) {
         overallStatus = 'partial';
         message = `${successCount + partialCount} of ${totalFiles} file${totalFiles > 1 ? 's' : ''} processed successfully.`;
         if (partialCount > 0) {
           message += ` (${partialCount} partial)`;
         }
+        if (skippedRAGCount > 0) {
+          message += ` ${skippedRAGCount} file${skippedRAGCount > 1 ? 's' : ''} skipped RAG indexing.`;
+        }
       } else {
         overallStatus = 'error';
         message = 'All files failed to process.';
+        if (skippedRAGCount > 0) {
+          message += ` ${skippedRAGCount} file${skippedRAGCount > 1 ? 's' : ''} skipped RAG indexing.`;
+        }
       }
 
       // Determine which result to use (single file or aggregated)
@@ -523,6 +871,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
         message: error instanceof Error ? error.message : 'Upload failed',
       });
     } finally {
+      // Re-enable the upload button
       setIsUploading(false);
     }
   };
@@ -644,6 +993,27 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           </div>
         )}
 
+        {/* Overwrite Checkbox */}
+        {files.length > 0 && (
+          <div className="mt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={overwriteExisting}
+                onChange={(e) => setOverwriteExisting(e.target.checked)}
+                disabled={isUploading}
+                className="w-4 h-4 text-unkey-teal-500 bg-unkey-gray-850 border-unkey-gray-600 rounded focus:ring-unkey-teal-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm text-unkey-gray-200">
+                Overwrite existing files
+              </span>
+            </label>
+            <p className="text-xs text-unkey-gray-400 mt-1 ml-6">
+              If unchecked, files with existing names will be skipped
+            </p>
+          </div>
+        )}
+
         {/* Upload Button */}
         <button
           onClick={handleUpload}
@@ -655,7 +1025,46 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
             : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
         </button>
 
-        {/* Per-File Status Display */}
+        {/* Streaming Progress Display (Single File) */}
+        {streamingProgress && (
+          <div className="mt-6">
+            <DualPipelineUploadProgress
+              ragProgress={streamingProgress.ragProgress}
+              directProgress={streamingProgress.directProgress}
+              filename={streamingProgress.filename}
+            />
+          </div>
+        )}
+
+        {/* Results Display (After Streaming Complete) */}
+        {!streamingProgress && uploadStatus.status !== 'idle' && uploadStatus.status !== 'uploading' && files.length === 0 && (
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <RagUploadResult
+              status={uploadStatus.ragStatus}
+              chunkCount={uploadStatus.ragChunks}
+              tokenCount={uploadStatus.ragTokens}
+              indexTime={uploadStatus.ragIndexTime}
+              processedText={uploadStatus.ragProcessedText}
+              error={uploadStatus.ragError}
+              hasImages={uploadStatus.hasImages}
+              imageCount={uploadStatus.imageCount}
+              fileSize={uploadStatus.fileSize}
+            />
+            <DirectUploadResult
+              status={uploadStatus.directStatus}
+              tokenCount={uploadStatus.directTokens}
+              loadTime={uploadStatus.directLoadTime}
+              warnings={uploadStatus.directWarnings}
+              processedText={uploadStatus.directProcessedText}
+              error={uploadStatus.directError}
+              hasImages={uploadStatus.hasImages}
+              imageCount={uploadStatus.imageCount}
+              fileSize={uploadStatus.fileSize}
+            />
+          </div>
+        )}
+
+        {/* Per-File Status Display (Multi-File Uploads) */}
         {isUploading && fileStatuses.length > 0 && (
           <div className="mt-4 p-4 border border-unkey-gray-700 rounded-unkey-md bg-unkey-gray-850">
             <h3 className="font-semibold text-white mb-4">Upload Progress</h3>
@@ -773,6 +1182,31 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Skipped RAG Files Display */}
+        {skippedFiles.length > 0 && !isUploading && (
+          <div className="mt-4 p-4 border border-blue-500/30 rounded-unkey-md bg-blue-500/10">
+            <h3 className="font-semibold text-blue-400 mb-2">
+              RAG Indexing Skipped ({skippedFiles.length})
+            </h3>
+            <p className="text-sm text-blue-300 mb-2">
+              The following files already exist in OpenSearch and were not re-indexed, but were still processed for Direct context:
+            </p>
+            <div className="max-h-40 overflow-y-auto space-y-1">
+              {skippedFiles.map((filename, index) => (
+                <div key={index} className="text-sm text-blue-200 flex items-center gap-2">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span className="truncate">{filename}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-blue-300 mt-2">
+              Enable "Overwrite existing files" to re-index these files in OpenSearch.
+            </p>
           </div>
         )}
       </div>

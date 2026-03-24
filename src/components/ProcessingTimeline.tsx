@@ -31,23 +31,45 @@ interface ProcessingTimelineProps {
  */
 function getEventLabel(type: ProcessingEventType): string {
   const labels: Record<ProcessingEventType, string> = {
+    // Common events
     [ProcessingEventType.VALIDATION]: 'Input Validation',
     [ProcessingEventType.PROMPT_BUILDING]: 'Prompt Building',
     [ProcessingEventType.CONTEXT_CHECK]: 'Context Validation',
     [ProcessingEventType.TOKEN_ESTIMATION]: 'Token Estimation',
     [ProcessingEventType.API_CALL]: 'API Call',
     [ProcessingEventType.METRICS_CALCULATION]: 'Metrics Calculation',
+    
+    // RAG-specific (Query)
     [ProcessingEventType.FILTER_LOOKUP]: 'Filter Lookup',
     [ProcessingEventType.DOCUMENT_RETRIEVAL]: 'Document Retrieval',
     [ProcessingEventType.EMBEDDING_GENERATION]: 'Embedding Generation',
     [ProcessingEventType.VECTOR_SEARCH]: 'Vector Search',
     [ProcessingEventType.CONTEXT_ASSEMBLY]: 'Context Assembly',
+    
+    // RAG-specific (Upload)
+    [ProcessingEventType.FILTER_CREATION]: 'Filter Creation',
+    [ProcessingEventType.FILE_VALIDATION]: 'File Validation',
+    [ProcessingEventType.RAG_INDEXING]: 'RAG Indexing',
+    [ProcessingEventType.CHUNK_PROCESSING]: 'Chunk Processing',
+    [ProcessingEventType.EMBEDDING_UPLOAD]: 'Embedding Upload',
+    [ProcessingEventType.FILTER_UPDATE]: 'Filter Update',
+    
+    // Direct-specific (Query)
     [ProcessingEventType.CONTEXT_BUILDING]: 'Context Building',
     [ProcessingEventType.DOCUMENT_LOADING]: 'Document Loading',
+    
+    // Direct-specific (Upload)
+    [ProcessingEventType.DOCUMENT_PARSING]: 'Document Parsing',
+    [ProcessingEventType.CONTENT_VALIDATION]: 'Content Validation',
+    [ProcessingEventType.STORAGE_OPERATION]: 'Storage Operation',
+    
+    // Ollama-specific
     [ProcessingEventType.MODEL_DETECTION]: 'Model Detection',
     [ProcessingEventType.CONNECTION_CHECK]: 'Connection Check',
     [ProcessingEventType.STREAM_SETUP]: 'Stream Setup',
     [ProcessingEventType.RESPONSE_PARSING]: 'Response Parsing',
+    
+    // General overhead
     [ProcessingEventType.INITIALIZATION]: 'Initialization',
     [ProcessingEventType.CLEANUP]: 'Cleanup',
     [ProcessingEventType.ERROR_HANDLING]: 'Error Handling',

@@ -32,7 +32,8 @@ import type {
 import {
   ProcessingEventTracker,
   ProcessingEventType,
-  ProcessingEvent
+  ProcessingEvent,
+  PipelineType
 } from '@/types/processing-events';
 
 /**
@@ -64,6 +65,7 @@ export function getOpenRAGClient(): OpenRAGClient {
     openragClient = new OpenRAGClient({
       apiKey: process.env.OPENRAG_API_KEY,
       baseUrl: process.env.OPENRAG_URL,
+      timeout: 180000, // 3 minutes timeout to prevent premature aborts
     });
   }
   return openragClient;
@@ -643,7 +645,28 @@ export async function indexDocument(
     // Check if ingestion was successful
     // Result is IngestTaskStatus when wait=true
     const taskStatus = result as any; // Type assertion needed due to SDK union type
+    
+    // Log detailed ingestion results
+    console.log('\n╔════════════════════════════════════════════════════════════╗');
+    console.log('║         OpenRAG Document Ingestion Complete               ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log(`📄 Filename: ${path.basename(metadata.filename)}`);
+    console.log(`🆔 Document ID: ${documentId}`);
+    console.log(`📊 Ingestion Status: ${taskStatus.status}`);
+    console.log(`✅ Successful Files: ${taskStatus.successful_files || 0}`);
+    console.log(`❌ Failed Files: ${taskStatus.failed_files || 0}`);
+    console.log(`📦 Total Files Processed: ${(taskStatus.successful_files || 0) + (taskStatus.failed_files || 0)}`);
+    console.log(`⏱️  Processing Time: ${Math.round(performance.now() - startTime)}ms`);
+    console.log(`🔢 Estimated Tokens: ${tokenCount}`);
+    console.log(`📏 File Size: ${(file.size / 1024).toFixed(2)} KB`);
+    
     if (taskStatus.status !== 'completed') {
+      console.log('╔════════════════════════════════════════════════════════════╗');
+      console.log('║                  ❌ INGESTION FAILED                       ║');
+      console.log('╚════════════════════════════════════════════════════════════╝');
+      console.log(`Status: ${taskStatus.status}`);
+      console.log(`Failed Files: ${JSON.stringify(taskStatus.failed_files, null, 2)}`);
+      
       throw new RAGPipelineError(
         `Document ingestion failed with status: ${taskStatus.status}`,
         'INGESTION_ERROR',
@@ -654,6 +677,9 @@ export async function indexDocument(
         }
       );
     }
+    
+    console.log('✅ Verification: Document successfully indexed in OpenRAG');
+    console.log('════════════════════════════════════════════════════════════\n');
 
     // Use the provided knowledge filter ID or create/update one
     // If knowledgeFilterId is provided (from upload route), use it directly without additional operations
@@ -777,7 +803,7 @@ export async function query(
   console.log('Config:', JSON.stringify(config, null, 2));
   
   // Initialize event tracker with optional callback for real-time streaming
-  const eventTracker = new ProcessingEventTracker(eventCallback);
+  const eventTracker = new ProcessingEventTracker(eventCallback, PipelineType.RAG);
   
   try {
     // Track initialization

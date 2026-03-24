@@ -17,16 +17,29 @@ export enum ProcessingEventType {
   API_CALL = 'api_call',
   METRICS_CALCULATION = 'metrics_calculation',
   
-  // RAG-specific events
+  // RAG-specific events (Query)
   FILTER_LOOKUP = 'filter_lookup',
   DOCUMENT_RETRIEVAL = 'document_retrieval',
   EMBEDDING_GENERATION = 'embedding_generation',
   VECTOR_SEARCH = 'vector_search',
   CONTEXT_ASSEMBLY = 'context_assembly',
   
-  // Direct-specific events
+  // RAG-specific events (Upload)
+  FILTER_CREATION = 'filter_creation',
+  FILE_VALIDATION = 'file_validation',
+  RAG_INDEXING = 'rag_indexing',
+  CHUNK_PROCESSING = 'chunk_processing',
+  EMBEDDING_UPLOAD = 'embedding_upload',
+  FILTER_UPDATE = 'filter_update',
+  
+  // Direct-specific events (Query)
   CONTEXT_BUILDING = 'context_building',
   DOCUMENT_LOADING = 'document_loading',
+  
+  // Direct-specific events (Upload)
+  DOCUMENT_PARSING = 'document_parsing',
+  CONTENT_VALIDATION = 'content_validation',
+  STORAGE_OPERATION = 'storage_operation',
   
   // Ollama-specific events
   MODEL_DETECTION = 'model_detection',
@@ -116,17 +129,19 @@ export class ProcessingEventTracker {
   private events: ProcessingEvent[] = [];
   private startTime: number;
   private eventCallback?: EventCallback;
+  private pipelinePrefix?: string;
   
-  constructor(eventCallback?: EventCallback) {
+  constructor(eventCallback?: EventCallback, pipelineType?: PipelineType) {
     this.startTime = Date.now();
     this.eventCallback = eventCallback;
+    this.pipelinePrefix = pipelineType ? `${pipelineType}_` : '';
   }
   
   /**
    * Start tracking a new operation
    */
   startEvent(type: ProcessingEventType, operationName: string, metadata?: Record<string, any>): string {
-    const id = `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `${this.pipelinePrefix}${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const event: ProcessingEvent = {
       id,
       type,
