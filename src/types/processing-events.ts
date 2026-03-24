@@ -27,6 +27,7 @@ export enum ProcessingEventType {
   // RAG-specific events (Upload)
   FILTER_CREATION = 'filter_creation',
   FILE_VALIDATION = 'file_validation',
+  FILE_STATUS_CHECK = 'file_status_check',
   RAG_INDEXING = 'rag_indexing',
   CHUNK_PROCESSING = 'chunk_processing',
   EMBEDDING_UPLOAD = 'embedding_upload',

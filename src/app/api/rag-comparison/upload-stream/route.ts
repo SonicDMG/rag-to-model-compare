@@ -289,6 +289,48 @@ async function processRAGPipeline(
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.RAG);
 
   try {
+    // Check if file already exists in OpenSearch
+    const fileCheckId = tracker.startEvent(
+      ProcessingEventType.FILE_STATUS_CHECK,
+      'Checking if file already exists in OpenSearch'
+    );
+
+    let fileExists = false;
+    let existingDocument: any = null;
+
+    try {
+      const checkResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/rag-comparison/check-filename?filename=${encodeURIComponent(file.name)}`
+      );
+      
+      if (checkResponse.ok) {
+        const checkData = await checkResponse.json();
+        fileExists = checkData.exists;
+        existingDocument = checkData.document;
+        
+        tracker.completeEvent(fileCheckId, {
+          exists: fileExists,
+          filename: file.name,
+          ...(existingDocument && {
+            documentId: existingDocument.id,
+            uploadedAt: existingDocument.uploadedAt
+          })
+        });
+      } else {
+        tracker.completeEvent(fileCheckId, {
+          exists: false,
+          filename: file.name,
+          note: 'Check failed, proceeding with upload'
+        });
+      }
+    } catch (error) {
+      tracker.failEvent(
+        fileCheckId,
+        `File check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+      // Continue with upload even if check fails
+    }
+
     // File validation
     const validationId = tracker.startEvent(
       ProcessingEventType.FILE_VALIDATION,

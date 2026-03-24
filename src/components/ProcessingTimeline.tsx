@@ -49,6 +49,7 @@ function getEventLabel(type: ProcessingEventType): string {
     // RAG-specific (Upload)
     [ProcessingEventType.FILTER_CREATION]: 'Filter Creation',
     [ProcessingEventType.FILE_VALIDATION]: 'File Validation',
+    [ProcessingEventType.FILE_STATUS_CHECK]: 'File Status Check',
     [ProcessingEventType.RAG_INDEXING]: 'RAG Indexing',
     [ProcessingEventType.CHUNK_PROCESSING]: 'Chunk Processing',
     [ProcessingEventType.EMBEDDING_UPLOAD]: 'Embedding Upload',
