@@ -57,6 +57,84 @@ function validateFile(file: File): void {
 }
 
 /**
+ * Batch filter update mechanism for concurrent uploads
+ * Collects filenames and updates filter once after all uploads complete
+ */
+let pendingFilterUpdates: Set<string> = new Set();
+let filterUpdateTimer: NodeJS.Timeout | null = null;
+const FILTER_UPDATE_DELAY = 2000; // Wait 2 seconds after last file before updating filter
+
+/**
+ * Schedule a batch filter update with all pending filenames.
+ * Uses a debounce mechanism to wait for all concurrent uploads to complete.
+ *
+ * This prevents race conditions when multiple files are uploaded concurrently
+ * by batching all filename updates into a single atomic operation.
+ *
+ * @param filterId - The filter ID to update
+ * @param filename - The filename to add to the filter's data_sources
+ */
+async function scheduleBatchFilterUpdate(filterId: string, filename: string): Promise<void> {
+  // Add filename to pending updates
+  pendingFilterUpdates.add(filename);
+  console.log(`📎 [Stream] Scheduled filter update for: ${filename} (${pendingFilterUpdates.size} pending)`);
+  
+  // Clear existing timer
+  if (filterUpdateTimer) {
+    clearTimeout(filterUpdateTimer);
+  }
+  
+  // Set new timer - will execute after FILTER_UPDATE_DELAY ms of inactivity
+  filterUpdateTimer = setTimeout(async () => {
+    const filenamesToUpdate = Array.from(pendingFilterUpdates);
+    pendingFilterUpdates.clear();
+    filterUpdateTimer = null;
+    
+    if (filenamesToUpdate.length === 0) {
+      return;
+    }
+    
+    console.log(`\n📎 [Stream] Executing batch filter update for ${filenamesToUpdate.length} file(s)`);
+    console.log(`📎 [Stream] Files: [${filenamesToUpdate.join(', ')}]`);
+    
+    try {
+      const client = new OpenRAGClient({
+        apiKey: process.env.OPENRAG_API_KEY!,
+        baseUrl: process.env.OPENRAG_URL!,
+      });
+      
+      // Get current filter state
+      const filterResponse = await client.knowledgeFilters.get(filterId);
+      
+      if (filterResponse) {
+        const currentDataSources = filterResponse.queryData?.filters?.data_sources || [];
+        
+        // Merge new filenames with existing ones (avoid duplicates)
+        const allDataSources = [...new Set([...currentDataSources, ...filenamesToUpdate])];
+        
+        console.log(`📎 [Stream] Current data_sources: [${currentDataSources.join(', ')}]`);
+        console.log(`📎 [Stream] Adding: [${filenamesToUpdate.join(', ')}]`);
+        console.log(`📎 [Stream] Final data_sources: [${allDataSources.join(', ')}]`);
+        
+        // Single atomic update with all filenames
+        await client.knowledgeFilters.update(filterId, {
+          queryData: {
+            filters: {
+              data_sources: allDataSources
+            }
+          }
+        });
+        
+        console.log(`✅ [Stream] Batch filter update successful - ${filenamesToUpdate.length} new files, ${allDataSources.length} total`);
+      }
+    } catch (error) {
+      console.error(`❌ [Stream] Batch filter update failed:`, error);
+      // Don't throw - documents are already indexed
+    }
+  }, FILTER_UPDATE_DELAY);
+}
+
+/**
  * Ensure knowledge filter exists
  * Uses the same robust filter management as the main upload route
  */
@@ -413,6 +491,14 @@ async function processRAGPipeline(
     }
     
     tracker.completeEvent(storageId);
+
+    // Schedule batch filter update to associate this file with the Compare filter
+    // Uses debouncing to handle concurrent uploads efficiently
+    const baseFilename = path.basename(file.name);
+    scheduleBatchFilterUpdate(knowledgeFilterId, baseFilename).catch(err => {
+      console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
+      // Don't throw - document is already indexed and stored
+    });
 
     return {
       success: true,
