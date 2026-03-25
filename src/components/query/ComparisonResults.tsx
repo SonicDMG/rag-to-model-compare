@@ -75,7 +75,7 @@ export function ComparisonResults({
             processingEvents={ragProcessingEvents.length > 0 ? ragProcessingEvents : ragResult?.processingEvents}
           />
           
-          {/* Hybrid Section */}
+          {/* Hybrid Section - Shows Direct pipeline results (type: 'direct' from backend) */}
           <HybridSection
             directResult={directResult}
             isQuerying={isDirectQuerying}
@@ -84,7 +84,7 @@ export function ComparisonResults({
             processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
           />
           
-          {/* Direct Section */}
+          {/* Direct Section (Ollama) - Shows Ollama pipeline results (type: 'ollama' from backend) */}
           <DirectSection
             ollamaResult={ollamaResult}
             isQuerying={isOllamaQuerying}

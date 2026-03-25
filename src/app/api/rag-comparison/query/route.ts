@@ -318,8 +318,9 @@ export async function POST(request: NextRequest): Promise<Response> {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Hybrid pipeline (uses full context + can search filter's documents)
-        const hybridPromise = storedDoc
+        // Direct pipeline (Hybrid approach: GPT with full context + optional filter search)
+        // This is what the UI shows as "Direct Approach"
+        const directPromise = storedDoc
           ? hybridQuery(
               sanitizedDocumentId,
               storedDoc.content,
@@ -328,32 +329,38 @@ export async function POST(request: NextRequest): Promise<Response> {
               createEventCallback(PipelineType.DIRECT),
               storedDoc.filterId // Pass filterId for hybrid search capability
             )
-          : Promise.reject(new Error('Document not found in storage for Hybrid pipeline'));
+          : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
 
-        hybridPromise
-          .then((hybridResult) => {
-            console.log('🟢 Hybrid pipeline completed successfully');
+        directPromise
+          .then((directResult) => {
+            console.log('🟢 Direct pipeline (Hybrid) completed successfully');
+            console.log('Direct pipeline answer length:', directResult.answer?.length || 0);
             
             // Stream the final result
             const data = JSON.stringify({
               type: 'direct',
               success: true,
-              data: hybridResult
+              data: directResult
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           })
           .catch((error) => {
-            console.error('🟢 Hybrid pipeline failed:', error);
+            console.error('🟢 Direct pipeline (Hybrid) failed:', error);
+            console.error('Error details:', {
+              message: error instanceof Error ? error.message : 'Unknown error',
+              stack: error instanceof Error ? error.stack : undefined
+            });
             const data = JSON.stringify({
               type: 'direct',
               success: false,
-              error: error instanceof Error ? error.message : 'Hybrid pipeline failed'
+              error: error instanceof Error ? error.message : 'Direct pipeline failed'
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Direct pipeline (Ollama local LLM)
-        const directPromise = storedDoc
+        // Ollama pipeline (Local LLM with full context)
+        // This is what the UI shows as "OLLAMA Pipeline"
+        const ollamaPromise = storedDoc
           ? directQuery(
               sanitizedDocumentId,
               storedDoc.content,
@@ -362,26 +369,37 @@ export async function POST(request: NextRequest): Promise<Response> {
               createEventCallback(PipelineType.OLLAMA),
               undefined // images parameter
             )
-          : Promise.reject(new Error('Document not found for Direct pipeline'));
+          : Promise.reject(new Error('Document not found in storage for Ollama pipeline'));
 
-        directPromise
-          .then((directResult) => {
-            console.log('🟣 Direct pipeline completed successfully');
+        ollamaPromise
+          .then((ollamaResult) => {
+            console.log('🟣 Ollama pipeline completed successfully');
+            console.log('Ollama pipeline answer length:', ollamaResult.answer?.length || 0);
+            console.log('Ollama pipeline answer preview:', ollamaResult.answer?.substring(0, 200) || 'No answer');
             
             // Stream the final result
             const data = JSON.stringify({
               type: 'ollama',
               success: true,
-              data: directResult
+              data: ollamaResult
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           })
           .catch((error) => {
-            console.error('🟣 Direct pipeline failed:', error);
+            console.error('🟣 Ollama pipeline failed:', error);
+            console.error('Ollama error details:', {
+              message: error instanceof Error ? error.message : 'Unknown error',
+              stack: error instanceof Error ? error.stack : undefined,
+              ollamaConfig: {
+                model: ollamaConfig.model,
+                baseUrl: ollamaConfig.baseUrl,
+                temperature: ollamaConfig.temperature
+              }
+            });
             const data = JSON.stringify({
               type: 'ollama',
               success: false,
-              error: error instanceof Error ? error.message : 'Direct pipeline failed'
+              error: error instanceof Error ? error.message : 'Ollama pipeline failed'
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
@@ -390,8 +408,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         // Reuse the same promises to avoid duplicate execution
         await Promise.allSettled([
           ragPromise.catch(() => {}),
-          hybridPromise.catch(() => {}),
-          directPromise.catch(() => {})
+          directPromise.catch(() => {}),
+          ollamaPromise.catch(() => {})
         ]);
 
         console.log('\n========================================');

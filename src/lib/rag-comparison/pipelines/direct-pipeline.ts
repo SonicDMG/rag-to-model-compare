@@ -656,7 +656,7 @@ export async function query(
       { model: config.model, hasImages: !!(images && images.length > 0) }
     );
 
-    const response = await client.generate({
+    let response = await client.generate({
       model: config.model,
       prompt: fullPrompt,
       images: images,
@@ -667,6 +667,52 @@ export async function query(
         num_predict: config.maxTokens
       }
     });
+
+    // WORKAROUND: Ollama empty response issue
+    // Ollama occasionally returns empty responses on first attempt, particularly with:
+    // - Large context windows
+    // - Model initialization/loading
+    // - GPU memory allocation
+    //
+    // NOTE: Ollama's API is stateless - each call is independent with no context persistence.
+    // We must resend the full prompt on retry (not just the query).
+    //
+    // A brief delay (100ms) gives Ollama time to stabilize before retry, which empirically
+    // improves success rate without adding significant latency.
+    if (!response.response || response.response.trim().length === 0) {
+      console.warn('[Ollama Pipeline Query] ⚠️ Empty response detected on first attempt');
+      console.warn('[Ollama Pipeline Query] Retrying with full context (Ollama API is stateless)...');
+      
+      // Brief delay to allow Ollama to stabilize (reduced from 1000ms to 100ms)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Retry with full prompt - Ollama doesn't maintain context between calls
+      const retryStartTime = performance.now();
+      response = await client.generate({
+        model: config.model,
+        prompt: fullPrompt,
+        images: images,
+        options: {
+          temperature: config.temperature,
+          top_p: config.top_p,
+          top_k: config.top_k,
+          num_predict: config.maxTokens
+        }
+      });
+      const retryTime = Math.round(performance.now() - retryStartTime);
+      
+      if (debugLogging) {
+        console.log('[Ollama Pipeline Query] Retry completed in', retryTime, 'ms');
+        console.log('[Ollama Pipeline Query] Retry response length:', response.response?.length || 0);
+      }
+      
+      // Log if retry also failed
+      if (!response.response || response.response.trim().length === 0) {
+        console.error('[Ollama Pipeline Query] ❌ Retry also returned empty response');
+      } else {
+        console.log('[Ollama Pipeline Query] ✓ Retry successful');
+      }
+    }
 
     const generationEndTime = performance.now();
     const generationTime = Math.round(generationEndTime - generationStartTime);
