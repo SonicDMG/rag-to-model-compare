@@ -20,7 +20,7 @@ export function ModelConfigSection({
   availableModels = []
 }: ModelConfigSectionProps) {
   return (
-    <div className="bg-unkey-gray-900 border border-unkey-gray-700 rounded-unkey-lg shadow-unkey-card p-6">
+    <div className="bg-unkey-gray-900 border border-unkey-gray-700 rounded-unkey-lg shadow-unkey-card p-6 h-full flex flex-col">
       <h2 className="text-2xl font-bold mb-4 text-white">Model Configuration</h2>
       
       {/* Ollama Section */}
@@ -28,11 +28,11 @@ export function ModelConfigSection({
         <div className="flex items-center gap-3 mb-2">
           <h3 className="text-lg font-semibold text-white">Ollama</h3>
           {isOllamaAvailable ? (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30" style={{ transform: 'translateY(-5px)' }}>
               ● Available
             </span>
           ) : (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30" style={{ transform: 'translateY(-5px)' }}>
               ● Unavailable
             </span>
           )}

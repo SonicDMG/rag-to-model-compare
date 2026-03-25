@@ -45,22 +45,29 @@ export function IngestTab({
 }: IngestTabProps) {
   return (
     <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      {/* Model Configuration Section */}
-      <section className="animate-slideUp">
-        <ModelConfigSection
-          selectedModel={ollamaModel}
-          onModelChange={onOllamaModelChange}
-          isOllamaAvailable={isOllamaAvailable}
-          availableModels={availableOllamaModels}
-        />
-      </section>
+      {/* Upload and Model Configuration - 3 Column Layout */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-slideUp items-stretch">
+        {/* Document Upload - Takes 2 columns */}
+        <div className="lg:col-span-2 flex w-full">
+          <div className="w-full">
+            <DocumentUpload
+              onUploadComplete={onUploadComplete}
+              onUploadResult={onUploadResult}
+            />
+          </div>
+        </div>
 
-      {/* Document Upload Section */}
-      <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
-        <DocumentUpload
-          onUploadComplete={onUploadComplete}
-          onUploadResult={onUploadResult}
-        />
+        {/* Model Configuration - Takes 1 column on the right */}
+        <div className="lg:col-span-1 flex w-full">
+          <div className="w-full">
+            <ModelConfigSection
+              selectedModel={ollamaModel}
+              onModelChange={onOllamaModelChange}
+              isOllamaAvailable={isOllamaAvailable}
+              availableModels={availableOllamaModels}
+            />
+          </div>
+        </div>
       </section>
 
       {/* Upload Results - Side by Side */}
