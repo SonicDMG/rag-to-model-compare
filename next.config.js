@@ -48,7 +48,11 @@ const nextConfig = {
 
   // Performance optimizations
   experimental: {
-    optimizePackageImports: ['openrag-sdk', 'zod']
+    optimizePackageImports: ['openrag-sdk', 'zod'],
+    // Increase body size limit for large file uploads (150MB)
+    serverActions: {
+      bodySizeLimit: '150mb'
+    }
   }
 };
 

@@ -26,7 +26,9 @@ export const maxDuration = 300; // 5 minutes for large file uploads
  */
 const FileValidationSchema = z.object({
   name: z.string().min(1).max(255),
-  size: z.number().min(1).max(50 * 1024 * 1024), // 50MB max
+  size: z.number()
+    .min(1, 'File is empty')
+    .max(150 * 1024 * 1024, 'File size exceeds maximum allowed size of 150MB'), // 150MB max
   type: z.string().regex(/^[a-zA-Z0-9\/\-\+\.]+$/)
 });
 
@@ -271,21 +273,38 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
 
-        // Execute both pipelines independently
+        // Clone the file for each pipeline to ensure true independence
+        // This prevents one pipeline from consuming the file stream and blocking the other
+        const fileBuffer = await file.arrayBuffer();
+        const ragFile = new File([fileBuffer], file.name, { type: file.type });
+        const directFile = new File([fileBuffer], file.name, { type: file.type });
+
+        // Execute both pipelines independently with their own file copies
         const ragPromise = processRAGPipeline(
-          file,
+          ragFile,
           documentId,
           knowledgeFilterId,
           ragEventCallback
         );
 
         const directPromise = processDirectPipeline(
-          file,
+          directFile,
           documentId,
           directEventCallback
         );
 
-        // Handle RAG completion
+        // Track completion count to close stream after both pipelines finish
+        let completedCount = 0;
+        const checkAndClose = () => {
+          completedCount++;
+          if (completedCount === 2) {
+            // Both pipelines have sent their completion events
+            // Close the stream after a brief delay to ensure all events are flushed
+            setTimeout(() => controller.close(), 100);
+          }
+        };
+
+        // Handle RAG completion - completely independent
         ragPromise
           .then((result) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -293,6 +312,7 @@ export async function POST(request: NextRequest): Promise<Response> {
               pipeline: PipelineType.RAG,
               result
             })}\n\n`));
+            checkAndClose();
           })
           .catch((error) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -300,9 +320,10 @@ export async function POST(request: NextRequest): Promise<Response> {
               pipeline: PipelineType.RAG,
               error: error instanceof Error ? error.message : 'Unknown error'
             })}\n\n`));
+            checkAndClose();
           });
 
-        // Handle Direct completion
+        // Handle Direct completion - completely independent
         directPromise
           .then((result) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -310,6 +331,7 @@ export async function POST(request: NextRequest): Promise<Response> {
               pipeline: PipelineType.DIRECT,
               result
             })}\n\n`));
+            checkAndClose();
           })
           .catch((error) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -317,21 +339,8 @@ export async function POST(request: NextRequest): Promise<Response> {
               pipeline: PipelineType.DIRECT,
               error: error instanceof Error ? error.message : 'Unknown error'
             })}\n\n`));
+            checkAndClose();
           });
-
-        // Wait for both pipelines to complete
-        const results = await Promise.allSettled([ragPromise, directPromise]);
-
-        // Send final completion event
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-          type: 'upload_complete',
-          documentId,
-          filename: file.name,
-          ragSuccess: results[0].status === 'fulfilled',
-          directSuccess: results[1].status === 'fulfilled'
-        })}\n\n`));
-
-        controller.close();
       }
     });
 
@@ -534,9 +543,8 @@ async function processRAGPipeline(
       'Storing RAG metadata'
     );
 
-    // Check if Direct has already stored content
-    const existingDoc = getDocument(documentId);
-    
+    // RAG pipeline stores its own metadata independently
+    // No coordination with Direct pipeline
     const storageMetadata: DocumentMetadata = {
       filename: file.name,
       size: file.size,
@@ -547,15 +555,10 @@ async function processRAGPipeline(
       strategy: 'fixed'
     };
 
-    if (existingDoc && existingDoc.content) {
-      // Direct completed first - preserve its content and add filterId
-      storeDocument(documentId, existingDoc.content, storageMetadata, ragResult.filterId);
-      console.log(`[RAG] ✅ Added filterId to existing content (${existingDoc.content.length} chars)`);
-    } else {
-      // Direct hasn't completed yet - store with empty content and filterId
-      storeDocument(documentId, '', storageMetadata, ragResult.filterId);
-      console.log(`[RAG] ✅ Stored filterId, content will be added by Direct`);
-    }
+    // Store RAG metadata with filterId, empty content
+    // Direct pipeline will handle its own storage independently
+    storeDocument(documentId, '', storageMetadata, ragResult.filterId);
+    console.log(`[RAG] ✅ Stored RAG metadata with filterId: ${ragResult.filterId}`);
     
     tracker.completeEvent(storageId);
 
@@ -569,6 +572,7 @@ async function processRAGPipeline(
 
     return {
       success: true,
+      documentId: documentId,
       chunkCount: ragResult.chunkCount,
       tokenCount: ragResult.tokenCount,
       indexTime: ragResult.indexTime,
@@ -744,39 +748,28 @@ async function processDirectPipeline(
       'Storing Direct content'
     );
 
-    // Check if RAG has already stored metadata with filterId
-    const existingDoc = getDocument(documentId);
+    // Direct pipeline stores its own content independently
+    // No coordination with RAG pipeline
+    const storageMetadata: DocumentMetadata = {
+      filename: file.name,
+      size: file.size,
+      mimeType: file.type || 'text/plain',
+      uploadedAt: new Date(),
+      chunkCount: 0,
+      totalTokens: directResult.tokenCount,
+      strategy: 'fixed'
+    };
     
-    if (existingDoc && existingDoc.filterId) {
-      // RAG completed first - update with content while preserving filterId
-      const updatedMetadata: DocumentMetadata = {
-        ...existingDoc.metadata,
-        totalTokens: directResult.tokenCount,
-      };
-      
-      storeDocument(documentId, content, updatedMetadata, existingDoc.filterId);
-      console.log(`[Direct] ✅ Stored content (${content.length} chars) with filterId: ${existingDoc.filterId}`);
-    } else {
-      // RAG hasn't completed yet or failed - store content without filterId
-      // RAG will update the filterId when it completes
-      const storageMetadata: DocumentMetadata = {
-        filename: file.name,
-        size: file.size,
-        mimeType: file.type || 'text/plain',
-        uploadedAt: new Date(),
-        chunkCount: 0,
-        totalTokens: directResult.tokenCount,
-        strategy: 'fixed'
-      };
-      
-      storeDocument(documentId, content, storageMetadata, existingDoc?.filterId);
-      console.log(`[Direct] ✅ Stored content (${content.length} chars), filterId will be added by RAG`);
-    }
+    // Store Direct content without filterId
+    // RAG pipeline handles its own filterId independently
+    storeDocument(documentId, content, storageMetadata);
+    console.log(`[Direct] ✅ Stored content (${content.length} chars)`);
     
     tracker.completeEvent(storageId);
 
     return {
       success: true,
+      documentId: documentId,
       tokenCount: directResult.tokenCount,
       loadTime: directResult.loadTime,
       withinLimit: directResult.withinLimit,

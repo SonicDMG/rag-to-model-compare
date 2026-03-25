@@ -169,8 +169,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                 if (done) {
                   // Stream complete - check if both pipelines finished
                   if (ragCompleted || directCompleted) {
-                    // Generate a document ID based on timestamp (backend doesn't send one)
-                    const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                    // Use documentId from backend (whichever pipeline completed successfully)
+                    const documentId = ragResult?.documentId || directResult?.documentId || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
                     
                     // Create upload result data
                     const uploadResultData: UploadResultData = {

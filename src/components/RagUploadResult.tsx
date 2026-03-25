@@ -12,9 +12,16 @@ interface RagUploadResultProps {
   hasImages?: boolean;
   imageCount?: number;
   fileSize?: number;
+  skipped?: boolean;
+  existingDocument?: {
+    id: string;
+    filename: string;
+    uploadedAt?: string;
+  };
+  message?: string;
 }
 
-export function RagUploadResult({ status, tokenCount, indexTime, processedText, error, hasImages, imageCount, fileSize }: RagUploadResultProps) {
+export function RagUploadResult({ status, tokenCount, indexTime, processedText, error, hasImages, imageCount, fileSize, skipped, existingDocument, message }: RagUploadResultProps) {
   const [showText, setShowText] = useState(false);
 
   if (!status) return null;
@@ -26,12 +33,61 @@ export function RagUploadResult({ status, tokenCount, indexTime, processedText, 
     <div className={`
       p-4 rounded-unkey-lg border shadow-unkey-card flex flex-col min-h-[280px]
       ${status === 'success'
-        ? 'bg-success/10 border-success/20'
+        ? skipped ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-success/10 border-success/20'
         : 'bg-red-500/10 border-red-500/20'
       }
     `}>
       <h3 className="text-lg font-bold text-white mb-3">RAG Approach Results</h3>
-      {status === 'success' ? (
+      {status === 'success' && skipped ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm font-medium text-yellow-400">File Already Indexed - Skipped</span>
+          </div>
+          
+          <div className="ml-7 space-y-2">
+            <p className="text-sm text-unkey-gray-300">
+              {message || 'This file has already been indexed in OpenSearch.'}
+            </p>
+            
+            {existingDocument && (
+              <div className="mt-3 p-3 bg-unkey-gray-900/50 border border-yellow-500/30 rounded-unkey-md space-y-2">
+                <p className="text-sm font-semibold text-unkey-gray-200">Existing Document:</p>
+                <div className="space-y-1 text-sm text-unkey-gray-300">
+                  <p className="flex items-start gap-2">
+                    <span className="text-unkey-gray-400">•</span>
+                    <span>
+                      <span className="font-medium text-unkey-gray-200">Document ID:</span> {existingDocument.id}
+                    </span>
+                  </p>
+                  <p className="flex items-start gap-2">
+                    <span className="text-unkey-gray-400">•</span>
+                    <span>
+                      <span className="font-medium text-unkey-gray-200">Filename:</span> {existingDocument.filename}
+                    </span>
+                  </p>
+                  {existingDocument.uploadedAt && (
+                    <p className="flex items-start gap-2">
+                      <span className="text-unkey-gray-400">•</span>
+                      <span>
+                        <span className="font-medium text-unkey-gray-200">Originally Uploaded:</span> {new Date(existingDocument.uploadedAt).toLocaleString()}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <div className="mt-3 p-2 bg-blue/10 border border-blue/20 rounded-unkey-md">
+              <p className="text-xs text-blue">
+                💡 <span className="font-semibold">Tip:</span> To re-index this file, delete it from OpenSearch first or rename the file before uploading.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : status === 'success' ? (
         <div className="flex flex-col flex-grow">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
