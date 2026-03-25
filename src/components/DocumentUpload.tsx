@@ -156,11 +156,10 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
           }
 
           let buffer = '';
-          let documentId: string | null = null;
           let ragResult: any = null;
           let directResult: any = null;
-          let ragSuccess = false;
-          let directSuccess = false;
+          let ragCompleted = false;
+          let directCompleted = false;
 
           const processStream = async () => {
             try {
@@ -168,16 +167,19 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                 const { done, value } = await reader.read();
                 
                 if (done) {
-                  // Stream complete
-                  if (documentId) {
+                  // Stream complete - check if both pipelines finished
+                  if (ragCompleted || directCompleted) {
+                    // Generate a document ID based on timestamp (backend doesn't send one)
+                    const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                    
                     // Create upload result data
                     const uploadResultData: UploadResultData = {
-                      ragStatus: ragSuccess ? 'success' : 'error',
+                      ragStatus: ragCompleted && ragResult?.success ? 'success' : 'error',
                       ragChunks: ragResult?.chunkCount,
                       ragTokens: ragResult?.tokenCount,
                       ragIndexTime: ragResult?.indexTime,
                       ragError: ragResult?.error,
-                      directStatus: directSuccess ? 'success' : 'error',
+                      directStatus: directCompleted && directResult?.success ? 'success' : 'error',
                       directTokens: directResult?.tokenCount,
                       directLoadTime: directResult?.loadTime,
                       directWarnings: directResult?.warnings,
@@ -186,6 +188,9 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                       imageCount: directResult?.imageCount,
                       fileSize: file.size,
                     };
+
+                    const ragSuccess = ragCompleted && ragResult?.success;
+                    const directSuccess = directCompleted && directResult?.success;
 
                     // Call callbacks
                     if (onUploadComplete && (ragSuccess || directSuccess)) {
@@ -272,7 +277,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                         
                         if (pipeline === PipelineType.RAG) {
                           ragResult = result;
-                          ragSuccess = true;
+                          ragCompleted = true;
                           setStreamingProgress(prev => prev ? {
                             ...prev,
                             ragProgress: {
@@ -283,7 +288,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                           } : prev);
                         } else if (pipeline === PipelineType.DIRECT) {
                           directResult = result;
-                          directSuccess = true;
+                          directCompleted = true;
                           setStreamingProgress(prev => prev ? {
                             ...prev,
                             directProgress: {
@@ -298,6 +303,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                         const error = data.error;
                         
                         if (pipeline === PipelineType.RAG) {
+                          ragCompleted = true;
+                          ragResult = { success: false, error };
                           setStreamingProgress(prev => prev ? {
                             ...prev,
                             ragProgress: {
@@ -307,6 +314,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                             },
                           } : prev);
                         } else if (pipeline === PipelineType.DIRECT) {
+                          directCompleted = true;
+                          directResult = { success: false, error };
                           setStreamingProgress(prev => prev ? {
                             ...prev,
                             directProgress: {
@@ -316,10 +325,6 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                             },
                           } : prev);
                         }
-                      } else if (data.type === 'upload_complete') {
-                        documentId = data.documentId;
-                        ragSuccess = data.ragSuccess;
-                        directSuccess = data.directSuccess;
                       } else if (data.type === 'error') {
                         throw new Error(data.error);
                       }
