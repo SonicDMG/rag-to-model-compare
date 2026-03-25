@@ -555,10 +555,15 @@ async function processRAGPipeline(
       strategy: 'fixed'
     };
 
-    // Store RAG metadata with filterId, empty content
-    // Direct pipeline will handle its own storage independently
-    storeDocument(documentId, '', storageMetadata, ragResult.filterId);
+    // Store RAG metadata with filterId
+    // Check if Direct pipeline already stored content, preserve it
+    const existingDoc = getDocument(documentId);
+    const contentToStore = existingDoc?.content || '';
+    storeDocument(documentId, contentToStore, storageMetadata, ragResult.filterId);
     console.log(`[RAG] ✅ Stored RAG metadata with filterId: ${ragResult.filterId}`);
+    if (existingDoc?.content) {
+      console.log(`[RAG] ℹ️  Preserved existing content from Direct pipeline (${existingDoc.content.length} chars)`);
+    }
     
     tracker.completeEvent(storageId);
 
@@ -760,10 +765,14 @@ async function processDirectPipeline(
       strategy: 'fixed'
     };
     
-    // Store Direct content without filterId
-    // RAG pipeline handles its own filterId independently
-    storeDocument(documentId, content, storageMetadata);
+    // Store Direct content, preserving filterId if RAG already stored it
+    const existingDoc = getDocument(documentId);
+    const filterIdToStore = existingDoc?.filterId;
+    storeDocument(documentId, content, storageMetadata, filterIdToStore);
     console.log(`[Direct] ✅ Stored content (${content.length} chars)`);
+    if (filterIdToStore) {
+      console.log(`[Direct] ℹ️  Preserved filterId from RAG pipeline: ${filterIdToStore}`);
+    }
     
     tracker.completeEvent(storageId);
 
