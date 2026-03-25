@@ -28,10 +28,10 @@ export function DirectModelSection({
       {/* Section Header */}
       <div className="bg-gradient-to-r from-blue/20 to-blue/10 rounded-unkey-lg p-6 border border-blue/30 h-[140px] flex flex-col justify-center shadow-unkey-card">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Direct Context Approach
+          Hybrid Approach
         </h2>
         <p className="text-unkey-gray-200">
-          Full document is provided directly in the context window without chunking or retrieval
+          Full document context with optional retrieval search capability
         </p>
       </div>
 

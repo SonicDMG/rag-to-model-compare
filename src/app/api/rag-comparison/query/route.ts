@@ -318,14 +318,15 @@ export async function POST(request: NextRequest): Promise<Response> {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Direct pipeline
+        // Direct pipeline (Hybrid approach - uses full context + can search filter's documents)
         const directPromise = storedDoc
           ? directQuery(
               sanitizedDocumentId,
               storedDoc.content,
               sanitizedQuery,
               directConfig,
-              createEventCallback(PipelineType.DIRECT)
+              createEventCallback(PipelineType.DIRECT),
+              storedDoc.filterId // Pass filterId for hybrid search capability
             )
           : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
 

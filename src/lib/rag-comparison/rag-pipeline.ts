@@ -433,6 +433,8 @@ export async function createKnowledgeFilter(
       name: filterName,
       description: `Filter for document comparison`,
       queryData: {
+        limit: 5,
+        scoreThreshold: 0.5,
         filters: {
           data_sources: [filename] // Start with this document's filename
         }
@@ -870,16 +872,25 @@ export async function query(
     }
     
     const filterId = existingFilters[0].id;
+    const filter = existingFilters[0];
+    
+    // Extract limit and scoreThreshold from filter configuration
+    // Filter configuration takes precedence over request parameters
+    const filterLimit = filter.queryData?.limit ?? config.topK;
+    const filterScoreThreshold = filter.queryData?.scoreThreshold ?? 0.5;
+    
     eventTracker.completeEvent(filterLookupEventId, { filterId });
     console.log('Using knowledge filter ID:', filterId);
-    console.log('Filter data sources:', existingFilters[0].queryData?.filters?.data_sources);
+    console.log('Filter data sources:', filter.queryData?.filters?.data_sources);
+    console.log('Filter limit (from config):', filterLimit);
+    console.log('Filter scoreThreshold (from config):', filterScoreThreshold);
 
     // Track RAG query time (single API call performs both retrieval and generation)
     const retrievalStartTime = performance.now();
     const retrievalEventId = eventTracker.startEvent(
       ProcessingEventType.VECTOR_SEARCH,
       'RAG Query (Retrieval + Generation)',
-      { topK: config.topK, filterId, model: config.model }
+      { topK: filterLimit, filterId, model: config.model }
     );
     console.log('OpenRAG client obtained');
     console.log('[DEBUG] Client config:', {
@@ -891,10 +902,11 @@ export async function query(
 
     // Execute RAG query using OpenRAG SDK chat method
     // This single API call performs both vector search/retrieval AND generation
+    // Use limit and scoreThreshold from filter configuration
     const chatRequest = {
       message: sanitizedQuery,
-      limit: config.topK,
-      scoreThreshold: 0.5,
+      limit: filterLimit,
+      scoreThreshold: filterScoreThreshold,
       stream: false as const,
       filterId: filterId,
     };

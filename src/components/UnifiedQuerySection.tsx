@@ -99,7 +99,7 @@ export function UnifiedQuerySection({
               aria-label="Query input"
             />
             <p className="mt-1 text-sm text-unkey-gray-400">
-              This query will be sent to RAG, Direct Context, and Ollama (if available) simultaneously
+              This query will be sent to RAG, Hybrid, and Direct Context (if available) simultaneously
             </p>
           </div>
 

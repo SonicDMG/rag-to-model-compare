@@ -48,7 +48,7 @@ export function OllamaSection({
       <div className="bg-gradient-to-r from-purple-500/20 to-purple-500/10 rounded-unkey-lg p-6 border border-purple-500/30 h-[140px] flex flex-col justify-center shadow-unkey-card">
         <div className="flex items-center gap-3 mb-2">
           <h2 className="text-2xl font-bold text-white">
-            Ollama Approach
+            Direct Context Approach
           </h2>
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
             Native API

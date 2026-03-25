@@ -198,7 +198,7 @@ export function MetricsDisplay({
             />
             
             <ContextWindowBar
-              label="Direct Approach"
+              label="Hybrid Approach"
               percentage={metrics.contextWindow.directUsage}
               isWinner={directContextWins && !contextTie}
             />

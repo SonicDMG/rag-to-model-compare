@@ -38,7 +38,7 @@ export function DirectUploadResult({ status, tokenCount, loadTime, warnings, pro
         : 'bg-red-500/10 border-red-500/20'
       }
     `}>
-      <h3 className="text-lg font-bold text-white mb-3">Direct Approach Results</h3>
+      <h3 className="text-lg font-bold text-white mb-3">Hybrid Approach Results</h3>
       {status === 'success' && skipped ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2">

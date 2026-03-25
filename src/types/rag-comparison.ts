@@ -263,14 +263,14 @@ export interface DirectResult {
 }
 
 /**
- * Comparison metrics between RAG, direct, and Ollama approaches
+ * Comparison metrics between RAG, hybrid, and Ollama approaches
  */
 export interface ComparisonMetrics {
   /** Speed comparison */
   speed: {
     /** RAG total time (retrieval + generation) in ms */
     ragTotal: number;
-    /** Direct generation time in ms */
+    /** Hybrid generation time in ms */
     directTotal: number;
     /** Ollama generation time in ms (optional) */
     ollamaTotal?: number;
@@ -281,7 +281,7 @@ export interface ComparisonMetrics {
   tokens: {
     /** Tokens used by RAG approach */
     rag: number;
-    /** Tokens used by direct approach */
+    /** Tokens used by hybrid approach */
     direct: number;
     /** Tokens used by Ollama approach (optional) */
     ollama?: number;
@@ -292,7 +292,7 @@ export interface ComparisonMetrics {
   cost: {
     /** Cost of RAG approach in USD */
     rag: number;
-    /** Cost of direct approach in USD */
+    /** Cost of hybrid approach in USD */
     direct: number;
     /** Cost of Ollama approach in USD (optional, always $0) */
     ollama?: number;
@@ -303,7 +303,7 @@ export interface ComparisonMetrics {
   contextWindow: {
     /** Percentage used by RAG approach */
     ragUsage: number;
-    /** Percentage used by direct approach */
+    /** Percentage used by hybrid approach */
     directUsage: number;
     /** Percentage used by Ollama approach (optional) */
     ollamaUsage?: number;
@@ -314,7 +314,7 @@ export interface ComparisonMetrics {
   quality?: {
     /** RAG answer quality score (0-1) */
     ragScore?: number;
-    /** Direct answer quality score (0-1) */
+    /** Hybrid answer quality score (0-1) */
     directScore?: number;
     /** Ollama answer quality score (0-1) */
     ollamaScore?: number;
@@ -324,12 +324,12 @@ export interface ComparisonMetrics {
 }
 
 /**
- * Complete comparison result between RAG, direct, and Ollama approaches
+ * Complete comparison result between RAG, hybrid, and Ollama approaches
  */
 export interface ComparisonResult {
   /** RAG approach result */
   rag: RAGResult;
-  /** Direct approach result */
+  /** Hybrid approach result */
   direct: DirectResult;
   /** Ollama approach result (optional) */
   ollama?: OllamaResult;

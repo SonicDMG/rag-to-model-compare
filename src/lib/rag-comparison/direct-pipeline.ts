@@ -35,7 +35,7 @@ import type {
   DirectConfig,
   DirectResult
 } from '@/types/rag-comparison';
-import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
+import { buildPrompt, buildHybridPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
   ProcessingEventType,
@@ -741,7 +741,8 @@ export async function query(
   content: string,
   query: string,
   config: DirectConfig,
-  eventCallback?: (event: ProcessingEvent) => void
+  eventCallback?: (event: ProcessingEvent) => void,
+  filterId?: string
 ): Promise<DirectResult> {
   // Initialize event tracker with optional callback for real-time streaming
   const eventTracker = new ProcessingEventTracker(eventCallback, PipelineType.DIRECT);
@@ -853,11 +854,41 @@ export async function query(
     );
     
     const client = getOpenRAGClient();
-    const fullMessage = buildPrompt(sanitizedContent, sanitizedQuery);
+    const fullMessage = buildHybridPrompt(sanitizedContent, sanitizedQuery);
     
     eventTracker.completeEvent(promptBuildEventId, {
       messageLength: fullMessage.length
     });
+
+    // Fetch filter configuration if filterId is provided
+    let filterLimit = 0;
+    let filterScoreThreshold = 0.99;
+    
+    if (filterId) {
+      try {
+        console.log('[Direct Pipeline Query] Fetching filter configuration for ID:', filterId);
+        const filter = await client.knowledgeFilters.get(filterId);
+        
+        if (filter && filter.queryData) {
+          // Use filter's configuration if available
+          filterLimit = filter.queryData.limit ?? 0;
+          filterScoreThreshold = filter.queryData.scoreThreshold ?? 0.99;
+          
+          console.log('[Direct Pipeline Query] Filter configuration applied:');
+          console.log('  - Filter name:', filter.name);
+          console.log('  - Limit:', filterLimit);
+          console.log('  - Score threshold:', filterScoreThreshold);
+          console.log('  - Data sources:', filter.queryData.filters?.data_sources);
+        } else {
+          console.log('[Direct Pipeline Query] Filter found but no queryData, using defaults');
+        }
+      } catch (error) {
+        console.warn('[Direct Pipeline Query] Failed to fetch filter configuration:', error);
+        console.log('[Direct Pipeline Query] Using default values: limit=0, scoreThreshold=0.99');
+      }
+    } else {
+      console.log('[Direct Pipeline Query] No filterId provided, using defaults');
+    }
 
     // Log the full message being sent to LLM
     console.log('[Direct Pipeline Query] Full message length:', fullMessage.length);
@@ -869,16 +900,18 @@ export async function query(
     const generationStartTime = performance.now();
     const apiCallEventId = eventTracker.startEvent(
       ProcessingEventType.API_CALL,
-      'Call OpenRAG API with full document context',
-      { model: config.model }
+      'Call OpenRAG API with full document context and filter',
+      { model: config.model, filterId: filterId || 'none' }
     );
     
     let responseData: ChatResponse;
     try {
+      // Use filter configuration values and pass filterId for hybrid search
       responseData = await client.chat.create({
         message: fullMessage,
-        limit: 0,
-        scoreThreshold: 0.99
+        limit: filterLimit,
+        scoreThreshold: filterScoreThreshold,
+        filterId: filterId
       });
       console.log('[Direct Pipeline Query] ✅ LLM response received');
       
