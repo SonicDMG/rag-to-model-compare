@@ -21,6 +21,7 @@ interface DirectSectionProps {
   onModelChange?: (model: string) => void;
   isOllamaAvailable?: boolean;
   processingEvents?: ProcessingEvent[];
+  processedContent?: string;
 }
 
 export function DirectSection({
@@ -32,9 +33,11 @@ export function DirectSection({
   availableModels,
   onModelChange,
   isOllamaAvailable = true,
-  processingEvents
+  processingEvents,
+  processedContent
 }: DirectSectionProps) {
   const [recheckAttempted, setRecheckAttempted] = useState(false);
+  const [showProcessedText, setShowProcessedText] = useState(false);
 
   const handleRecheckOllama = async () => {
     setRecheckAttempted(true);
@@ -306,6 +309,33 @@ export function DirectSection({
               pipelineType="ollama"
               documentTokens={documentTokens}
             />
+          )}
+
+          {/* Processed Content Display */}
+          {processedContent && (
+            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
+              <button
+                onClick={() => setShowProcessedText(!showProcessedText)}
+                className="flex items-center gap-2 text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform ${showProcessedText ? 'rotate-90' : ''}`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                {showProcessedText ? 'Hide processed text' : 'Show processed text'}
+              </button>
+              
+              {showProcessedText && (
+                <div className="mt-4 p-4 bg-unkey-gray-800 border border-purple-500/20 rounded-unkey-md max-h-96 overflow-auto">
+                  <pre className="text-xs font-mono text-unkey-gray-200 whitespace-pre-wrap break-words">
+                    {processedContent}
+                  </pre>
+                </div>
+              )}
+            </div>
           )}
         </section>
       )}

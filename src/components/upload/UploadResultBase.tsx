@@ -226,7 +226,7 @@ export function UploadResultBase({
           </div>
           
           {/* Collapsible processed text section - pushed to bottom */}
-          {processedText && (
+          {status === 'success' && (
             <div className="mt-auto pt-3 ml-7">
               <button
                 onClick={() => setShowText(!showText)}
@@ -244,9 +244,15 @@ export function UploadResultBase({
               
               {showText && (
                 <div className={`mt-2 p-3 bg-unkey-gray-900 border ${successBorder} rounded-unkey-md max-h-96 overflow-auto`}>
-                  <pre className="text-xs font-mono text-unkey-gray-200 whitespace-pre-wrap break-words">
-                    {processedText}
-                  </pre>
+                  {processedText ? (
+                    <pre className="text-xs font-mono text-unkey-gray-200 whitespace-pre-wrap break-words">
+                      {processedText}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-yellow-400">
+                      ⚠️ Processed text not available. Check console logs for details.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

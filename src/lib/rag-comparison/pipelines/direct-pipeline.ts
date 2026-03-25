@@ -1,4 +1,4 @@
-/**
+ /**
  * Ollama Pipeline Implementation
  *
  * Implements document loading and query execution using Ollama's local LLM API.
@@ -597,16 +597,40 @@ export async function query(
     }
     
     if (!contextCheck.withinLimit) {
+      // Ollama often fails silently when context is exceeded
+      // Be strict about context limits to avoid silent failures
       eventTracker.failEvent(contextCheckEventId, 'Context exceeds model limit');
+      
+      const errorMessage = [
+        `Context exceeds model's limit: ${contextCheck.totalTokens.toLocaleString()} tokens > ${contextCheck.contextWindow.toLocaleString()} tokens`,
+        ``,
+        `⚠️ Note: Ollama often fails silently when context limits are exceeded.`,
+        ``,
+        `Suggestions:`,
+        `1. Use a model with larger context window (e.g., models with 128K+ context)`,
+        `2. Split your document into smaller sections`,
+        `3. Use the RAG approach instead, which handles large documents by chunking`,
+        ``,
+        `Current usage: ${contextCheck.usage.toFixed(1)}% of context window`
+      ].join('\n');
+      
       throw new OllamaPipelineError(
-        `Content exceeds model context window: ${contextCheck.totalTokens.toLocaleString()} tokens > ${contextCheck.contextWindow.toLocaleString()} tokens`,
+        errorMessage,
         'CONTEXT_LIMIT_EXCEEDED',
         {
           totalTokens: contextCheck.totalTokens,
           contextWindow: contextCheck.contextWindow,
-          usage: contextCheck.usage
+          usage: contextCheck.usage,
+          model: config.model
         }
       );
+    }
+    
+    // Warn if using >80% of context window (Ollama may struggle)
+    if (contextCheck.usage > 80) {
+      console.warn(`[Ollama Pipeline Query] ⚠️ WARNING: Using ${contextCheck.usage.toFixed(1)}% of context window`);
+      console.warn(`[Ollama Pipeline Query] Ollama may fail silently or produce poor results at high context usage`);
+      console.warn(`[Ollama Pipeline Query] Consider using a model with larger context or the RAG approach`);
     }
     
     eventTracker.completeEvent(contextCheckEventId, {

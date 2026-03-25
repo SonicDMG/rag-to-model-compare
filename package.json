@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "canvas": "^3.2.1",
+    "js-tiktoken": "^1.0.21",
     "mammoth": "^1.11.0",
     "next": "^16.0.0",
     "openrag-sdk": "^0.1.3",

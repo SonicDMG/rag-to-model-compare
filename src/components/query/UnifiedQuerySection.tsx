@@ -24,6 +24,7 @@ interface UnifiedQuerySectionProps {
   isDirectQuerying?: boolean;
   directError?: string | null;
   documentTokens?: number;
+  processedContent?: string;
   // Ollama props from parent
   ollamaModel?: string;
   availableOllamaModels?: OllamaModelInfo[];
@@ -48,6 +49,7 @@ export function UnifiedQuerySection({
   isDirectQuerying,
   directError,
   documentTokens,
+  processedContent,
   ollamaModel = 'llama3.2',
   availableOllamaModels = [],
   isOllamaAvailable = false,
@@ -210,6 +212,7 @@ export function UnifiedQuerySection({
           onOllamaModelChange={undefined}
           isOllamaAvailable={isOllamaAvailable}
           documentTokens={documentTokens}
+          processedContent={processedContent}
           ragProcessingEvents={ragProcessingEvents}
           directProcessingEvents={directProcessingEvents}
           ollamaProcessingEvents={ollamaProcessingEvents}

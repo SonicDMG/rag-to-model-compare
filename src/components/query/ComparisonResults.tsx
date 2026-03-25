@@ -34,6 +34,7 @@ interface ComparisonResultsProps {
   
   // Shared props
   documentTokens?: number;
+  processedContent?: string;
   
   // Real-time processing events
   ragProcessingEvents?: ProcessingEvent[];
@@ -56,6 +57,7 @@ export function ComparisonResults({
   onOllamaModelChange,
   isOllamaAvailable,
   documentTokens,
+  processedContent,
   ragProcessingEvents = [],
   directProcessingEvents = [],
   ollamaProcessingEvents = []
@@ -72,6 +74,7 @@ export function ComparisonResults({
             isQuerying={isRagQuerying}
             error={ragError}
             documentTokens={documentTokens}
+            processedContent={processedContent}
             processingEvents={ragProcessingEvents.length > 0 ? ragProcessingEvents : ragResult?.processingEvents}
           />
           
@@ -81,6 +84,7 @@ export function ComparisonResults({
             isQuerying={isDirectQuerying}
             error={directError}
             documentTokens={documentTokens}
+            processedContent={processedContent}
             processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
           />
           
@@ -90,6 +94,7 @@ export function ComparisonResults({
             isQuerying={isOllamaQuerying}
             error={ollamaError}
             documentTokens={documentTokens}
+            processedContent={processedContent}
             selectedModel={ollamaModel}
             availableModels={availableOllamaModels}
             onModelChange={onOllamaModelChange}

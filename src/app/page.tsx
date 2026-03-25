@@ -403,6 +403,7 @@ export default function Home() {
               isDirectQuerying={isDirectQuerying}
               directError={directError}
               documentTokens={uploadResult?.ragTokens}
+              processedContent={uploadResult?.directProcessedText}
               ollamaModel={ollamaModel}
               availableOllamaModels={availableOllamaModels}
               isOllamaAvailable={isOllamaAvailable}

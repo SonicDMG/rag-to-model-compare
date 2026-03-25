@@ -178,11 +178,13 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                       ragChunks: ragResult?.chunkCount,
                       ragTokens: ragResult?.tokenCount,
                       ragIndexTime: ragResult?.indexTime,
+                      ragProcessedText: ragResult?.processedText,
                       ragError: ragResult?.error,
                       directStatus: directCompleted && directResult?.success ? 'success' : 'error',
                       directTokens: directResult?.tokenCount,
                       directLoadTime: directResult?.loadTime,
                       directWarnings: directResult?.warnings,
+                      directProcessedText: directResult?.processedText,
                       directError: directResult?.error,
                       hasImages: directResult?.hasImages,
                       imageCount: directResult?.imageCount,
@@ -289,6 +291,11 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
                         } else if (pipeline === PipelineType.DIRECT) {
                           directResult = result;
                           directCompleted = true;
+                          console.log('[DocumentUpload] Direct pipeline complete, result:', {
+                            hasProcessedText: !!result.processedText,
+                            processedTextLength: result.processedText?.length,
+                            processedTextPreview: result.processedText?.substring(0, 100)
+                          });
                           setStreamingProgress(prev => prev ? {
                             ...prev,
                             directProgress: {
@@ -819,6 +826,13 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
 
       // Include detailed status for both single and multi-file uploads
       if (resultToUse) {
+        console.log('[DocumentUpload] Creating upload result data:', {
+          hasDirectProcessedText: !!resultToUse.direct?.processedText,
+          directProcessedTextLength: resultToUse.direct?.processedText?.length,
+          hasRagProcessedText: !!resultToUse.rag?.processedText,
+          ragProcessedTextLength: resultToUse.rag?.processedText?.length
+        });
+        
         const uploadResultData = {
           ragStatus: resultToUse.rag?.status,
           ragChunks: resultToUse.rag?.chunkCount,
