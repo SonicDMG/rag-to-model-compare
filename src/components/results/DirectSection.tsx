@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { OllamaResult } from '@/types/ollama';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
-import { ExpandableText } from './ExpandableText';
+import { ExpandableText } from '../shared/ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
-import { ProcessingTimeline } from './ProcessingTimeline';
+import { ProcessingTimeline } from '../processing/ProcessingTimeline';
 
-interface OllamaSectionProps {
+interface DirectSectionProps {
   ollamaResult: OllamaResult | null;
   isQuerying: boolean;
   error: string | null;
@@ -23,7 +23,7 @@ interface OllamaSectionProps {
   processingEvents?: ProcessingEvent[];
 }
 
-export function OllamaSection({
+export function DirectSection({
   ollamaResult,
   isQuerying,
   error,
@@ -33,7 +33,7 @@ export function OllamaSection({
   onModelChange,
   isOllamaAvailable = true,
   processingEvents
-}: OllamaSectionProps) {
+}: DirectSectionProps) {
   const [recheckAttempted, setRecheckAttempted] = useState(false);
 
   const handleRecheckOllama = async () => {
@@ -48,10 +48,10 @@ export function OllamaSection({
       <div className="bg-gradient-to-r from-purple-500/20 to-purple-500/10 rounded-unkey-lg p-6 border border-purple-500/30 h-[140px] flex flex-col justify-center shadow-unkey-card">
         <div className="flex items-center gap-3 mb-2">
           <h2 className="text-2xl font-bold text-white">
-            Direct Context Approach
+            Direct Approach
           </h2>
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-            Native API
+            Local
           </span>
           {isOllamaAvailable ? (
             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
@@ -64,7 +64,7 @@ export function OllamaSection({
           )}
         </div>
         <p className="text-unkey-gray-200">
-          Local LLM inference with full document context - no API costs, complete privacy
+          Local LLM inference with full document context – no API costs, complete privacy, runs entirely on your machine
         </p>
       </div>
 

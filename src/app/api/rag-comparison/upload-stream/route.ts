@@ -8,10 +8,10 @@
 import { NextRequest } from 'next/server';
 import path from 'path';
 import { z } from 'zod';
-import { parseDocument } from '@/lib/rag-comparison/document-processor';
-import { storeDocument, getDocument } from '@/lib/rag-comparison/document-storage';
-import { indexDocument as ragIndexDocument } from '@/lib/rag-comparison/rag-pipeline';
-import { loadDocument as directLoadDocument } from '@/lib/rag-comparison/direct-pipeline';
+import { parseDocument } from '@/lib/rag-comparison/processing/document-processor';
+import { storeDocument, getDocument } from '@/lib/rag-comparison/processing/document-storage';
+import { indexDocument as ragIndexDocument } from '@/lib/rag-comparison/pipelines/rag-pipeline';
+import { loadDocument as hybridLoadDocument } from '@/lib/rag-comparison/pipelines/hybrid-pipeline';
 import { ProcessingEventTracker, ProcessingEventType, PipelineType } from '@/types/processing-events';
 import type { DocumentMetadata } from '@/types/rag-comparison';
 import { OpenRAGClient } from 'openrag-sdk';
@@ -729,7 +729,7 @@ async function processDirectPipeline(
       strategy: 'fixed'
     };
 
-    const directResult = await directLoadDocument(
+    const directResult = await hybridLoadDocument(
       content,
       documentId,
       directMetadata,

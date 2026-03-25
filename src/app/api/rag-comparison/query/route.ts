@@ -14,16 +14,16 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export const maxDuration = 120;
 import { z } from 'zod';
-import { getDocument, debugStorage } from '@/lib/rag-comparison/document-storage';
+import { getDocument, debugStorage } from '@/lib/rag-comparison/processing/document-storage';
 import {
   query as ragQuery
-} from '@/lib/rag-comparison/rag-pipeline';
+} from '@/lib/rag-comparison/pipelines/rag-pipeline';
+import {
+  query as hybridQuery
+} from '@/lib/rag-comparison/pipelines/hybrid-pipeline';
 import {
   query as directQuery
-} from '@/lib/rag-comparison/direct-pipeline';
-import {
-  query as ollamaQuery
-} from '@/lib/rag-comparison/ollama-pipeline';
+} from '@/lib/rag-comparison/pipelines/direct-pipeline';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
 import { OLLAMA_CONFIG } from '@/lib/env';
 import type {
@@ -318,9 +318,9 @@ export async function POST(request: NextRequest): Promise<Response> {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Direct pipeline (Hybrid approach - uses full context + can search filter's documents)
-        const directPromise = storedDoc
-          ? directQuery(
+        // Hybrid pipeline (uses full context + can search filter's documents)
+        const hybridPromise = storedDoc
+          ? hybridQuery(
               sanitizedDocumentId,
               storedDoc.content,
               sanitizedQuery,
@@ -328,33 +328,33 @@ export async function POST(request: NextRequest): Promise<Response> {
               createEventCallback(PipelineType.DIRECT),
               storedDoc.filterId // Pass filterId for hybrid search capability
             )
-          : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
+          : Promise.reject(new Error('Document not found in storage for Hybrid pipeline'));
 
-        directPromise
-          .then((directResult) => {
-            console.log('🟢 Direct pipeline completed successfully');
+        hybridPromise
+          .then((hybridResult) => {
+            console.log('🟢 Hybrid pipeline completed successfully');
             
             // Stream the final result
             const data = JSON.stringify({
               type: 'direct',
               success: true,
-              data: directResult
+              data: hybridResult
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           })
           .catch((error) => {
-            console.error('🟢 Direct pipeline failed:', error);
+            console.error('🟢 Hybrid pipeline failed:', error);
             const data = JSON.stringify({
               type: 'direct',
               success: false,
-              error: error instanceof Error ? error.message : 'Direct pipeline failed'
+              error: error instanceof Error ? error.message : 'Hybrid pipeline failed'
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
 
-        // Ollama pipeline
-        const ollamaPromise = storedDoc
-          ? ollamaQuery(
+        // Direct pipeline (Ollama local LLM)
+        const directPromise = storedDoc
+          ? directQuery(
               sanitizedDocumentId,
               storedDoc.content,
               sanitizedQuery,
@@ -362,26 +362,26 @@ export async function POST(request: NextRequest): Promise<Response> {
               createEventCallback(PipelineType.OLLAMA),
               undefined // images parameter
             )
-          : Promise.reject(new Error('Document not found for Ollama pipeline'));
+          : Promise.reject(new Error('Document not found for Direct pipeline'));
 
-        ollamaPromise
-          .then((ollamaResult) => {
-            console.log('🟣 Ollama pipeline completed successfully');
+        directPromise
+          .then((directResult) => {
+            console.log('🟣 Direct pipeline completed successfully');
             
             // Stream the final result
             const data = JSON.stringify({
               type: 'ollama',
               success: true,
-              data: ollamaResult
+              data: directResult
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           })
           .catch((error) => {
-            console.error('🟣 Ollama pipeline failed:', error);
+            console.error('🟣 Direct pipeline failed:', error);
             const data = JSON.stringify({
               type: 'ollama',
               success: false,
-              error: error instanceof Error ? error.message : 'Ollama pipeline failed'
+              error: error instanceof Error ? error.message : 'Direct pipeline failed'
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           });
@@ -390,8 +390,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         // Reuse the same promises to avoid duplicate execution
         await Promise.allSettled([
           ragPromise.catch(() => {}),
-          directPromise.catch(() => {}),
-          ollamaPromise.catch(() => {})
+          hybridPromise.catch(() => {}),
+          directPromise.catch(() => {})
         ]);
 
         console.log('\n========================================');

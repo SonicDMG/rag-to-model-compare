@@ -1,9 +1,11 @@
 /**
  * Shared Prompt Builder
- * 
+ *
  * Provides consistent prompt building functionality for both Ollama and Direct pipelines.
  * This eliminates redundancy and ensures identical prompts across pipelines.
  */
+
+import { sanitizeInput } from '../utils/pipeline-utils';
 
 /**
  * System prompt for Direct Context (Ollama) pipeline
@@ -37,23 +39,6 @@ Instructions:
 - Clearly indicate when you're using information from the provided context vs. additional sources
 - If neither the provided document nor the knowledge base contains enough information, say so clearly`;
 
-/**
- * Sanitizes input strings to prevent injection attacks
- * 
- * @param input - String to sanitize
- * @returns Sanitized string
- */
-function sanitizeInput(input: string): string {
-  if (!input || typeof input !== 'string') {
-    return '';
-  }
-  
-  // Remove null bytes and control characters
-  return input
-    .replace(/\0/g, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .trim();
-}
 
 /**
  * Builds a complete prompt for LLM queries

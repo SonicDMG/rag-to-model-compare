@@ -1,10 +1,10 @@
 'use client';
 
 import { DetailedMetricsBreakdown } from '@/types/rag-comparison';
-import { TimingBreakdownView } from './breakdown/TimingBreakdownView';
-import { TokenBreakdownView } from './breakdown/TokenBreakdownView';
-import { CostBreakdownView } from './breakdown/CostBreakdownView';
-import { ContextWindowBreakdownView } from './breakdown/ContextWindowBreakdownView';
+import { TimingBreakdownView } from '../breakdown/TimingBreakdownView';
+import { TokenBreakdownView } from '../breakdown/TokenBreakdownView';
+import { CostBreakdownView } from '../breakdown/CostBreakdownView';
+import { ContextWindowBreakdownView } from '../breakdown/ContextWindowBreakdownView';
 import { useMetricsTab } from '@/contexts/MetricsTabContext';
 
 interface MetricsBreakdownPanelProps {

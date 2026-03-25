@@ -46,7 +46,7 @@ export function QueryForm({ documentId, onSubmit, isLoading = false }: QueryForm
               aria-label="Query input"
             />
             <p className="mt-1 text-sm text-unkey-gray-400">
-              Enter your question to compare RAG vs Direct context approaches
+              Enter your question to compare RAG vs Hybrid approaches
             </p>
           </div>
 

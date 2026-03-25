@@ -6,10 +6,11 @@
  * local models. Includes comprehensive metrics tracking and OWASP security compliance.
  */
 
-import { OllamaClient } from './ollama-client';
+import { OllamaClient } from '../clients/ollama-client';
 import { OllamaConfig, OllamaResult, OllamaPipelineError } from '@/types/ollama';
 import type { DocumentMetadata } from '@/types/rag-comparison';
-import { getDocument, appendToDocument } from './document-storage';
+import { getDocument, appendToDocument } from '../processing/document-storage';
+import { sanitizeInput, validateDocumentId, validateQuery } from '../utils/pipeline-utils';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import { getOllamaModelConfig } from '@/lib/constants/ollama-models';
 import { OLLAMA_CONFIG } from '@/lib/env';
@@ -18,7 +19,7 @@ import {
   calculateTokenBreakdown,
   calculateCostBreakdown,
   calculateContextWindowBreakdown
-} from './metrics-calculator';
+} from '../metrics/metrics-calculator';
 import { buildPrompt, SYSTEM_PROMPT } from './shared-prompt-builder';
 import {
   ProcessingEventTracker,
@@ -91,91 +92,6 @@ function getOllamaClient(): OllamaClient {
   return ollamaClient;
 }
 
-/**
- * Sanitizes input strings to prevent injection attacks
- * 
- * @param input - String to sanitize
- * @returns Sanitized string
- */
-function sanitizeInput(input: string): string {
-  if (!input || typeof input !== 'string') {
-    return '';
-  }
-  
-  // Remove null bytes and control characters
-  return input
-    .replace(/\0/g, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .trim();
-}
-
-/**
- * Validates document ID format
- * 
- * @param documentId - Document ID to validate
- * @throws {OllamaPipelineError} If document ID is invalid
- */
-function validateDocumentId(documentId: string): void {
-  if (!documentId || typeof documentId !== 'string') {
-    throw new OllamaPipelineError(
-      'Document ID is required',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Prevent path traversal and injection
-  if (documentId.includes('..') || documentId.includes('/') || documentId.includes('\\')) {
-    throw new OllamaPipelineError(
-      'Document ID contains invalid characters',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Limit length to prevent DoS
-  if (documentId.length > 255) {
-    throw new OllamaPipelineError(
-      'Document ID exceeds maximum length',
-      'INVALID_DOCUMENT_ID',
-      { documentId, maxLength: 255 }
-    );
-  }
-}
-
-/**
- * Validates query string
- * 
- * @param query - Query to validate
- * @throws {OllamaPipelineError} If query is invalid
- */
-function validateQuery(query: string): void {
-  if (!query || typeof query !== 'string') {
-    throw new OllamaPipelineError(
-      'Query is required',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  const sanitized = sanitizeInput(query);
-  if (sanitized.length === 0) {
-    throw new OllamaPipelineError(
-      'Query cannot be empty after sanitization',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  // Limit query length to prevent DoS
-  if (sanitized.length > 10000) {
-    throw new OllamaPipelineError(
-      'Query exceeds maximum length',
-      'INVALID_QUERY',
-      { query, maxLength: 10000 }
-    );
-  }
-}
 
 /**
  * Validates document content
@@ -452,7 +368,7 @@ export async function loadDocument(
 
   try {
     // Validate inputs
-    validateDocumentId(documentId);
+    validateDocumentId(documentId, OllamaPipelineError);
     validateContent(content);
 
     // Sanitize and normalize content
@@ -606,9 +522,9 @@ export async function query(
       'Validate inputs (documentId, content, query, config, images)'
     );
     
-    validateDocumentId(documentId);
+    validateDocumentId(documentId, OllamaPipelineError);
     validateContent(content);
-    validateQuery(query);
+    validateQuery(query, OllamaPipelineError);
 
     if (!config || typeof config !== 'object') {
       eventTracker.failEvent(validationEventId, 'Invalid Ollama configuration');

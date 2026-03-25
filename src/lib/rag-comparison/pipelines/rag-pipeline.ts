@@ -6,23 +6,25 @@
  */
 
 import path from 'path';
-import {
-  OpenRAGClient,
-  OpenRAGError,
-  AuthenticationError,
-  NotFoundError,
-  ValidationError,
-  RateLimitError,
-  ServerError
-} from 'openrag-sdk';
+import { OpenRAGClient } from 'openrag-sdk';
 import { calculateCost, getModelPricing } from '@/lib/constants/models';
+import {
+  getOpenRAGClient,
+  handleOpenRAGError,
+  sanitizeInput,
+  validateDocumentId,
+  validateQuery
+} from '../utils/pipeline-utils';
+
+// Re-export getOpenRAGClient for backward compatibility
+export { getOpenRAGClient } from '../utils/pipeline-utils';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import {
   calculateTimingBreakdown,
   calculateTokenBreakdown,
   calculateCostBreakdown,
   calculateContextWindowBreakdown
-} from '@/lib/rag-comparison/metrics-calculator';
+} from '../metrics/metrics-calculator';
 import type {
   Chunk,
   DocumentMetadata,
@@ -36,108 +38,6 @@ import {
   PipelineType
 } from '@/types/processing-events';
 
-/**
- * OpenRAG client instance
- * Configured via OPENRAG_URL and OPENRAG_API_KEY environment variables
- */
-let openragClient: OpenRAGClient | null = null;
-
-/**
- * Get or create OpenRAG client instance
- * @throws {RAGPipelineError} If environment variables are not configured
- */
-export function getOpenRAGClient(): OpenRAGClient {
-  if (!openragClient) {
-    // Validate environment variables
-    if (!process.env.OPENRAG_API_KEY) {
-      throw new RAGPipelineError(
-        'OPENRAG_API_KEY environment variable is not set',
-        'MISSING_API_KEY'
-      );
-    }
-    if (!process.env.OPENRAG_URL) {
-      throw new RAGPipelineError(
-        'OPENRAG_URL environment variable is not set',
-        'MISSING_URL'
-      );
-    }
-
-    openragClient = new OpenRAGClient({
-      apiKey: process.env.OPENRAG_API_KEY,
-      baseUrl: process.env.OPENRAG_URL,
-      timeout: 180000, // 3 minutes timeout to prevent premature aborts
-    });
-  }
-  return openragClient;
-}
-
-/**
- * Convert OpenRAG SDK errors to RAGPipelineError
- * @param error - Error from OpenRAG SDK
- * @returns RAGPipelineError with appropriate code and message
- */
-function handleOpenRAGError(error: unknown): RAGPipelineError {
-  if (error instanceof AuthenticationError) {
-    return new RAGPipelineError(
-      'Authentication failed. Please check your OPENRAG_API_KEY.',
-      'AUTHENTICATION_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof NotFoundError) {
-    return new RAGPipelineError(
-      'Resource not found in OpenRAG.',
-      'NOT_FOUND_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof ValidationError) {
-    return new RAGPipelineError(
-      'Invalid request to OpenRAG.',
-      'VALIDATION_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof RateLimitError) {
-    return new RAGPipelineError(
-      'Rate limit exceeded. Please try again later.',
-      'RATE_LIMIT_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof ServerError) {
-    return new RAGPipelineError(
-      'OpenRAG server error. Please try again later.',
-      'SERVER_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof OpenRAGError) {
-    return new RAGPipelineError(
-      `OpenRAG error: ${error.message}`,
-      'OPENRAG_ERROR',
-      { originalError: error.message, statusCode: error.statusCode }
-    );
-  }
-  
-  if (error instanceof Error) {
-    return new RAGPipelineError(
-      `Unexpected error: ${error.message}`,
-      'UNEXPECTED_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  return new RAGPipelineError(
-    'Unknown error occurred',
-    'UNKNOWN_ERROR'
-  );
-}
 
 /**
  * Result from document indexing operation
@@ -229,91 +129,6 @@ export class RAGPipelineError extends Error {
   }
 }
 
-/**
- * Sanitizes input strings to prevent injection attacks
- * 
- * @param input - String to sanitize
- * @returns Sanitized string
- */
-function sanitizeInput(input: string): string {
-  if (!input || typeof input !== 'string') {
-    return '';
-  }
-  
-  // Remove null bytes and control characters
-  return input
-    .replace(/\0/g, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .trim();
-}
-
-/**
- * Validates document ID format
- * 
- * @param documentId - Document ID to validate
- * @throws {RAGPipelineError} If document ID is invalid
- */
-function validateDocumentId(documentId: string): void {
-  if (!documentId || typeof documentId !== 'string') {
-    throw new RAGPipelineError(
-      'Document ID is required',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Prevent path traversal and injection
-  if (documentId.includes('..') || documentId.includes('/') || documentId.includes('\\')) {
-    throw new RAGPipelineError(
-      'Document ID contains invalid characters',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Limit length to prevent DoS
-  if (documentId.length > 255) {
-    throw new RAGPipelineError(
-      'Document ID exceeds maximum length',
-      'INVALID_DOCUMENT_ID',
-      { documentId, maxLength: 255 }
-    );
-  }
-}
-
-/**
- * Validates query string
- * 
- * @param query - Query to validate
- * @throws {RAGPipelineError} If query is invalid
- */
-function validateQuery(query: string): void {
-  if (!query || typeof query !== 'string') {
-    throw new RAGPipelineError(
-      'Query is required',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  const sanitized = sanitizeInput(query);
-  if (sanitized.length === 0) {
-    throw new RAGPipelineError(
-      'Query cannot be empty after sanitization',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  // Limit query length to prevent DoS
-  if (sanitized.length > 10000) {
-    throw new RAGPipelineError(
-      'Query exceeds maximum length',
-      'INVALID_QUERY',
-      { query, maxLength: 10000 }
-    );
-  }
-}
 
 /**
  * Creates or updates the "Compare" knowledge filter for a specific document
@@ -398,7 +213,7 @@ export async function createKnowledgeFilter(
       );
     }
 
-    const client = getOpenRAGClient();
+    const client = getOpenRAGClient(RAGPipelineError);
     
     // Use the constant "Compare" as the filter name
     const filterName = KNOWLEDGE_FILTER_ID;
@@ -608,7 +423,7 @@ export async function indexDocument(
 
   try {
     // Validate inputs
-    validateDocumentId(documentId);
+    validateDocumentId(documentId, RAGPipelineError);
 
     if (!file || !(file instanceof File)) {
       throw new RAGPipelineError(
@@ -633,7 +448,7 @@ export async function indexDocument(
     const tokenCount = Math.floor(file.size / 4); // Rough estimate: ~4 bytes per token
 
     // Get OpenRAG client
-    const client = getOpenRAGClient();
+    const client = getOpenRAGClient(RAGPipelineError);
 
     // Upload document using OpenRAG SDK
     // The SDK handles parsing, chunking, and embedding automatically
@@ -699,7 +514,7 @@ export async function indexDocument(
       } else {
         // Single file upload path - associate this file with the filter
         try {
-          const client = getOpenRAGClient();
+          const client = getOpenRAGClient(RAGPipelineError);
           const filterResponse = await client.knowledgeFilters.get(knowledgeFilterId);
           
           if (filterResponse) {
@@ -821,8 +636,8 @@ export async function query(
       'Validate inputs (documentId, query, config)'
     );
     
-    validateDocumentId(documentId);
-    validateQuery(query);
+    validateDocumentId(documentId, RAGPipelineError);
+    validateQuery(query, RAGPipelineError);
 
     if (!config || typeof config !== 'object') {
       eventTracker.failEvent(validationEventId, 'Invalid RAG configuration');
@@ -858,7 +673,7 @@ export async function query(
     );
     
     console.log('Retrieving "Compare" knowledge filter from OpenRAG...');
-    const client = getOpenRAGClient();
+    const client = getOpenRAGClient(RAGPipelineError);
     
     const existingFilters = await client.knowledgeFilters.search(KNOWLEDGE_FILTER_ID, 1);
     
@@ -1079,7 +894,7 @@ export async function query(
       throw error;
     }
 
-    throw handleOpenRAGError(error);
+    throw handleOpenRAGError(error, RAGPipelineError);
   }
 }
 

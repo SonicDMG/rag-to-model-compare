@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { isOllamaAvailable } from '@/lib/rag-comparison/ollama-model-detector';
+import { isOllamaAvailable } from '@/lib/rag-comparison/clients/ollama-model-detector';
 import { OLLAMA_CONFIG } from '@/lib/env';
 
 /**

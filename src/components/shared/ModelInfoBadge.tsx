@@ -1,7 +1,7 @@
 'use client';
 
 import { getModelConfig, getPricingMetadata } from '@/lib/constants/models';
-import { Badge } from './ui/Badge';
+import { Badge } from '../ui/Badge';
 
 interface ModelInfoBadgeProps {
   /** Model identifier (e.g., 'gpt-4o') */

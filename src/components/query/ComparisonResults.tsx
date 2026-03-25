@@ -3,9 +3,9 @@
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { OllamaResult } from '@/types/ollama';
 import { ProcessingEvent } from '@/types/processing-events';
-import { RagSection } from './RagSection';
-import { DirectModelSection } from './DirectModelSection';
-import { OllamaSection } from './OllamaSection';
+import { RagSection } from '../results/RagSection';
+import { HybridSection } from '../results/HybridSection';
+import { DirectSection } from '../results/DirectSection';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 
 interface ComparisonResultsProps {
@@ -75,8 +75,8 @@ export function ComparisonResults({
             processingEvents={ragProcessingEvents.length > 0 ? ragProcessingEvents : ragResult?.processingEvents}
           />
           
-          {/* Direct Model Section */}
-          <DirectModelSection
+          {/* Hybrid Section */}
+          <HybridSection
             directResult={directResult}
             isQuerying={isDirectQuerying}
             error={directError}
@@ -84,8 +84,8 @@ export function ComparisonResults({
             processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
           />
           
-          {/* Ollama Section */}
-          <OllamaSection
+          {/* Direct Section */}
+          <DirectSection
             ollamaResult={ollamaResult}
             isQuerying={isOllamaQuerying}
             error={ollamaError}

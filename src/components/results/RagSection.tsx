@@ -1,44 +1,44 @@
 'use client';
 
-import { DirectResult } from '@/types/rag-comparison';
+import { RAGResult } from '@/types/rag-comparison';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
-import { ExpandableText } from './ExpandableText';
+import { ExpandableText } from '../shared/ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
-import { ModelInfoBadge } from './ModelInfoBadge';
-import { ProcessingTimeline } from './ProcessingTimeline';
+import { ModelInfoBadge } from '../shared/ModelInfoBadge';
+import { ProcessingTimeline } from '../processing/ProcessingTimeline';
 
-interface DirectModelSectionProps {
-  directResult: DirectResult | null;
+interface RagSectionProps {
+  ragResult: RAGResult | null;
   isQuerying: boolean;
   error: string | null;
   documentTokens?: number;
   processingEvents?: ProcessingEvent[];
 }
 
-export function DirectModelSection({
-  directResult,
+export function RagSection({
+  ragResult,
   isQuerying,
   error,
   documentTokens,
   processingEvents
-}: DirectModelSectionProps) {
+}: RagSectionProps) {
 
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div className="bg-gradient-to-r from-blue/20 to-blue/10 rounded-unkey-lg p-6 border border-blue/30 h-[140px] flex flex-col justify-center shadow-unkey-card">
+      <div className="bg-gradient-to-r from-success/20 to-success/10 rounded-unkey-lg p-6 border border-success/30 h-[140px] flex flex-col justify-center shadow-unkey-card">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Hybrid Approach
+          RAG Approach
         </h2>
         <p className="text-unkey-gray-200">
-          Full document context with optional retrieval search capability
+          Retrieval-Augmented Generation: Document is chunked and relevant pieces are retrieved for context
         </p>
       </div>
 
       {/* Processing Timeline */}
       {processingEvents && processingEvents.length > 0 && (
         <ProcessingTimeline
-          pipeline={PipelineType.DIRECT}
+          pipeline={PipelineType.RAG}
           events={processingEvents}
         />
       )}
@@ -68,10 +68,10 @@ export function DirectModelSection({
 
       {/* Loading State */}
       {isQuerying && (
-        <div className="bg-blue/10 border border-blue/20 rounded-unkey-lg p-6 shadow-unkey-card h-[140px]">
+        <div className="bg-success/10 border border-success/20 rounded-unkey-lg p-6 shadow-unkey-card h-[140px]">
           <div className="flex items-center justify-center gap-3">
             <svg
-              className="animate-spin h-8 w-8 text-blue"
+              className="animate-spin h-8 w-8 text-success"
               fill="none"
               viewBox="0 0 24 24"
             >
@@ -91,10 +91,10 @@ export function DirectModelSection({
             </svg>
             <div>
               <p className="text-lg font-semibold text-white">
-                Processing direct query...
+                Processing RAG query...
               </p>
               <p className="text-sm text-unkey-gray-300 mt-1">
-                Sending full document context to model
+                Retrieving relevant chunks and generating answer
               </p>
             </div>
           </div>
@@ -102,15 +102,48 @@ export function DirectModelSection({
       )}
 
       {/* Results Section */}
-      {directResult && !isQuerying && (
+      {ragResult && !isQuerying && (
         <section className="space-y-6">
           {/* Answer Display */}
-          <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-blue/30">
+          <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-success/30">
             <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
             
             <div className="prose prose-sm max-w-none min-h-[180px]">
-              <ExpandableText text={directResult.answer} characterLimit={400} />
+              <ExpandableText text={ragResult.answer} characterLimit={400} />
             </div>
+
+            {/* Source Citations */}
+            {ragResult.sources && ragResult.sources.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-unkey-gray-700">
+                <h4 className="text-sm font-semibold text-unkey-gray-200 mb-3">
+                  Source Citations ({ragResult.sources.length})
+                </h4>
+                <div className="space-y-3">
+                  {ragResult.sources.map((source, index) => (
+                    <div
+                      key={source.id}
+                      className="bg-success/10 rounded-unkey-md p-3 text-sm border border-success/20"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-6 h-6 bg-success text-white rounded-full flex items-center justify-center text-xs font-semibold">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-unkey-gray-300 line-clamp-3">
+                            {source.content}
+                          </p>
+                          {source.metadata?.index !== undefined && (
+                            <p className="text-xs text-unkey-gray-500 mt-1">
+                              Chunk {source.metadata.index + 1}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Metrics Display */}
@@ -118,57 +151,57 @@ export function DirectModelSection({
             <h3 className="text-xl font-bold text-white mb-4">Performance Metrics</h3>
             
             {/* Model Information */}
-            {directResult.metrics.breakdown?.metadata.model && (
+            {ragResult.metrics.breakdown?.metadata.model && (
               <div className="mb-6 pb-6 border-b border-unkey-gray-700">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Model Configuration</h4>
                 <ModelInfoBadge
-                  modelId={directResult.metrics.breakdown.metadata.model}
-                  variant="info"
+                  modelId={ragResult.metrics.breakdown.metadata.model}
+                  variant="success"
                 />
               </div>
             )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Generation Time */}
-              <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20">
+              <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Generation Time</h4>
-                <p className="text-2xl font-bold text-blue">
-                  {directResult.metrics.generationTime.toFixed(0)}ms
+                <p className="text-2xl font-bold text-success">
+                  {ragResult.metrics.generationTime.toFixed(0)}ms
                 </p>
                 <p className="text-xs text-unkey-gray-500 mt-1">
-                  No retrieval step needed
+                  Retrieval: {ragResult.metrics.retrievalTime.toFixed(0)}ms
                 </p>
               </div>
 
               {/* Token Usage */}
-              <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20">
+              <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Tokens Used</h4>
-                <p className="text-2xl font-bold text-blue">
-                  {directResult.metrics.tokens.toLocaleString()}
+                <p className="text-2xl font-bold text-success">
+                  {ragResult.metrics.tokens.toLocaleString()}
                 </p>
                 <p className="text-xs text-unkey-gray-500 mt-1">
-                  Full document in context
+                  Retrieved chunks only
                 </p>
               </div>
 
               {/* Cost */}
-              <div className="bg-blue/10 rounded-unkey-lg p-4 border border-blue/20 md:col-span-2">
+              <div className="bg-success/10 rounded-unkey-lg p-4 border border-success/20 md:col-span-2">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Cost</h4>
-                <p className="text-2xl font-bold text-blue">
-                  ${directResult.metrics.cost.toFixed(4)}
+                <p className="text-2xl font-bold text-success">
+                  ${ragResult.metrics.cost.toFixed(4)}
                 </p>
                 <p className="text-xs text-unkey-gray-500 mt-1">
-                  Single API call
+                  Total: {(ragResult.metrics.retrievalTime + ragResult.metrics.generationTime).toFixed(0)}ms
                 </p>
               </div>
             </div>
           </div>
 
           {/* Detailed Metrics Breakdown */}
-          {directResult.metrics.breakdown && (
+          {ragResult.metrics.breakdown && (
             <MetricsBreakdownPanel
-              breakdown={directResult.metrics.breakdown}
-              pipelineType="direct"
+              breakdown={ragResult.metrics.breakdown}
+              pipelineType="rag"
               documentTokens={documentTokens}
             />
           )}

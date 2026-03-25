@@ -5,7 +5,7 @@ import { ProcessingProgressIndicator } from './ProcessingProgressIndicator';
 import { DualPipelineUploadProgress, PipelineStatus } from './DualPipelineUploadProgress';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { RagUploadResult } from './RagUploadResult';
-import { DirectUploadResult } from './DirectUploadResult';
+import { HybridUploadResult } from './HybridUploadResult';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -1055,7 +1055,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
               imageCount={uploadStatus.imageCount}
               fileSize={uploadStatus.fileSize}
             />
-            <DirectUploadResult
+            <HybridUploadResult
               status={uploadStatus.directStatus}
               tokenCount={uploadStatus.directTokens}
               loadTime={uploadStatus.directLoadTime}
@@ -1197,7 +1197,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
               RAG Indexing Skipped ({skippedFiles.length})
             </h3>
             <p className="text-sm text-blue-300 mb-2">
-              The following files already exist in OpenSearch and were not re-indexed, but were still processed for Direct context:
+              The following files already exist in OpenSearch and were not re-indexed, but were still processed for Hybrid approach:
             </p>
             <div className="max-h-40 overflow-y-auto space-y-1">
               {skippedFiles.map((filename, index) => (

@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { DocumentUpload, UploadResultData } from '@/components/DocumentUpload';
-import { RagUploadResult } from '@/components/RagUploadResult';
-import { DirectUploadResult } from '@/components/DirectUploadResult';
-import { UnifiedQuerySection } from '@/components/UnifiedQuerySection';
-import { ModelConfigSection } from '@/components/ModelConfigSection';
+import { DocumentUpload, UploadResultData } from '@/components/upload/DocumentUpload';
+import { RagUploadResult } from '@/components/upload/RagUploadResult';
+import { HybridUploadResult } from '@/components/upload/HybridUploadResult';
+import { UnifiedQuerySection } from '@/components/query/UnifiedQuerySection';
+import { ModelConfigSection } from '@/components/processing/ModelConfigSection';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
@@ -313,10 +313,10 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
-                    D
+                    H
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white mb-2">Direct Context Approach</h3>
+                    <h3 className="font-semibold text-white mb-2">Hybrid Approach</h3>
                     <p className="text-sm text-unkey-gray-300 leading-relaxed">
                       The entire document is sent directly to the model's context window without
                       chunking or retrieval steps.
@@ -328,12 +328,12 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
-                    O
+                    D
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white mb-2">Ollama Approach</h3>
+                    <h3 className="font-semibold text-white mb-2">Direct Approach</h3>
                     <p className="text-sm text-unkey-gray-300 leading-relaxed">
-                      Local LLM inference with full document context - no API costs, complete privacy,
+                      Local LLM inference with full document context – no API costs, complete privacy,
                       runs entirely on your machine.
                     </p>
                   </div>
@@ -375,7 +375,7 @@ export default function Home() {
               imageCount={uploadResult.imageCount}
               fileSize={uploadResult.fileSize}
             />
-            <DirectUploadResult
+            <HybridUploadResult
               status={uploadResult.directStatus}
               tokenCount={uploadResult.directTokens}
               loadTime={uploadResult.directLoadTime}
@@ -490,11 +490,11 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Direct Benefits */}
+              {/* Hybrid Benefits */}
               <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 rounded-xl p-6 border border-blue-500/20 hover:border-blue-500/40 transition-colors">
                 <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 bg-blue-400 rounded-full" />
-                  Direct Context is Better For:
+                  Hybrid Approach is Better For:
                 </h3>
                 <ul className="space-y-3 text-sm text-unkey-gray-300">
                   <li className="flex items-start gap-3">
@@ -520,11 +520,11 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Ollama Benefits */}
+              {/* Direct Benefits */}
               <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-colors">
                 <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 bg-purple-400 rounded-full" />
-                  Ollama is Better For:
+                  Direct Approach is Better For:
                 </h3>
                 <ul className="space-y-3 text-sm text-unkey-gray-300">
                   <li className="flex items-start gap-3">

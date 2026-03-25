@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
-import { ProcessingTimeline } from './ProcessingTimeline';
+import { ProcessingTimeline } from '../processing/ProcessingTimeline';
 
 export type PipelineStatus = 'idle' | 'starting' | 'processing' | 'complete' | 'error';
 

@@ -3,9 +3,9 @@
 import { ComparisonMetrics, RAGResult, DirectResult } from '@/types/rag-comparison';
 import { formatCost, formatTokens, formatTime, formatPercentage } from '@/lib/utils/formatters';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
-import { Badge } from './ui/Badge';
-import { ProgressBar } from './ui/ProgressBar';
-import { ModelInfoBadge } from './ModelInfoBadge';
+import { Badge } from '../ui/Badge';
+import { ProgressBar } from '../ui/ProgressBar';
+import { ModelInfoBadge } from '../shared/ModelInfoBadge';
 
 interface MetricsDisplayProps {
   metrics: ComparisonMetrics;

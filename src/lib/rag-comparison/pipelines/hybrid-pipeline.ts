@@ -7,13 +7,6 @@
  */
 
 import {
-  OpenRAGClient,
-  OpenRAGError,
-  AuthenticationError,
-  NotFoundError,
-  ValidationError,
-  RateLimitError,
-  ServerError,
   ChatResponse
 } from 'openrag-sdk';
 import {
@@ -22,14 +15,21 @@ import {
   getModelPricing,
   DEFAULT_MODEL
 } from '@/lib/constants/models';
+import {
+  getOpenRAGClient,
+  handleOpenRAGError,
+  sanitizeInput,
+  validateDocumentId,
+  validateQuery
+} from '../utils/pipeline-utils';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import {
   calculateTimingBreakdown,
   calculateTokenBreakdown,
   calculateCostBreakdown,
   calculateContextWindowBreakdown
-} from '@/lib/rag-comparison/metrics-calculator';
-import { appendToDocument, getDocument } from '@/lib/rag-comparison/document-storage';
+} from '../metrics/metrics-calculator';
+import { appendToDocument, getDocument } from '../processing/document-storage';
 import type {
   DocumentMetadata,
   DirectConfig,
@@ -114,194 +114,6 @@ export class DirectPipelineError extends Error {
   }
 }
 
-/**
- * OpenRAG client instance
- * Configured via OPENRAG_URL and OPENRAG_API_KEY environment variables
- */
-let openragClient: OpenRAGClient | null = null;
-
-/**
- * Get or create OpenRAG client instance
- * @throws {DirectPipelineError} If environment variables are not configured
- */
-function getOpenRAGClient(): OpenRAGClient {
-  if (!openragClient) {
-    // Validate environment variables
-    if (!process.env.OPENRAG_API_KEY) {
-      throw new DirectPipelineError(
-        'OPENRAG_API_KEY environment variable is not set',
-        'MISSING_API_KEY'
-      );
-    }
-    if (!process.env.OPENRAG_URL) {
-      throw new DirectPipelineError(
-        'OPENRAG_URL environment variable is not set',
-        'MISSING_URL'
-      );
-    }
-
-    openragClient = new OpenRAGClient({
-      apiKey: process.env.OPENRAG_API_KEY,
-      baseUrl: process.env.OPENRAG_URL,
-      timeout: 180000, // 3 minutes timeout to prevent premature aborts
-    });
-  }
-  return openragClient;
-}
-
-/**
- * Convert OpenRAG SDK errors to DirectPipelineError
- * @param error - Error from OpenRAG SDK
- * @returns DirectPipelineError with appropriate code and message
- */
-function handleOpenRAGError(error: unknown): DirectPipelineError {
-  if (error instanceof AuthenticationError) {
-    return new DirectPipelineError(
-      'Authentication failed. Please check your OPENRAG_API_KEY.',
-      'AUTHENTICATION_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof NotFoundError) {
-    return new DirectPipelineError(
-      'Resource not found in OpenRAG.',
-      'NOT_FOUND_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof ValidationError) {
-    return new DirectPipelineError(
-      'Invalid request to OpenRAG.',
-      'VALIDATION_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof RateLimitError) {
-    return new DirectPipelineError(
-      'Rate limit exceeded. Please try again later.',
-      'RATE_LIMIT_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof ServerError) {
-    return new DirectPipelineError(
-      'OpenRAG server error. Please try again later.',
-      'SERVER_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  if (error instanceof OpenRAGError) {
-    return new DirectPipelineError(
-      `OpenRAG error: ${error.message}`,
-      'OPENRAG_ERROR',
-      { originalError: error.message, statusCode: error.statusCode }
-    );
-  }
-  
-  if (error instanceof Error) {
-    return new DirectPipelineError(
-      `Unexpected error: ${error.message}`,
-      'UNEXPECTED_ERROR',
-      { originalError: error.message }
-    );
-  }
-  
-  return new DirectPipelineError(
-    'Unknown error occurred',
-    'UNKNOWN_ERROR'
-  );
-}
-
-/**
- * Sanitizes input strings to prevent injection attacks
- * 
- * @param input - String to sanitize
- * @returns Sanitized string
- */
-function sanitizeInput(input: string): string {
-  if (!input || typeof input !== 'string') {
-    return '';
-  }
-  
-  // Remove null bytes and control characters
-  return input
-    .replace(/\0/g, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .trim();
-}
-
-/**
- * Validates document ID format
- * 
- * @param documentId - Document ID to validate
- * @throws {DirectPipelineError} If document ID is invalid
- */
-function validateDocumentId(documentId: string): void {
-  if (!documentId || typeof documentId !== 'string') {
-    throw new DirectPipelineError(
-      'Document ID is required',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Prevent path traversal and injection
-  if (documentId.includes('..') || documentId.includes('/') || documentId.includes('\\')) {
-    throw new DirectPipelineError(
-      'Document ID contains invalid characters',
-      'INVALID_DOCUMENT_ID',
-      { documentId }
-    );
-  }
-
-  // Limit length to prevent DoS
-  if (documentId.length > 255) {
-    throw new DirectPipelineError(
-      'Document ID exceeds maximum length',
-      'INVALID_DOCUMENT_ID',
-      { documentId, maxLength: 255 }
-    );
-  }
-}
-
-/**
- * Validates query string
- * 
- * @param query - Query to validate
- * @throws {DirectPipelineError} If query is invalid
- */
-function validateQuery(query: string): void {
-  if (!query || typeof query !== 'string') {
-    throw new DirectPipelineError(
-      'Query is required',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  const sanitized = sanitizeInput(query);
-  if (sanitized.length === 0) {
-    throw new DirectPipelineError(
-      'Query cannot be empty after sanitization',
-      'INVALID_QUERY',
-      { query }
-    );
-  }
-
-  // Limit query length to prevent DoS
-  if (sanitized.length > 10000) {
-    throw new DirectPipelineError(
-      'Query exceeds maximum length',
-      'INVALID_QUERY',
-      { query, maxLength: 10000 }
-    );
-  }
-}
 
 /**
  * Validates document content
@@ -589,7 +401,7 @@ export async function loadDocument(
 
   try {
     // Validate inputs
-    validateDocumentId(documentId);
+    validateDocumentId(documentId, DirectPipelineError);
     validateContent(content);
 
     // Sanitize and normalize content for accurate token counting
@@ -761,9 +573,9 @@ export async function query(
       'Validate inputs (documentId, content, query, config)'
     );
     
-    validateDocumentId(documentId);
+    validateDocumentId(documentId, DirectPipelineError);
     validateContent(content);
-    validateQuery(query);
+    validateQuery(query, DirectPipelineError);
 
     if (!config || typeof config !== 'object') {
       eventTracker.failEvent(validationEventId, 'Invalid Direct configuration');
@@ -853,7 +665,7 @@ export async function query(
       'Build complete prompt with document and query'
     );
     
-    const client = getOpenRAGClient();
+    const client = getOpenRAGClient(DirectPipelineError);
     const fullMessage = buildHybridPrompt(sanitizedContent, sanitizedQuery);
     
     eventTracker.completeEvent(promptBuildEventId, {
@@ -921,7 +733,7 @@ export async function query(
     } catch (error) {
       console.error('[Direct Pipeline Query] ❌ LLM call failed:', error);
       eventTracker.failEvent(apiCallEventId, error instanceof Error ? error.message : 'Unknown error');
-      throw handleOpenRAGError(error);
+      throw handleOpenRAGError(error, DirectPipelineError);
     }
 
     const generationEndTime = performance.now();

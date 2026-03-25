@@ -91,7 +91,7 @@ export function UnifiedQuerySection({
               id="query"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Enter your question to compare RAG, Direct context, and Ollama approaches"
+              placeholder="Enter your question to compare RAG, Hybrid, and Direct approaches"
               className="w-full px-4 py-3 bg-unkey-gray-850 border border-unkey-gray-700 rounded-unkey-md focus:ring-2 focus:ring-unkey-teal-500 focus:border-unkey-teal-500 resize-none text-white placeholder-unkey-gray-500"
               rows={4}
               disabled={isDisabled}
@@ -99,7 +99,7 @@ export function UnifiedQuerySection({
               aria-label="Query input"
             />
             <p className="mt-1 text-sm text-unkey-gray-400">
-              This query will be sent to RAG, Hybrid, and Direct Context (if available) simultaneously
+              This query will be sent to RAG, Hybrid, and Direct approaches (if available) simultaneously
             </p>
           </div>
 
