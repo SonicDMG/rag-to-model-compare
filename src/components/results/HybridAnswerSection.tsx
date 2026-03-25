@@ -14,7 +14,6 @@ interface HybridAnswerSectionProps {
 
 /**
  * Simplified Hybrid section for Query tab - shows answer and timeline only
- * For detailed metrics, see Performance tab
  */
 export function HybridAnswerSection({
   directResult,
@@ -109,18 +108,6 @@ export function HybridAnswerSection({
             </div>
           </div>
 
-          {/* Link to Performance Tab */}
-          <div className="mt-4 pt-4 border-t border-unkey-gray-700">
-            <a
-              href="#performance"
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-2"
-            >
-              <span>View detailed metrics in Performance tab</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
         </div>
       )}
     </div>

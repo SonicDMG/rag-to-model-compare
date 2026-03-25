@@ -15,6 +15,8 @@ interface RagSectionProps {
   documentTokens?: number;
   processingEvents?: ProcessingEvent[];
   processedContent?: string;
+  hideAnswer?: boolean;
+  hideTimeline?: boolean;
 }
 
 export function RagSection({
@@ -23,7 +25,9 @@ export function RagSection({
   error,
   documentTokens,
   processingEvents,
-  processedContent
+  processedContent,
+  hideAnswer = false,
+  hideTimeline = false
 }: RagSectionProps) {
   const [showProcessedText, setShowProcessedText] = useState(false);
 
@@ -40,7 +44,7 @@ export function RagSection({
       </div>
 
       {/* Processing Timeline */}
-      {processingEvents && processingEvents.length > 0 && (
+      {!hideTimeline && processingEvents && processingEvents.length > 0 && (
         <ProcessingTimeline
           pipeline={PipelineType.RAG}
           events={processingEvents}
@@ -109,46 +113,48 @@ export function RagSection({
       {ragResult && !isQuerying && (
         <section className="space-y-6">
           {/* Answer Display */}
-          <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-success/30">
-            <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
-            
-            <div className="prose prose-sm max-w-none min-h-[180px]">
-              <ExpandableText text={ragResult.answer} characterLimit={400} />
-            </div>
+          {!hideAnswer && (
+            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-success/30">
+              <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
+              
+              <div className="prose prose-sm max-w-none min-h-[180px]">
+                <ExpandableText text={ragResult.answer} characterLimit={400} />
+              </div>
 
-            {/* Source Citations */}
-            {ragResult.sources && ragResult.sources.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-unkey-gray-700">
-                <h4 className="text-sm font-semibold text-unkey-gray-200 mb-3">
-                  Source Citations ({ragResult.sources.length})
-                </h4>
-                <div className="space-y-3">
-                  {ragResult.sources.map((source, index) => (
-                    <div
-                      key={source.id}
-                      className="bg-success/10 rounded-unkey-md p-3 text-sm border border-success/20"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="flex-shrink-0 w-6 h-6 bg-success text-white rounded-full flex items-center justify-center text-xs font-semibold">
-                          {index + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-unkey-gray-300 line-clamp-3">
-                            {source.content}
-                          </p>
-                          {source.metadata?.index !== undefined && (
-                            <p className="text-xs text-unkey-gray-500 mt-1">
-                              Chunk {source.metadata.index + 1}
+              {/* Source Citations */}
+              {ragResult.sources && ragResult.sources.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-unkey-gray-700">
+                  <h4 className="text-sm font-semibold text-unkey-gray-200 mb-3">
+                    Source Citations ({ragResult.sources.length})
+                  </h4>
+                  <div className="space-y-3">
+                    {ragResult.sources.map((source, index) => (
+                      <div
+                        key={source.id}
+                        className="bg-success/10 rounded-unkey-md p-3 text-sm border border-success/20"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="flex-shrink-0 w-6 h-6 bg-success text-white rounded-full flex items-center justify-center text-xs font-semibold">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-unkey-gray-300 line-clamp-3">
+                              {source.content}
                             </p>
-                          )}
+                            {source.metadata?.index !== undefined && (
+                              <p className="text-xs text-unkey-gray-500 mt-1">
+                                Chunk {source.metadata.index + 1}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Metrics Display */}
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">

@@ -22,6 +22,8 @@ interface DirectSectionProps {
   isOllamaAvailable?: boolean;
   processingEvents?: ProcessingEvent[];
   processedContent?: string;
+  hideAnswer?: boolean;
+  hideTimeline?: boolean;
 }
 
 export function DirectSection({
@@ -34,7 +36,9 @@ export function DirectSection({
   onModelChange,
   isOllamaAvailable = true,
   processingEvents,
-  processedContent
+  processedContent,
+  hideAnswer = false,
+  hideTimeline = false
 }: DirectSectionProps) {
   const [recheckAttempted, setRecheckAttempted] = useState(false);
   const [showProcessedText, setShowProcessedText] = useState(false);
@@ -72,7 +76,7 @@ export function DirectSection({
       </div>
 
       {/* Processing Timeline */}
-      {processingEvents && processingEvents.length > 0 && (
+      {!hideTimeline && processingEvents && processingEvents.length > 0 && (
         <ProcessingTimeline
           pipeline={PipelineType.OLLAMA}
           events={processingEvents}
@@ -214,13 +218,15 @@ export function DirectSection({
       {ollamaResult && !isQuerying && (
         <section className="space-y-6">
           {/* Answer Display */}
-          <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-purple-500/30">
-            <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
-            
-            <div className="prose prose-sm max-w-none min-h-[180px]">
-              <ExpandableText text={ollamaResult.answer} characterLimit={50} />
+          {!hideAnswer && (
+            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-purple-500/30">
+              <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
+              
+              <div className="prose prose-sm max-w-none min-h-[180px]">
+                <ExpandableText text={ollamaResult.answer} characterLimit={50} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Metrics Display */}
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">

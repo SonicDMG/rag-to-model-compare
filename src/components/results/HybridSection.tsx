@@ -15,6 +15,8 @@ interface HybridSectionProps {
   documentTokens?: number;
   processingEvents?: ProcessingEvent[];
   processedContent?: string;
+  hideAnswer?: boolean;
+  hideTimeline?: boolean;
 }
 
 export function HybridSection({
@@ -23,7 +25,9 @@ export function HybridSection({
   error,
   documentTokens,
   processingEvents,
-  processedContent
+  processedContent,
+  hideAnswer = false,
+  hideTimeline = false
 }: HybridSectionProps) {
   const [showProcessedText, setShowProcessedText] = useState(false);
 
@@ -40,7 +44,7 @@ export function HybridSection({
       </div>
 
       {/* Processing Timeline */}
-      {processingEvents && processingEvents.length > 0 && (
+      {!hideTimeline && processingEvents && processingEvents.length > 0 && (
         <ProcessingTimeline
           pipeline={PipelineType.DIRECT}
           events={processingEvents}
@@ -109,13 +113,15 @@ export function HybridSection({
       {directResult && !isQuerying && (
         <section className="space-y-6">
           {/* Answer Display */}
-          <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-blue/30">
-            <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
-            
-            <div className="prose prose-sm max-w-none min-h-[180px]">
-              <ExpandableText text={directResult.answer} characterLimit={400} />
+          {!hideAnswer && (
+            <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card p-6 border border-blue/30">
+              <h3 className="text-xl font-bold text-white mb-4">Answer</h3>
+              
+              <div className="prose prose-sm max-w-none min-h-[180px]">
+                <ExpandableText text={directResult.answer} characterLimit={400} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Metrics Display */}
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">

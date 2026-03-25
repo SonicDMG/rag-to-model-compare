@@ -303,6 +303,8 @@ export function PerformanceTab({
               documentTokens={documentTokens}
               processedContent={processedContent}
               processingEvents={displayedResults.rag?.processingEvents}
+              hideAnswer={true}
+              hideTimeline={true}
             />
             
             <HybridSection
@@ -312,6 +314,8 @@ export function PerformanceTab({
               documentTokens={documentTokens}
               processedContent={processedContent}
               processingEvents={displayedResults.direct?.processingEvents}
+              hideAnswer={true}
+              hideTimeline={true}
             />
             
             <DirectSection
@@ -323,6 +327,8 @@ export function PerformanceTab({
               selectedModel={ollamaModel}
               availableModels={availableOllamaModels}
               processingEvents={displayedResults.ollama?.processingEvents}
+              hideAnswer={true}
+              hideTimeline={true}
             />
           </div>
         ) : (
