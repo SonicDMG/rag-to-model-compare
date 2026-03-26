@@ -84,7 +84,7 @@ export function DocumentUpload({
 
   // Helper function to validate file types
   const isValidFileType = (file: File): boolean => {
-    const validExtensions = ['.txt', '.md', '.json', '.pdf', '.docx', '.doc'];
+    const validExtensions = ['.txt', '.md', '.pdf', '.docx', '.doc'];
     return validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
   };
 
@@ -485,44 +485,209 @@ export function DocumentUpload({
       return updated;
     });
 
-    const formData = new FormData();
-    formData.append('files', file);  // Single file
-    
-    // If this is part of a multi-file upload, include the shared document ID
-    if (sharedDocumentId) {
-      formData.append('sharedDocumentId', sharedDocumentId);
-    }
-    
-    // If this file should skip RAG, include it in the skipRAG parameter
-    if (skipRAG) {
-      formData.append('skipRAG', file.name);
-    }
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const response = await fetch('/api/rag-comparison/upload', {
-      method: 'POST',
-      body: formData,
+      // Use the SSE-based upload-stream endpoint
+      fetch('/api/rag-comparison/upload-stream', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+          }
+
+          // Get the response as a stream
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+
+          if (!reader) {
+            throw new Error('No response body');
+          }
+
+          let buffer = '';
+          let ragResult: any = null;
+          let directResult: any = null;
+          let ragCompleted = false;
+          let directCompleted = false;
+
+          const processStream = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                  // Stream complete - check if both pipelines finished
+                  if (ragCompleted || directCompleted) {
+                    // Use documentId from backend (whichever pipeline completed successfully)
+                    const documentId = ragResult?.documentId || directResult?.documentId || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                    
+                    // Build result object for multi-file upload
+                    const result = {
+                      filename: file.name,
+                      relativePath: (file as any).webkitRelativePath || file.name,
+                      documentId: documentId,
+                      hasImages: directResult?.hasImages,
+                      imageCount: directResult?.imageCount,
+                      rag: {
+                        status: ragCompleted && ragResult?.success ? 'success' : 'error',
+                        chunkCount: ragResult?.chunkCount,
+                        tokenCount: ragResult?.tokenCount,
+                        indexTime: ragResult?.indexTime,
+                        processedText: ragResult?.processedText,
+                        error: ragResult?.error
+                      },
+                      direct: {
+                        status: directCompleted && directResult?.success ? 'success' : 'error',
+                        tokenCount: directResult?.tokenCount,
+                        loadTime: directResult?.loadTime,
+                        warnings: directResult?.warnings,
+                        processedText: directResult?.processedText,
+                        error: directResult?.error
+                      }
+                    };
+
+                    resolve(result);
+                  } else {
+                    reject(new Error('Both pipelines failed'));
+                  }
+                  
+                  break;
+                }
+
+                // Decode chunk and add to buffer
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.slice(6));
+                      
+                      // Handle different event types
+                      if (data.type === 'processing_event') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const event = data.event as ProcessingEvent;
+                        
+                        setStreamingProgress(prev => {
+                          if (!prev) return prev;
+                          
+                          if (pipeline === PipelineType.RAG) {
+                            // Check if event already exists (same ID), update it; otherwise append
+                            const existingIndex = prev.ragProgress.events.findIndex(e => e.id === event.id);
+                            const updatedEvents = existingIndex >= 0
+                              ? prev.ragProgress.events.map((e, i) => i === existingIndex ? event : e)
+                              : [...prev.ragProgress.events, event];
+                            
+                            return {
+                              ...prev,
+                              ragProgress: {
+                                ...prev.ragProgress,
+                                status: 'processing',
+                                currentOperation: event.operationName,
+                                events: updatedEvents,
+                              },
+                            };
+                          } else if (pipeline === PipelineType.DIRECT) {
+                            // Check if event already exists (same ID), update it; otherwise append
+                            const existingIndex = prev.directProgress.events.findIndex(e => e.id === event.id);
+                            const updatedEvents = existingIndex >= 0
+                              ? prev.directProgress.events.map((e, i) => i === existingIndex ? event : e)
+                              : [...prev.directProgress.events, event];
+                            
+                            return {
+                              ...prev,
+                              directProgress: {
+                                ...prev.directProgress,
+                                status: 'processing',
+                                currentOperation: event.operationName,
+                                events: updatedEvents,
+                              },
+                            };
+                          }
+                          return prev;
+                        });
+                      } else if (data.type === 'pipeline_complete') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const result = data.result;
+                        
+                        if (pipeline === PipelineType.RAG) {
+                          ragResult = result;
+                          ragCompleted = true;
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            ragProgress: {
+                              ...prev.ragProgress,
+                              status: 'complete',
+                              result,
+                            },
+                          } : prev);
+                        } else if (pipeline === PipelineType.DIRECT) {
+                          directResult = result;
+                          directCompleted = true;
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            directProgress: {
+                              ...prev.directProgress,
+                              status: 'complete',
+                              result,
+                            },
+                          } : prev);
+                        }
+                      } else if (data.type === 'pipeline_error') {
+                        const pipeline = data.pipeline as PipelineType;
+                        const error = data.error;
+                        
+                        if (pipeline === PipelineType.RAG) {
+                          ragCompleted = true;
+                          ragResult = { success: false, error };
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            ragProgress: {
+                              ...prev.ragProgress,
+                              status: 'error',
+                              error,
+                            },
+                          } : prev);
+                        } else if (pipeline === PipelineType.DIRECT) {
+                          directCompleted = true;
+                          directResult = { success: false, error };
+                          setStreamingProgress(prev => prev ? {
+                            ...prev,
+                            directProgress: {
+                              ...prev.directProgress,
+                              status: 'error',
+                              error,
+                            },
+                          } : prev);
+                        }
+                      } else if (data.type === 'error') {
+                        throw new Error(data.error);
+                      }
+                    } catch (parseError) {
+                      console.error('Error parsing SSE data:', parseError);
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Stream processing error:', error);
+              reject(error);
+            }
+          };
+
+          processStream();
+        })
+        .catch(error => {
+          console.error('Upload error:', error);
+          reject(error);
+        });
     });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-
-    // Handle single-file response
-    if ('data' in result && result.data) {
-      return {
-        filename: file.name,
-        relativePath: (file as any).webkitRelativePath || file.name,
-        documentId: result.data.documentId,
-        hasImages: result.data.hasImages,
-        imageCount: result.data.imageCount,
-        rag: result.data.rag,
-        direct: result.data.direct
-      };
-    }
-
-    throw new Error('Unexpected response format');
   };
 
   // Update file status based on upload result
@@ -590,14 +755,44 @@ export function DocumentUpload({
       ? `batch-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       : undefined;
 
+    // Initialize streaming progress for multi-file uploads
+    setStreamingProgress({
+      isActive: true,
+      filename: `Processing ${files.length} files...`,
+      ragProgress: {
+        status: 'processing',
+        currentOperation: 'Starting batch upload...',
+        events: [],
+      },
+      directProgress: {
+        status: 'processing',
+        currentOperation: 'Starting batch upload...',
+        events: [],
+      },
+    });
+
     // Process files in batches of 'concurrency'
     for (let i = 0; i < files.length; i += concurrency) {
       const batch = files.slice(i, i + concurrency);
 
+      // Update progress to show current batch
+      setStreamingProgress(prev => prev ? {
+        ...prev,
+        filename: `Processing file ${i + 1}-${Math.min(i + batch.length, files.length)} of ${files.length}...`,
+      } : prev);
+
       // Upload batch in parallel, passing shared document ID for multi-file uploads
       const batchPromises = batch.map((file, batchIndex) => {
+        const fileIndex = i + batchIndex;
         const shouldSkipRAG = filesToSkipRAG.includes(file.name);
-        return uploadSingleFile(file, i + batchIndex, sharedDocumentId, shouldSkipRAG);
+        
+        // Update progress to show current file being processed
+        setStreamingProgress(prev => prev ? {
+          ...prev,
+          filename: `Processing ${file.name} (${fileIndex + 1} of ${files.length})...`,
+        } : prev);
+        
+        return uploadSingleFile(file, fileIndex, sharedDocumentId, shouldSkipRAG);
       });
 
       const batchResults = await Promise.allSettled(batchPromises);
