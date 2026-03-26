@@ -48,6 +48,7 @@ export interface UploadResultData {
 interface DocumentUploadProps {
   onUploadComplete?: (documentId: string) => void;
   onUploadResult?: (result: UploadResultData) => void;
+  onUploadStart?: () => void;
 }
 
 interface FileStatus {
@@ -58,7 +59,7 @@ interface FileStatus {
   directStatus?: 'success' | 'error';
 }
 
-export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUploadProps) {
+export function DocumentUpload({ onUploadComplete, onUploadResult, onUploadStart }: DocumentUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMode, setUploadMode] = useState<'single' | 'folder'>('single');
   const [isDragging, setIsDragging] = useState(false);
@@ -739,6 +740,11 @@ export function DocumentUpload({ onUploadComplete, onUploadResult }: DocumentUpl
 
   const handleUpload = async () => {
     if (files.length === 0) return;
+
+    // Call onUploadStart to clear previous query results
+    if (onUploadStart) {
+      onUploadStart();
+    }
 
     setIsUploading(true);
     setSkippedFiles([]);

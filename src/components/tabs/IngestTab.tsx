@@ -21,6 +21,7 @@ interface IngestTabProps {
   // Upload handlers
   onUploadComplete: (documentId: string) => void;
   onUploadResult: (result: UploadResultData) => void;
+  onUploadStart?: () => void;
   
   // Upload result data
   uploadResult: UploadResultData | null;
@@ -41,6 +42,7 @@ export function IngestTab({
   availableOllamaModels,
   onUploadComplete,
   onUploadResult,
+  onUploadStart,
   uploadResult,
 }: IngestTabProps) {
   return (
@@ -53,6 +55,7 @@ export function IngestTab({
             <DocumentUpload
               onUploadComplete={onUploadComplete}
               onUploadResult={onUploadResult}
+              onUploadStart={onUploadStart}
             />
           </div>
         </div>

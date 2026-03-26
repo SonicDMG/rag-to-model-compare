@@ -48,7 +48,7 @@ export function PerformanceTab({
   processedContent,
   ollamaModel,
   availableOllamaModels,
-  isOllamaAvailable,
+  // isOllamaAvailable is available but not currently used in this component
 }: PerformanceTabProps) {
   const [queryHistory, setQueryHistory] = useState<QueryHistoryItem[]>([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string>('current');

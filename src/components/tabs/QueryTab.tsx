@@ -57,8 +57,7 @@ interface QueryTabProps {
  */
 export function QueryTab({
   documentId,
-  documentTokens,
-  processedContent,
+  // documentTokens and processedContent are available but not currently used in this component
   onQueryBoth,
   isLoading = false,
   ragResult,
@@ -70,8 +69,7 @@ export function QueryTab({
   directError,
   directProcessingEvents = [],
   ollamaModel = 'llama3.2',
-  availableOllamaModels = [],
-  isOllamaAvailable = false,
+  // availableOllamaModels and isOllamaAvailable are available but not currently used in this component
   ollamaResult = null,
   isOllamaQuerying = false,
   ollamaError = null,

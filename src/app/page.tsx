@@ -90,6 +90,30 @@ export default function Home() {
     setUploadResult(result);
   };
 
+  // Clear query results and upload results when a new upload starts
+  const handleUploadStart = () => {
+    // Clear upload results from previous document
+    setUploadResult(null);
+    
+    // Clear all query results
+    setRagResult(null);
+    setDirectResult(null);
+    setOllamaResult(null);
+    
+    // Clear errors
+    setRagError(null);
+    setDirectError(null);
+    setOllamaError(null);
+    
+    // Clear processing events
+    setRagProcessingEvents([]);
+    setDirectProcessingEvents([]);
+    setOllamaProcessingEvents([]);
+    
+    // Reset query count
+    setQueryCount(0);
+  };
+
   const handleQueryBoth = async (query: string, temperature: number, maxTokens: number) => {
     if (!documentId) return;
 
@@ -333,6 +357,7 @@ export default function Home() {
                   availableOllamaModels={availableOllamaModels}
                   onUploadComplete={handleUploadComplete}
                   onUploadResult={handleUploadResult}
+                  onUploadStart={handleUploadStart}
                   uploadResult={uploadResult}
                 />
               </TabPanel>
