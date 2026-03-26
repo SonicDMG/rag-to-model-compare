@@ -384,10 +384,10 @@ async function processRAGPipeline(
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.RAG);
 
   try {
-    // Check if file already exists in OpenSearch
+    // Check if file already exists in OpenRAG
     const fileCheckId = tracker.startEvent(
       ProcessingEventType.FILE_STATUS_CHECK,
-      'Checking if file already exists in OpenSearch'
+      'Checking if file already exists in OpenRAG'
     );
 
     let fileExists = false;
@@ -472,7 +472,7 @@ async function processRAGPipeline(
       );
       tracker.completeEvent(skipId, {
         skipped: true,
-        reason: 'File already exists in OpenSearch',
+        reason: 'File already exists in OpenRAG',
         ...(existingDocument && {
           existingDocumentId: existingDocument.id,
           uploadedAt: existingDocument.uploadedAt
@@ -611,83 +611,6 @@ async function processDirectPipeline(
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.DIRECT);
 
   try {
-    // Check if file already exists in OpenSearch
-    const fileCheckId = tracker.startEvent(
-      ProcessingEventType.FILE_STATUS_CHECK,
-      'Checking if file already exists in OpenSearch'
-    );
-
-    let fileExists = false;
-    let existingDocument: any = null;
-
-    try {
-      console.log(`🔍 [Direct] Checking if file exists: ${file.name}`);
-      
-      // Call OpenRAG backend directly
-      const backendUrl = `${process.env.OPENRAG_URL}/api/documents/check-filename?filename=${encodeURIComponent(file.name)}`;
-      console.log(`🔍 [Direct] Backend URL: ${backendUrl}`);
-      
-      const checkResponse = await fetch(backendUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENRAG_API_KEY}`
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      });
-      
-      console.log(`🔍 [Direct] Check response status: ${checkResponse.status}`);
-      
-      if (checkResponse.ok) {
-        const checkData = await checkResponse.json();
-        fileExists = checkData.exists;
-        existingDocument = checkData.document;
-        
-        console.log(`🔍 [Direct] File check result: exists=${fileExists}`, existingDocument ? `documentId=${existingDocument.id}` : '');
-        
-        tracker.completeEvent(fileCheckId, {
-          exists: fileExists,
-          filename: file.name,
-          skipped: fileExists,
-          ...(existingDocument && {
-            documentId: existingDocument.id,
-            uploadedAt: existingDocument.uploadedAt
-          })
-        });
-      } else if (checkResponse.status === 404) {
-        // 404 means file doesn't exist - this is expected for new files
-        console.log(`🔍 [Direct] File does not exist (404) - proceeding with upload`);
-        tracker.completeEvent(fileCheckId, {
-          exists: false,
-          filename: file.name,
-          skipped: false
-        });
-      } else {
-        const errorText = await checkResponse.text();
-        console.warn(`⚠️  [Direct] File check returned ${checkResponse.status}: ${errorText}`);
-        tracker.completeEvent(fileCheckId, {
-          exists: false,
-          filename: file.name,
-          skipped: false,
-          note: `Check returned ${checkResponse.status}, proceeding with upload`
-        });
-      }
-    } catch (error) {
-      console.error(`❌ [Direct] File check error:`, error);
-      tracker.failEvent(
-        fileCheckId,
-        `File check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-      // Continue with upload even if check fails
-    }
-
-    // Note: Direct pipeline does NOT skip even if file exists in OpenRAG
-    // It needs to parse and store the document content locally for direct model queries
-    // Only log the file existence check result for informational purposes
-    if (fileExists) {
-      console.log(`ℹ️  [Direct] File exists in OpenRAG, but Direct pipeline will still process it locally`);
-    }
-
     // File validation
     const validationId = tracker.startEvent(
       ProcessingEventType.FILE_VALIDATION,
