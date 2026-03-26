@@ -878,6 +878,7 @@ export async function query(
         generationTime: metrics.generationTime,
         tokens: metrics.totalTokens,
         cost: metrics.cost,
+        contextWindowUsage: contextWindowBreakdown.percentageUsed,
         breakdown
       },
       processingEvents: eventTracker.getEvents()

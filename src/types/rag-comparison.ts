@@ -232,6 +232,8 @@ export interface RAGResult {
     tokens: number;
     /** Total cost in USD */
     cost: number;
+    /** Percentage of context window used */
+    contextWindowUsage?: number;
     /** Detailed metrics breakdown (optional) */
     breakdown?: DetailedMetricsBreakdown;
   };
