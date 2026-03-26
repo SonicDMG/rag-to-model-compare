@@ -4,11 +4,32 @@ import { ModelConfigSection } from '@/components/processing/ModelConfigSection';
 import { DocumentUpload, UploadResultData } from '@/components/upload/DocumentUpload';
 import { RagUploadResult } from '@/components/upload/RagUploadResult';
 import { HybridUploadResult } from '@/components/upload/HybridUploadResult';
+import { DualPipelineUploadProgress, PipelineStatus } from '@/components/upload/DualPipelineUploadProgress';
+import { ProcessingEvent } from '@/types/processing-events';
 
 interface OllamaModelInfo {
   name: string;
   displayName: string;
   supportsImages: boolean;
+}
+
+export interface StreamingProgressData {
+  isActive: boolean;
+  filename: string;
+  ragProgress: {
+    status: PipelineStatus;
+    currentOperation?: string;
+    events: ProcessingEvent[];
+    error?: string;
+    result?: any;
+  };
+  directProgress: {
+    status: PipelineStatus;
+    currentOperation?: string;
+    events: ProcessingEvent[];
+    error?: string;
+    result?: any;
+  };
 }
 
 interface IngestTabProps {
@@ -22,9 +43,11 @@ interface IngestTabProps {
   onUploadComplete: (documentId: string) => void;
   onUploadResult: (result: UploadResultData) => void;
   onUploadStart?: () => void;
+  onStreamingProgressChange?: (progress: StreamingProgressData | null) => void;
   
   // Upload result data
   uploadResult: UploadResultData | null;
+  streamingProgress: StreamingProgressData | null;
 }
 
 /**
@@ -43,7 +66,9 @@ export function IngestTab({
   onUploadComplete,
   onUploadResult,
   onUploadStart,
+  onStreamingProgressChange,
   uploadResult,
+  streamingProgress,
 }: IngestTabProps) {
   return (
     <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
@@ -56,6 +81,7 @@ export function IngestTab({
               onUploadComplete={onUploadComplete}
               onUploadResult={onUploadResult}
               onUploadStart={onUploadStart}
+              onStreamingProgressChange={onStreamingProgressChange}
             />
           </div>
         </div>
@@ -73,7 +99,18 @@ export function IngestTab({
         </div>
       </section>
 
-      {/* Upload Results - Side by Side */}
+      {/* Pipeline Processing Progress - Full Width (All 3 Columns) */}
+      {streamingProgress && streamingProgress.isActive && (
+        <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
+          <DualPipelineUploadProgress
+            ragProgress={streamingProgress.ragProgress}
+            directProgress={streamingProgress.directProgress}
+            filename={streamingProgress.filename}
+          />
+        </section>
+      )}
+
+      {/* Upload Results - Side by Side (2 Columns) */}
       {uploadResult && (uploadResult.ragStatus || uploadResult.directStatus) && (
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-slideUp" style={{ animationDelay: '0.15s' }}>
           <RagUploadResult

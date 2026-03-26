@@ -2,10 +2,11 @@
 
 import { useState, useRef, DragEvent, useEffect } from 'react';
 import { ProcessingProgressIndicator } from './ProcessingProgressIndicator';
-import { DualPipelineUploadProgress, PipelineStatus } from './DualPipelineUploadProgress';
+import { PipelineStatus } from './DualPipelineUploadProgress';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { RagUploadResult } from './RagUploadResult';
 import { HybridUploadResult } from './HybridUploadResult';
+import { StreamingProgressData } from '@/components/tabs/IngestTab';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -49,6 +50,7 @@ interface DocumentUploadProps {
   onUploadComplete?: (documentId: string) => void;
   onUploadResult?: (result: UploadResultData) => void;
   onUploadStart?: () => void;
+  onStreamingProgressChange?: (progress: StreamingProgressData | null) => void;
 }
 
 interface FileStatus {
@@ -59,7 +61,12 @@ interface FileStatus {
   directStatus?: 'success' | 'error';
 }
 
-export function DocumentUpload({ onUploadComplete, onUploadResult, onUploadStart }: DocumentUploadProps) {
+export function DocumentUpload({
+  onUploadComplete,
+  onUploadResult,
+  onUploadStart,
+  onStreamingProgressChange
+}: DocumentUploadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMode, setUploadMode] = useState<'single' | 'folder'>('single');
   const [isDragging, setIsDragging] = useState(false);
@@ -69,25 +76,8 @@ export function DocumentUpload({ onUploadComplete, onUploadResult, onUploadStart
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
   
-  // Streaming upload state
-  const [streamingProgress, setStreamingProgress] = useState<{
-    isActive: boolean;
-    filename: string;
-    ragProgress: {
-      status: PipelineStatus;
-      currentOperation?: string;
-      events: ProcessingEvent[];
-      error?: string;
-      result?: any;
-    };
-    directProgress: {
-      status: PipelineStatus;
-      currentOperation?: string;
-      events: ProcessingEvent[];
-      error?: string;
-      result?: any;
-    };
-  } | null>(null);
+  // Streaming upload state - now managed by parent
+  const [streamingProgress, setStreamingProgress] = useState<StreamingProgressData | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -116,6 +106,13 @@ export function DocumentUpload({ onUploadComplete, onUploadResult, onUploadStart
       }
     };
   }, []);
+
+  // Notify parent of streaming progress changes
+  useEffect(() => {
+    if (onStreamingProgressChange) {
+      onStreamingProgressChange(streamingProgress);
+    }
+  }, [streamingProgress, onStreamingProgressChange]);
 
   // Upload single file with streaming progress
   const uploadSingleFileWithStreaming = async (file: File): Promise<void> => {
@@ -1050,16 +1047,7 @@ export function DocumentUpload({ onUploadComplete, onUploadResult, onUploadStart
             : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
         </button>
 
-        {/* Streaming Progress Display (Single File) */}
-        {streamingProgress && (
-          <div className="mt-6">
-            <DualPipelineUploadProgress
-              ragProgress={streamingProgress.ragProgress}
-              directProgress={streamingProgress.directProgress}
-              filename={streamingProgress.filename}
-            />
-          </div>
-        )}
+        {/* Streaming Progress Display moved to IngestTab for full-width layout */}
 
         {/* Results Display (After Streaming Complete) */}
         {!streamingProgress && uploadStatus.status !== 'idle' && uploadStatus.status !== 'uploading' && files.length === 0 && (

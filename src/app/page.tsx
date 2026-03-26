@@ -8,7 +8,7 @@ import { DEFAULT_MODEL } from '@/lib/constants/models';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { TabContainer } from '@/components/tabs/TabContainer';
 import { TabPanel } from '@/components/tabs/TabPanel';
-import { IngestTab } from '@/components/tabs/IngestTab';
+import { IngestTab, StreamingProgressData } from '@/components/tabs/IngestTab';
 import { QueryTab } from '@/components/tabs/QueryTab';
 import { PerformanceTab } from '@/components/tabs/PerformanceTab';
 import { useQueryHistory } from '@/hooks/useQueryHistory';
@@ -24,6 +24,9 @@ export default function Home() {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
   const [queryCount, setQueryCount] = useState(0);
+  
+  // Upload streaming progress state
+  const [streamingProgress, setStreamingProgress] = useState<StreamingProgressData | null>(null);
   
   // Query state
   const [isQuerying, setIsQuerying] = useState(false);
@@ -95,6 +98,9 @@ export default function Home() {
     // Clear upload results from previous document
     setUploadResult(null);
     
+    // Clear streaming progress
+    setStreamingProgress(null);
+    
     // Clear all query results
     setRagResult(null);
     setDirectResult(null);
@@ -112,6 +118,11 @@ export default function Home() {
     
     // Reset query count
     setQueryCount(0);
+  };
+
+  // Handle streaming progress updates from DocumentUpload
+  const handleStreamingProgressChange = (progress: StreamingProgressData | null) => {
+    setStreamingProgress(progress);
   };
 
   const handleQueryBoth = async (query: string, temperature: number, maxTokens: number) => {
@@ -358,7 +369,9 @@ export default function Home() {
                   onUploadComplete={handleUploadComplete}
                   onUploadResult={handleUploadResult}
                   onUploadStart={handleUploadStart}
+                  onStreamingProgressChange={handleStreamingProgressChange}
                   uploadResult={uploadResult}
+                  streamingProgress={streamingProgress}
                 />
               </TabPanel>
 
