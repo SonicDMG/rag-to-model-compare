@@ -209,6 +209,12 @@ export function DocumentUpload({
                         : 'File processing failed',
                       ...uploadResultData,
                     });
+                    
+                    // Mark streaming as inactive but keep the progress data for display
+                    setStreamingProgress(prev => prev ? {
+                      ...prev,
+                      isActive: false,
+                    } : prev);
                   }
                   
                   resolve();

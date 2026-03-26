@@ -100,7 +100,8 @@ export function IngestTab({
       </section>
 
       {/* Pipeline Processing Progress - Full Width (All 3 Columns) */}
-      {streamingProgress && streamingProgress.isActive && (
+      {/* Show pipeline progress if we have streaming progress data (active or completed) */}
+      {streamingProgress && (
         <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>
           <DualPipelineUploadProgress
             ragProgress={streamingProgress.ragProgress}
