@@ -404,19 +404,22 @@ export async function loadDocument(
     validateDocumentId(documentId, DirectPipelineError);
     validateContent(content);
 
-    // Sanitize and normalize content for accurate token counting
-    // The sanitizeInput removes control characters, but we also need to normalize whitespace
-    // to match what estimateTokens() does internally for consistent counting
+    // Sanitize content but preserve original formatting for accurate token counting
+    // The sanitizeInput removes control characters while preserving whitespace structure
     const sanitizedContent = sanitizeInput(content);
     
-    // Normalize whitespace to get the actual usable content
-    // This removes extra spaces, newlines, and formatting artifacts from PDF/DOCX parsing
-    // The normalized content is what will actually be used during queries
-    const normalizedContent = sanitizedContent.trim().replace(/\s+/g, ' ');
+    console.log(`[Hybrid Pipeline] BEFORE estimateTokens:`);
+    console.log(`[Hybrid Pipeline]   - Original content length: ${content.length.toLocaleString()} characters`);
+    console.log(`[Hybrid Pipeline]   - Sanitized content length: ${sanitizedContent.length.toLocaleString()} characters`);
+    console.log(`[Hybrid Pipeline]   - Content preview (first 200 chars): "${sanitizedContent.substring(0, 200)}"`);
     
-    // Estimate total tokens for this document using normalized content
-    // This gives us the actual usable token count, not the inflated raw content count
-    const tokenCount = estimateTokens(normalizedContent);
+    // Estimate total tokens for this document using the actual content
+    // Do NOT normalize whitespace here - tiktoken counts tokens based on actual text structure
+    // Collapsing whitespace artificially reduces token count and causes inaccurate metrics
+    const tokenCount = estimateTokens(sanitizedContent);
+    
+    console.log(`[Hybrid Pipeline] AFTER estimateTokens:`);
+    console.log(`[Hybrid Pipeline]   - Token count: ${tokenCount.toLocaleString()} tokens`);
 
     // Handle multi-file uploads - append to existing document
     if (isMultiFile) {
@@ -428,27 +431,24 @@ export async function loadDocument(
       const existingDoc = getDocument(documentId);
       
       if (existingDoc) {
-        // Append to existing document - use normalized content for consistency
-        appendToDocument(documentId, normalizedContent, metadata, undefined, separator);
+        // Append to existing document - use sanitized content
+        appendToDocument(documentId, sanitizedContent, metadata, undefined, separator);
         console.log(`[Direct] Appended ${filename || 'document'} to batch ${documentId}`);
       } else {
         // First document in the batch - create with separator prefix
         const contentWithHeader = filename
-          ? `=== DOCUMENT: ${filename} ===\n\n${normalizedContent}`
-          : normalizedContent;
+          ? `=== DOCUMENT: ${filename} ===\n\n${sanitizedContent}`
+          : sanitizedContent;
         appendToDocument(documentId, contentWithHeader, metadata);
         console.log(`[Direct] Created batch ${documentId} with ${filename || 'document'}`);
       }
       
       // Get the accumulated document to calculate total tokens
       const accumulatedDoc = getDocument(documentId);
-      // Normalize the accumulated content before calculating tokens
-      // This ensures separators and any remaining whitespace are normalized
-      const normalizedAccumulatedContent = accumulatedDoc
-        ? accumulatedDoc.content.trim().replace(/\s+/g, ' ')
-        : normalizedContent;
+      // Calculate tokens on the actual accumulated content without normalization
+      // This preserves the true token count including whitespace structure
       const totalTokenCount = accumulatedDoc
-        ? estimateTokens(normalizedAccumulatedContent)
+        ? estimateTokens(accumulatedDoc.content)
         : tokenCount;
       
       // Get context window limit for a default model

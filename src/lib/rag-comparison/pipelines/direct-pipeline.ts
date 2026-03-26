@@ -371,12 +371,15 @@ export async function loadDocument(
     validateDocumentId(documentId, OllamaPipelineError);
     validateContent(content);
 
-    // Sanitize and normalize content
+    // Sanitize content but preserve formatting for accurate token counting
     const sanitizedContent = sanitizeInput(content);
-    const normalizedContent = sanitizedContent.trim().replace(/\s+/g, ' ');
     
-    // Estimate tokens
-    const tokenCount = estimateTokens(normalizedContent);
+    // Estimate tokens on the actual content WITHOUT normalization
+    // Tiktoken counts based on actual text structure including whitespace
+    const tokenCount = estimateTokens(sanitizedContent);
+    
+    console.log(`[Ollama Pipeline] Token count: ${tokenCount.toLocaleString()} tokens`);
+    console.log(`[Ollama Pipeline] Content length: ${sanitizedContent.length.toLocaleString()} characters`);
 
     // Handle multi-file uploads
     if (isMultiFile) {
@@ -387,23 +390,20 @@ export async function loadDocument(
       const existingDoc = getDocument(documentId);
       
       if (existingDoc) {
-        appendToDocument(documentId, normalizedContent, metadata, undefined, separator);
+        appendToDocument(documentId, sanitizedContent, metadata, undefined, separator);
         console.log(`[Ollama] Appended ${filename || 'document'} to batch ${documentId}`);
       } else {
         const contentWithHeader = filename
-          ? `=== DOCUMENT: ${filename} ===\n\n${normalizedContent}`
-          : normalizedContent;
+          ? `=== DOCUMENT: ${filename} ===\n\n${sanitizedContent}`
+          : sanitizedContent;
         appendToDocument(documentId, contentWithHeader, metadata);
         console.log(`[Ollama] Created batch ${documentId} with ${filename || 'document'}`);
       }
       
-      // Get accumulated document
+      // Get accumulated document and count tokens on actual content
       const accumulatedDoc = getDocument(documentId);
-      const normalizedAccumulatedContent = accumulatedDoc
-        ? accumulatedDoc.content.trim().replace(/\s+/g, ' ')
-        : normalizedContent;
       const totalTokenCount = accumulatedDoc
-        ? estimateTokens(normalizedAccumulatedContent)
+        ? estimateTokens(accumulatedDoc.content)
         : tokenCount;
       
       // Use a default model for context window check

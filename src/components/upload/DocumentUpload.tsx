@@ -2,7 +2,6 @@
 
 import { useState, useRef, DragEvent, useEffect } from 'react';
 import { ProcessingProgressIndicator } from './ProcessingProgressIndicator';
-import { PipelineStatus } from './DualPipelineUploadProgress';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { RagUploadResult } from './RagUploadResult';
 import { HybridUploadResult } from './HybridUploadResult';
@@ -476,7 +475,7 @@ export function DocumentUpload({
     file: File,
     index: number,
     sharedDocumentId?: string,
-    skipRAG: boolean = false
+    _skipRAG: boolean = false
   ): Promise<any> => {
     // Mark as processing
     setFileStatuses(prev => {

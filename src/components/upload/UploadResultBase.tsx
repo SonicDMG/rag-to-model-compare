@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { estimateTokens } from '@/lib/utils/token-estimator';
 
 interface UploadResultBaseProps {
   pipelineType: 'rag' | 'direct';
@@ -24,23 +25,32 @@ interface UploadResultBaseProps {
   message?: string;
 }
 
-export function UploadResultBase({ 
+export function UploadResultBase({
   pipelineType,
-  status, 
-  tokenCount, 
+  status,
+  tokenCount,
   indexTime,
   loadTime,
   warnings,
-  processedText, 
-  error, 
-  hasImages, 
-  imageCount, 
-  fileSize, 
-  skipped, 
-  existingDocument, 
-  message 
+  processedText,
+  error,
+  hasImages,
+  imageCount,
+  fileSize,
+  skipped,
+  existingDocument,
+  message
 }: UploadResultBaseProps) {
   const [showText, setShowText] = useState(false);
+
+  // Calculate actual token count from processed text if available
+  // This ensures accuracy regardless of backend calculation issues
+  const actualTokenCount = useMemo(() => {
+    if (processedText && pipelineType === 'direct') {
+      return estimateTokens(processedText);
+    }
+    return tokenCount;
+  }, [processedText, tokenCount, pipelineType]);
 
   if (!status) return null;
 
@@ -167,23 +177,23 @@ export function UploadResultBase({
                     )}
                   </>
                 ) : (
-                  <>
-                    <p className="flex items-start gap-2">
-                      <span className="text-blue">✓</span>
-                      <span>
-                        <span className="font-medium text-blue">Content Tokens:</span> {tokenCount?.toLocaleString()} tokens <span className="text-xs text-unkey-gray-400">(extracted text, images and formatting removed)</span>
-                      </span>
-                    </p>
-                    {characterCount > 0 && (
-                      <p className="flex items-start gap-2">
-                        <span className="text-unkey-gray-400">•</span>
-                        <span className="text-xs text-unkey-gray-400">
-                          Character count: {characterCount.toLocaleString()} characters
-                        </span>
-                      </p>
-                    )}
-                  </>
-                )}
+                 <>
+                   <p className="flex items-start gap-2">
+                     <span className="text-blue">✓</span>
+                     <span>
+                       <span className="font-medium text-blue">Content Tokens:</span> {actualTokenCount?.toLocaleString()} tokens <span className="text-xs text-unkey-gray-400">(extracted text, images and formatting removed)</span>
+                     </span>
+                   </p>
+                   {characterCount > 0 && (
+                     <p className="flex items-start gap-2">
+                       <span className="text-unkey-gray-400">•</span>
+                       <span className="text-xs text-unkey-gray-400">
+                         Character count: {characterCount.toLocaleString()} characters
+                       </span>
+                     </p>
+                   )}
+                 </>
+               )}
               </div>
             </div>
 

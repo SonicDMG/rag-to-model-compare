@@ -65,9 +65,9 @@ function estimateTokensHeuristic(text: string): number {
     adjustedCharsPerToken = 3.5; // Very dense text
   }
   
-  // Remove extra whitespace and normalize
-  const normalizedText = text.trim().replace(/\s+/g, ' ');
-  const charCount = normalizedText.length;
+  // Count characters without normalization to preserve actual text structure
+  // Whitespace is significant for token counting
+  const charCount = text.length;
   
   return Math.ceil(charCount / adjustedCharsPerToken);
 }

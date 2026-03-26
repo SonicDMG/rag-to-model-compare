@@ -205,17 +205,17 @@ export async function POST(request: NextRequest): Promise<Response> {
       
       // Enhanced logging for multi-file uploads
       console.log('[Direct Query Debug] Content source: Frontend');
-      console.log('[Direct Query Debug] Content length:', documentContent.length);
+      console.log('[Direct Query Debug] Content length:', documentContent?.length || 0);
       console.log('[Direct Query Debug] Content preview (first 500 chars):',
-        documentContent.substring(0, 500));
+        documentContent?.substring(0, 500) || '');
       
       // Count document separators to verify all files are included
       const separatorPattern = /=== DOCUMENT:/g;
-      const separatorMatches = documentContent.match(separatorPattern);
+      const separatorMatches = documentContent?.match(separatorPattern);
       const documentCount = separatorMatches ? separatorMatches.length : 0;
       console.log('[Direct Query Debug] Number of documents in content:', documentCount);
       
-      if (documentCount > 1) {
+      if (documentCount > 1 && documentContent) {
         console.log('[Direct Query Debug] ✅ Multi-file content detected with', documentCount, 'documents');
         // Log each document header found
         const headerPattern = /=== DOCUMENT: ([^\n]+) ===/g;
