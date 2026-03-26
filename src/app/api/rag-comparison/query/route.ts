@@ -46,6 +46,10 @@ const QueryRequestSchema = z.object({
     .min(1, 'Query is required')
     .max(10000, 'Query exceeds maximum length'),
   
+  // Optional processed content from frontend (for batch uploads)
+  processedContent: z.string()
+    .optional(),
+  
   model: z.string()
     .regex(/^[a-zA-Z0-9.-]+$/, 'Invalid model name format')
     .optional()
@@ -190,43 +194,88 @@ export async function POST(request: NextRequest): Promise<Response> {
       ollamaMaxTokens
     });
 
-    // Retrieve document from storage (needed for Direct pipeline)
-    console.log('Retrieving document from storage...');
-    console.log('[DEBUG] Storage state before retrieval:');
-    debugStorage();
-    console.log('[DEBUG] Looking for document ID:', sanitizedDocumentId);
-    const storedDoc = getDocument(sanitizedDocumentId);
+    // Use processedContent from frontend if provided, otherwise retrieve from storage
+    let documentContent: string | undefined;
+    let filterId: string | undefined;
+    let storedDoc = getDocument(sanitizedDocumentId); // Always try to get from storage for metadata/filterId
     
-    if (!storedDoc) {
-      console.warn('⚠️  Document not found in storage:', sanitizedDocumentId);
-      console.log('This may affect Direct pipeline, but RAG can still work if document was indexed.');
-    } else {
-      console.log('✅ Document found:', {
-        filename: storedDoc.metadata.filename,
-        hasFilterId: !!storedDoc.filterId,
-        filterId: storedDoc.filterId,
-        chunkCount: storedDoc.metadata.chunkCount,
-        contentLength: storedDoc.content.length
-      });
+    if (body.processedContent && body.processedContent.trim().length > 0) {
+      console.log('✅ Using processed content from frontend (batch upload)');
+      documentContent = body.processedContent;
       
       // Enhanced logging for multi-file uploads
-      console.log('[Direct Query Debug] Document ID:', sanitizedDocumentId);
-      console.log('[Direct Query Debug] Content length:', storedDoc.content.length);
+      console.log('[Direct Query Debug] Content source: Frontend');
+      console.log('[Direct Query Debug] Content length:', documentContent.length);
       console.log('[Direct Query Debug] Content preview (first 500 chars):',
-        storedDoc.content.substring(0, 500));
+        documentContent.substring(0, 500));
       
       // Count document separators to verify all files are included
       const separatorPattern = /=== DOCUMENT:/g;
-      const separatorMatches = storedDoc.content.match(separatorPattern);
+      const separatorMatches = documentContent.match(separatorPattern);
       const documentCount = separatorMatches ? separatorMatches.length : 0;
-      console.log('[Direct Query Debug] Number of documents in accumulated content:', documentCount);
+      console.log('[Direct Query Debug] Number of documents in content:', documentCount);
       
       if (documentCount > 1) {
         console.log('[Direct Query Debug] ✅ Multi-file content detected with', documentCount, 'documents');
+        // Log each document header found
+        const headerPattern = /=== DOCUMENT: ([^\n]+) ===/g;
+        const headers = [...documentContent.matchAll(headerPattern)];
+        console.log('[Direct Query Debug] Document files included:');
+        headers.forEach((match, idx) => {
+          console.log(`  ${idx + 1}. ${match[1]}`);
+        });
       } else if (documentCount === 1) {
         console.log('[Direct Query Debug] ℹ️  Single document detected');
       } else {
         console.log('[Direct Query Debug] ⚠️  No document separators found - may be single file or legacy format');
+      }
+      
+      // Get filterId from storage if available
+      if (storedDoc) {
+        filterId = storedDoc.filterId;
+        console.log('[Direct Query Debug] Retrieved filterId from storage:', filterId);
+      }
+    } else {
+      // Fallback to storage retrieval (legacy behavior)
+      console.log('Retrieving document from storage...');
+      console.log('[DEBUG] Storage state before retrieval:');
+      debugStorage();
+      console.log('[DEBUG] Looking for document ID:', sanitizedDocumentId);
+      
+      if (!storedDoc) {
+        console.warn('⚠️  Document not found in storage:', sanitizedDocumentId);
+        console.log('This may affect Direct pipeline, but RAG can still work if document was indexed.');
+      } else {
+        console.log('✅ Document found in storage:', {
+          filename: storedDoc.metadata.filename,
+          hasFilterId: !!storedDoc.filterId,
+          filterId: storedDoc.filterId,
+          chunkCount: storedDoc.metadata.chunkCount,
+          contentLength: storedDoc.content.length
+        });
+        
+        documentContent = storedDoc.content;
+        filterId = storedDoc.filterId;
+        
+        // Enhanced logging for multi-file uploads
+        console.log('[Direct Query Debug] Content source: Storage');
+        console.log('[Direct Query Debug] Content length:', documentContent.length);
+        console.log('[Direct Query Debug] Content preview (first 500 chars):',
+          documentContent.substring(0, 500));
+        
+        // Count document separators to verify all files are included
+        const separatorPattern = /=== DOCUMENT:/g;
+        const separatorMatches = documentContent.match(separatorPattern);
+        const documentCount = separatorMatches ? separatorMatches.length : 0;
+        console.log('[Direct Query Debug] Number of documents in accumulated content:', documentCount);
+        
+        if (documentCount > 1) {
+          console.log('[Direct Query Debug] ✅ Multi-file content detected with', documentCount, 'documents');
+        } else if (documentCount === 1) {
+          console.log('[Direct Query Debug] ℹ️  Single document detected');
+        } else {
+          console.log('[Direct Query Debug] ⚠️  No document separators found - may be single file or legacy format');
+        }
       }
     }
 
@@ -320,16 +369,16 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         // Direct pipeline (Hybrid approach: GPT with full context + optional filter search)
         // This is what the UI shows as "Direct Approach"
-        const directPromise = storedDoc
+        const directPromise = documentContent
           ? hybridQuery(
               sanitizedDocumentId,
-              storedDoc.content,
+              documentContent,
               sanitizedQuery,
               directConfig,
               createEventCallback(PipelineType.DIRECT),
-              storedDoc.filterId // Pass filterId for hybrid search capability
+              filterId // Pass filterId for hybrid search capability
             )
-          : Promise.reject(new Error('Document not found in storage for Direct pipeline'));
+          : Promise.reject(new Error('Document content not available for Direct pipeline'));
 
         directPromise
           .then((directResult) => {
@@ -360,16 +409,16 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         // Ollama pipeline (Local LLM with full context)
         // This is what the UI shows as "OLLAMA Pipeline"
-        const ollamaPromise = storedDoc
+        const ollamaPromise = documentContent
           ? directQuery(
               sanitizedDocumentId,
-              storedDoc.content,
+              documentContent,
               sanitizedQuery,
               ollamaConfig,
               createEventCallback(PipelineType.OLLAMA),
               undefined // images parameter
             )
-          : Promise.reject(new Error('Document not found in storage for Ollama pipeline'));
+          : Promise.reject(new Error('Document content not available for Ollama pipeline'));
 
         ollamaPromise
           .then((ollamaResult) => {

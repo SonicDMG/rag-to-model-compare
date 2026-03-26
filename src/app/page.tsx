@@ -154,6 +154,7 @@ export default function Home() {
         body: JSON.stringify({
           query,
           documentId,
+          processedContent: uploadResult?.directProcessedText, // Send full processed text from frontend
           temperature,
           maxTokens,
           model: DEFAULT_MODEL,
