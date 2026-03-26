@@ -203,6 +203,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     // Parse FormData
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const providedDocumentId = formData.get('documentId') as string | null;
+    const isMultiFileStr = formData.get('isMultiFile') as string | null;
+    const isMultiFile = isMultiFileStr === 'true';
     
     if (!file) {
       return new Response(
@@ -216,19 +219,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       validateFile(file);
     } catch (error) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: error instanceof Error ? error.message : 'File validation failed' 
+        JSON.stringify({
+          success: false,
+          error: error instanceof Error ? error.message : 'File validation failed'
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Generate document IDs
-    const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    // Use provided document ID for multi-file uploads, generate new one for single files
+    const documentId = providedDocumentId || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     
     console.log(`📄 Processing file: ${file.name}`);
     console.log(`📋 Document ID: ${documentId}`);
+    console.log(`📦 Multi-file upload: ${isMultiFile}`);
+    if (providedDocumentId) {
+      console.log(`🔗 Using shared document ID for batch: ${documentId}`);
+    }
 
     // Create streaming response
     const encoder = new TextEncoder();
@@ -290,7 +297,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         const directPromise = processDirectPipeline(
           directFile,
           documentId,
-          directEventCallback
+          directEventCallback,
+          isMultiFile
         );
 
         // Track completion count to close stream after both pipelines finish
@@ -597,7 +605,8 @@ async function processRAGPipeline(
 async function processDirectPipeline(
   file: File,
   documentId: string,
-  eventCallback: (event: any) => void
+  eventCallback: (event: any) => void,
+  isMultiFile: boolean = false
 ): Promise<any> {
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.DIRECT);
 
@@ -733,7 +742,7 @@ async function processDirectPipeline(
       content,
       documentId,
       directMetadata,
-      false,
+      isMultiFile,
       file.name
     );
 

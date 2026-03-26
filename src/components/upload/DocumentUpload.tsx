@@ -488,6 +488,12 @@ export function DocumentUpload({
     return new Promise((resolve, reject) => {
       const formData = new FormData();
       formData.append('file', file);
+      
+      // Pass shared document ID for multi-file uploads
+      if (sharedDocumentId) {
+        formData.append('documentId', sharedDocumentId);
+        formData.append('isMultiFile', 'true');
+      }
 
       // Use the SSE-based upload-stream endpoint
       fetch('/api/rag-comparison/upload-stream', {
