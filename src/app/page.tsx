@@ -5,7 +5,6 @@ import { UploadResultData } from '@/components/upload/DocumentUpload';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 import { FilterProvider, useFilter } from '@/contexts/FilterContext';
-import { DEFAULT_MODEL } from '@/lib/constants/models';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { TabContainer } from '@/components/tabs/TabContainer';
 import { TabPanel } from '@/components/tabs/TabPanel';
@@ -15,6 +14,7 @@ import { PerformanceTab } from '@/components/tabs/PerformanceTab';
 import { ChartsTab } from '@/components/tabs/ChartsTab';
 import { GlobalConfigBar } from '@/components/config/GlobalConfigBar';
 import { useQueryHistory } from '@/hooks/useQueryHistory';
+import { DEFAULT_MODEL } from '@/lib/constants/models';
 
 interface OllamaModelInfo {
   name: string;
@@ -179,7 +179,7 @@ function HomeContent() {
           processedContent: uploadResult?.directProcessedText, // Send full processed text from frontend
           temperature,
           maxTokens,
-          model: DEFAULT_MODEL,
+          model: pricingModel, // Use selected pricing model for cost calculations
           ollamaModel,
           ollamaTemperature: temperature,
           ollamaMaxTokens: maxTokens,
