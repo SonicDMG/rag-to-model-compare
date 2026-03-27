@@ -411,29 +411,6 @@ function formatModelName(modelId: string): string {
 }
 
 /**
- * Get the currently active LLM model from OpenRAG
- * 
- * @returns Promise resolving to active model ID or null if unavailable
- * 
- * @example
- * ```typescript
- * const activeModel = await getActiveModel();
- * if (activeModel) {
- *   console.log('Using model:', activeModel);
- * }
- * ```
- */
-export async function getActiveModel(): Promise<string | null> {
-  const result = await getOpenRAGSettings();
-  
-  if (result.success && result.flattened) {
-    return result.flattened.llm_model;
-  }
-  
-  return null;
-}
-
-/**
  * Get model configuration with dynamic fallback
  * 
  * Attempts to get model info from OpenRAG, falls back to hardcoded config.
@@ -463,85 +440,6 @@ export async function getModelConfig(modelId: string): Promise<ModelConfig | und
   console.warn(`Model ${modelId} not found in hardcoded list. Consider updating constants.`);
   
   return undefined;
-}
-
-/**
- * Check if OpenRAG API is accessible
- * 
- * Performs a lightweight check to verify API connectivity.
- * Useful for determining whether to use dynamic or fallback data.
- * 
- * @returns Promise resolving to true if API is accessible
- * 
- * @example
- * ```typescript
- * const isOnline = await isOpenRAGAvailable();
- * if (isOnline) {
- *   // Use dynamic model fetching
- * } else {
- *   // Use fallback models
- * }
- * ```
- */
-export async function isOpenRAGAvailable(): Promise<boolean> {
-  try {
-    const result = await getOpenRAGSettings();
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Update OpenRAG settings (including active models)
- *
- * **Note**: This function allows updating the active LLM and embedding models
- * in OpenRAG. Use with caution as it affects the entire OpenRAG instance.
- *
- * @param updates - Settings to update (uses SDK's SettingsUpdateOptions)
- * @returns Promise resolving to success status
- * @throws {OpenRAGModelsError} If update fails
- *
- * @example
- * ```typescript
- * try {
- *   await updateOpenRAGSettings({
- *     llm_model: 'gpt-4-turbo',
- *     llm_provider: 'openai'
- *   });
- *   console.log('Settings updated successfully');
- * } catch (error) {
- *   console.error('Failed to update settings:', error);
- * }
- * ```
- */
-export async function updateOpenRAGSettings(updates: {
-  llm_model?: string;
-  llm_provider?: string;
-  embedding_model?: string;
-  embedding_provider?: string;
-  chunk_size?: number;
-  chunk_overlap?: number;
-  system_prompt?: string;
-}): Promise<boolean> {
-  try {
-    const client = getClient();
-    
-    // Validate updates
-    if (!updates || typeof updates !== 'object') {
-      throw new OpenRAGModelsError(
-        'Invalid settings update object',
-        'INVALID_UPDATES',
-        { updates }
-      );
-    }
-    
-    await client.settings.update(updates);
-    
-    return true;
-  } catch (error) {
-    throw handleOpenRAGError(error);
-  }
 }
 
 // Made with Bob

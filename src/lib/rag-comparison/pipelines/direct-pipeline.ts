@@ -10,7 +10,7 @@ import { OllamaClient } from '../clients/ollama-client';
 import { OllamaConfig, OllamaResult, OllamaPipelineError } from '@/types/ollama';
 import type { DocumentMetadata } from '@/types/rag-comparison';
 import { getDocument, appendToDocument } from '../processing/document-storage';
-import { sanitizeInput, validateDocumentId, validateQuery } from '../utils/pipeline-utils';
+import { sanitizeInput, validateDocumentId, validateQuery, validateMetricsInput } from '../utils/pipeline-utils';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import { getOllamaModelConfig } from '@/lib/constants/ollama-models';
 import { OLLAMA_CONFIG } from '@/lib/env';
@@ -312,21 +312,13 @@ export function calculateMetrics(
   contextWindowUsage: number;
 } {
   // Validate inputs
-  if (generationTime < 0) {
-    throw new OllamaPipelineError(
-      'Generation time cannot be negative',
-      'INVALID_METRICS',
-      { generationTime }
-    );
-  }
-
-  if (inputTokens < 0 || outputTokens < 0) {
-    throw new OllamaPipelineError(
-      'Token counts cannot be negative',
-      'INVALID_METRICS',
-      { inputTokens, outputTokens }
-    );
-  }
+  validateMetricsInput(
+    {
+      times: { generationTime },
+      tokens: { inputTokens, outputTokens }
+    },
+    OllamaPipelineError
+  );
 
   const modelConfig = getOllamaModelConfig(model);
   const contextWindow = modelConfig?.contextWindow || 128000; // Default to 128K

@@ -8,6 +8,7 @@ import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
 import { RagSection } from '@/components/results/RagSection';
 import { HybridSection } from '@/components/results/HybridSection';
 import { DirectSection } from '@/components/results/DirectSection';
+import { formatTime, formatCost } from '@/lib/utils/formatters';
 
 interface OllamaModelInfo {
   name: string;
@@ -146,15 +147,6 @@ export function PerformanceTab({
 
   const metrics = getComparisonMetrics();
 
-  const formatTime = (ms: number) => {
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
-
-  const formatCost = (cost: number) => {
-    if (cost === 0) return 'Free';
-    return `$${cost.toFixed(4)}`;
-  };
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {

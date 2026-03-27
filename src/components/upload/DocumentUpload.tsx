@@ -7,6 +7,7 @@ import { RagUploadResult } from './RagUploadResult';
 import { HybridUploadResult } from './HybridUploadResult';
 import { StreamingProgressData } from '@/components/tabs/IngestTab';
 import { useFilter } from '@/contexts/FilterContext';
+import { Spinner } from '../ui/Spinner';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -299,10 +300,11 @@ export function DocumentUpload({
                           
                           if (pipeline === PipelineType.RAG) {
                             // Check if event already exists (same ID), update it; otherwise append
-                            const existingIndex = prev.ragProgress.events.findIndex(e => e.id === event.id);
+                            const currentEvents = prev.ragProgress.events || [];
+                            const existingIndex = currentEvents.findIndex(e => e.id === event.id);
                             const updatedEvents = existingIndex >= 0
-                              ? prev.ragProgress.events.map((e, i) => i === existingIndex ? event : e)
-                              : [...prev.ragProgress.events, event];
+                              ? currentEvents.map((e, i) => i === existingIndex ? event : e)
+                              : [...currentEvents, event];
                             
                             return {
                               ...prev,
@@ -315,10 +317,11 @@ export function DocumentUpload({
                             };
                           } else if (pipeline === PipelineType.DIRECT) {
                             // Check if event already exists (same ID), update it; otherwise append
-                            const existingIndex = prev.directProgress.events.findIndex(e => e.id === event.id);
+                            const currentEvents = prev.directProgress.events || [];
+                            const existingIndex = currentEvents.findIndex(e => e.id === event.id);
                             const updatedEvents = existingIndex >= 0
-                              ? prev.directProgress.events.map((e, i) => i === existingIndex ? event : e)
-                              : [...prev.directProgress.events, event];
+                              ? currentEvents.map((e, i) => i === existingIndex ? event : e)
+                              : [...currentEvents, event];
                             
                             return {
                               ...prev,
@@ -666,10 +669,11 @@ export function DocumentUpload({
                           
                           if (pipeline === PipelineType.RAG) {
                             // Check if event already exists (same ID), update it; otherwise append
-                            const existingIndex = prev.ragProgress.events.findIndex(e => e.id === event.id);
+                            const currentEvents = prev.ragProgress.events || [];
+                            const existingIndex = currentEvents.findIndex(e => e.id === event.id);
                             const updatedEvents = existingIndex >= 0
-                              ? prev.ragProgress.events.map((e, i) => i === existingIndex ? event : e)
-                              : [...prev.ragProgress.events, event];
+                              ? currentEvents.map((e, i) => i === existingIndex ? event : e)
+                              : [...currentEvents, event];
                             
                             return {
                               ...prev,
@@ -682,10 +686,11 @@ export function DocumentUpload({
                             };
                           } else if (pipeline === PipelineType.DIRECT) {
                             // Check if event already exists (same ID), update it; otherwise append
-                            const existingIndex = prev.directProgress.events.findIndex(e => e.id === event.id);
+                            const currentEvents = prev.directProgress.events || [];
+                            const existingIndex = currentEvents.findIndex(e => e.id === event.id);
                             const updatedEvents = existingIndex >= 0
-                              ? prev.directProgress.events.map((e, i) => i === existingIndex ? event : e)
-                              : [...prev.directProgress.events, event];
+                              ? currentEvents.map((e, i) => i === existingIndex ? event : e)
+                              : [...currentEvents, event];
                             
                             return {
                               ...prev,
@@ -1429,10 +1434,7 @@ export function DocumentUpload({
                     )}
                     {fileStatus.status === 'processing' && (
                       <div className="w-5 h-5">
-                        <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <Spinner size="md" className="text-blue-500" />
                       </div>
                     )}
                     {fileStatus.status === 'success' && (
@@ -1502,10 +1504,7 @@ export function DocumentUpload({
                 </svg>
               )}
               {(uploadStatus.status === 'uploading' || uploadStatus.status === 'processing') && (
-                <svg className="animate-spin h-5 w-5 text-unkey-teal-500 mt-0.5 mr-2" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
+                <Spinner size="md" className="text-unkey-teal-500 mt-0.5 mr-2" />
               )}
               
               <div className="flex-1">

@@ -314,4 +314,49 @@ export function validateQuery(
   }
 }
 
+/**
+ * Validate metrics input values
+ *
+ * Common validation logic for calculateMetrics functions across all pipelines.
+ * Ensures time and token values are non-negative.
+ *
+ * @param params - Object containing values to validate
+ * @param params.times - Time values to validate (e.g., retrievalTime, generationTime)
+ * @param params.tokens - Token counts to validate (e.g., inputTokens, outputTokens)
+ * @param ErrorClass - The error class to throw on validation failure
+ * @throws {PipelineError} If any value is negative
+ */
+export function validateMetricsInput(
+  params: {
+    times?: Record<string, number>;
+    tokens?: Record<string, number>;
+  },
+  ErrorClass: PipelineErrorConstructor
+): void {
+  // Validate time values
+  if (params.times) {
+    const negativeTime = Object.entries(params.times).find(([_, value]) => value < 0);
+    if (negativeTime) {
+      const [key, value] = negativeTime;
+      throw new ErrorClass(
+        `${key} cannot be negative`,
+        'INVALID_METRICS',
+        { [key]: value, ...params.times }
+      );
+    }
+  }
+
+  // Validate token counts
+  if (params.tokens) {
+    const negativeTokens = Object.entries(params.tokens).find(([_, value]) => value < 0);
+    if (negativeTokens) {
+      throw new ErrorClass(
+        'Token counts cannot be negative',
+        'INVALID_METRICS',
+        params.tokens
+      );
+    }
+  }
+}
+
 // Made with Bob

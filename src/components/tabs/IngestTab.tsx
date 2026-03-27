@@ -3,26 +3,14 @@
 import { DocumentUpload, UploadResultData } from '@/components/upload/DocumentUpload';
 import { RagUploadResult } from '@/components/upload/RagUploadResult';
 import { HybridUploadResult } from '@/components/upload/HybridUploadResult';
-import { DualPipelineUploadProgress, PipelineStatus } from '@/components/upload/DualPipelineUploadProgress';
-import { ProcessingEvent } from '@/types/processing-events';
+import { DualPipelineUploadProgress } from '@/components/upload/DualPipelineUploadProgress';
+import { PipelineProgress } from '@/types/rag-comparison';
 
 export interface StreamingProgressData {
   isActive: boolean;
   filename: string;
-  ragProgress: {
-    status: PipelineStatus;
-    currentOperation?: string;
-    events: ProcessingEvent[];
-    error?: string;
-    result?: any;
-  };
-  directProgress: {
-    status: PipelineStatus;
-    currentOperation?: string;
-    events: ProcessingEvent[];
-    error?: string;
-    result?: any;
-  };
+  ragProgress: PipelineProgress;
+  directProgress: PipelineProgress;
 }
 
 interface IngestTabProps {

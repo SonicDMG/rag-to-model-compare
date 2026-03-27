@@ -9,18 +9,10 @@
 'use client';
 
 import React from 'react';
-import { ProcessingEvent, PipelineType } from '@/types/processing-events';
+import { PipelineType } from '@/types/processing-events';
+import { PipelineProgress, PipelineStatus } from '@/types/rag-comparison';
 import { ProcessingTimeline } from '../processing/ProcessingTimeline';
-
-export type PipelineStatus = 'idle' | 'starting' | 'processing' | 'complete' | 'error';
-
-interface PipelineProgress {
-  status: PipelineStatus;
-  currentOperation?: string;
-  events: ProcessingEvent[];
-  error?: string;
-  result?: any;
-}
+import { Spinner } from '../ui/Spinner';
 
 interface DualPipelineUploadProgressProps {
   ragProgress: PipelineProgress;
@@ -54,12 +46,7 @@ function getStatusDisplay(status: PipelineStatus): {
         color: 'text-blue',
         bgColor: 'bg-blue/10',
         borderColor: 'border-blue/20',
-        icon: (
-          <svg className="animate-spin h-5 w-5 text-blue" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        ),
+        icon: <Spinner size="md" className="text-blue" />,
         label: 'Starting...'
       };
     case 'processing':
@@ -67,12 +54,7 @@ function getStatusDisplay(status: PipelineStatus): {
         color: 'text-blue',
         bgColor: 'bg-blue/10',
         borderColor: 'border-blue/20',
-        icon: (
-          <svg className="animate-spin h-5 w-5 text-blue" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        ),
+        icon: <Spinner size="md" className="text-blue" />,
         label: 'Processing...'
       };
     case 'complete':
@@ -150,7 +132,7 @@ function PipelineProgressCard({
         )}
 
         {/* Event Timeline */}
-        {progress.events.length > 0 && (
+        {progress.events && progress.events.length > 0 && (
           <div className="mt-4">
             <ProcessingTimeline
               pipeline={pipeline}
@@ -160,7 +142,7 @@ function PipelineProgressCard({
         )}
 
         {/* Idle State */}
-        {progress.status === 'idle' && progress.events.length === 0 && (
+        {progress.status === 'idle' && (!progress.events || progress.events.length === 0) && (
           <div className="text-center py-8 text-unkey-gray-500">
             <p className="text-sm">Waiting to start...</p>
           </div>
@@ -205,10 +187,7 @@ export function DualPipelineUploadProgress({
           </div>
           {isProcessing && (
             <div className="flex items-center gap-2">
-              <svg className="animate-spin h-6 w-6 text-unkey-teal-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
+              <Spinner size="lg" className="text-unkey-teal-500" />
             </div>
           )}
         </div>

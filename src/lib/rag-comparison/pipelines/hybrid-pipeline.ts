@@ -20,7 +20,8 @@ import {
   handleOpenRAGError,
   sanitizeInput,
   validateDocumentId,
-  validateQuery
+  validateQuery,
+  validateMetricsInput
 } from '../utils/pipeline-utils';
 import { estimateTokens } from '@/lib/utils/token-estimator';
 import {
@@ -300,30 +301,6 @@ export function checkContextLimit(
 }
 
 /**
- * Calculates context window usage percentage
- * 
- * @param totalTokens - Total tokens in context
- * @param model - Model identifier
- * @returns Percentage of context window used (0-100)
- * 
- * @example
- * ```typescript
- * const usage = calculateContextUsage(50000, 'gpt-4-turbo');
- * console.log(`Using ${usage.toFixed(2)}% of context window`);
- * ```
- */
-export function calculateContextUsage(totalTokens: number, model: string): number {
-  const limit = getContextWindowSize(model);
-  
-  if (limit === 0) {
-    return 0;
-  }
-
-  const percentage = (totalTokens / limit) * 100;
-  return Math.min(percentage, 100); // Cap at 100%
-}
-
-/**
  * Calculates comprehensive metrics for direct queries
  * 
  * @param generationTime - Time taken for generation in milliseconds
@@ -347,26 +324,19 @@ export function calculateMetrics(
   model: string
 ): DirectMetrics {
   // Validate inputs
-  if (generationTime < 0) {
-    throw new DirectPipelineError(
-      'Generation time cannot be negative',
-      'INVALID_METRICS',
-      { generationTime }
-    );
-  }
-
-  if (inputTokens < 0 || outputTokens < 0) {
-    throw new DirectPipelineError(
-      'Token counts cannot be negative',
-      'INVALID_METRICS',
-      { inputTokens, outputTokens }
-    );
-  }
+  validateMetricsInput(
+    {
+      times: { generationTime },
+      tokens: { inputTokens, outputTokens }
+    },
+    DirectPipelineError
+  );
 
   const totalTime = generationTime;
   const totalTokens = inputTokens + outputTokens;
   const cost = calculateCost(model, inputTokens, outputTokens);
-  const contextWindowUsage = calculateContextUsage(inputTokens, model);
+  const contextWindowBreakdown = calculateContextWindowBreakdown(model, inputTokens);
+  const contextWindowUsage = contextWindowBreakdown.percentageUsed;
 
   return {
     totalTime,

@@ -13,7 +13,8 @@ import {
   handleOpenRAGError,
   sanitizeInput,
   validateDocumentId,
-  validateQuery
+  validateQuery,
+  validateMetricsInput
 } from '../utils/pipeline-utils';
 
 // Re-export getOpenRAGClient for backward compatibility
@@ -348,21 +349,13 @@ export function calculateMetrics(
   model: string
 ): RAGMetrics {
   // Validate inputs
-  if (retrievalTime < 0 || generationTime < 0) {
-    throw new RAGPipelineError(
-      'Time values cannot be negative',
-      'INVALID_METRICS',
-      { retrievalTime, generationTime }
-    );
-  }
-
-  if (inputTokens < 0 || outputTokens < 0) {
-    throw new RAGPipelineError(
-      'Token counts cannot be negative',
-      'INVALID_METRICS',
-      { inputTokens, outputTokens }
-    );
-  }
+  validateMetricsInput(
+    {
+      times: { retrievalTime, generationTime },
+      tokens: { inputTokens, outputTokens }
+    },
+    RAGPipelineError
+  );
 
   const totalTime = retrievalTime + generationTime;
   const totalTokens = inputTokens + outputTokens;

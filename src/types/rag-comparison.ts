@@ -6,22 +6,6 @@ import type { OllamaConfig, OllamaResult } from './ollama';
 import type { ProcessingEvent } from './processing-events';
 
 /**
- * Props for the ModelSelector component
- */
-export interface ModelSelectorProps {
-  /** Currently selected model ID */
-  currentModel: string;
-  /** Array of available model IDs to display */
-  availableModels: string[];
-  /** Callback when model selection changes */
-  onModelChange: (newModel: string) => void;
-  /** Whether the selector is disabled */
-  disabled?: boolean;
-  /** Whether a model change is in progress */
-  isLoading?: boolean;
-}
-
-/**
  * Represents a single chunk of text from a document
  */
 export interface Chunk {
@@ -395,18 +379,6 @@ export interface QueryRequest {
 }
 
 /**
- * Error information
- */
-export interface ErrorInfo {
-  /** Error message */
-  message: string;
-  /** Error code */
-  code?: string;
-  /** Additional error details */
-  details?: Record<string, unknown>;
-}
-
-/**
  * Result for a single file upload in multi-file scenario
  */
 export interface FileUploadResult {
@@ -486,21 +458,33 @@ export interface MultiFileUploadResponse {
 
 /**
  * Status for individual pipeline progress
+ * - idle: Pipeline not yet started
+ * - starting: Pipeline initialization in progress
+ * - processing: Pipeline actively processing
+ * - complete: Pipeline finished successfully
+ * - error: Pipeline encountered an error
  */
-export type PipelineStatus = 'pending' | 'processing' | 'completed' | 'error';
+export type PipelineStatus = 'idle' | 'starting' | 'processing' | 'complete' | 'error';
 
 /**
  * Progress information for a single pipeline (RAG or Direct)
+ * Supports both streaming progress tracking and simple progress reporting
  */
 export interface PipelineProgress {
   /** Current status of the pipeline */
   status: PipelineStatus;
-  /** Progress percentage (0-100) */
-  progress: number;
-  /** Current processing stage description */
+  /** Current operation or processing stage description */
+  currentOperation?: string;
+  /** Progress percentage (0-100) - optional for streaming mode */
+  progress?: number;
+  /** Current processing stage description (alias for currentOperation) */
   stage?: string;
+  /** Processing events for detailed timeline tracking */
+  events?: ProcessingEvent[];
   /** Error message if status is 'error' */
   error?: string;
+  /** Result data when pipeline completes */
+  result?: any;
 }
 
 /**
