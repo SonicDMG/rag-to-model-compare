@@ -99,11 +99,6 @@ export interface Source {
 }
 
 /**
- * Knowledge filter identifier for scoping retrieval
- */
-const KNOWLEDGE_FILTER_ID = 'Compare';
-
-/**
  * System prompt for RAG queries
  */
 const RAG_SYSTEM_PROMPT = `You are a helpful AI assistant that answers questions based on the provided context.
@@ -191,12 +186,29 @@ async function updateFilterWithRetry(
   );
 }
 
-export async function createKnowledgeFilter(
+/**
+ * Add a filename to an existing knowledge filter's data sources
+ *
+ * @param filterId - ID of the filter to update
+ * @param documentId - Document ID (for logging/validation)
+ * @param filename - Filename to add to the filter
+ * @returns The filter ID
+ */
+export async function addFilenameToFilter(
+  filterId: string,
   documentId: string,
   filename: string
 ): Promise<string> {
   try {
     // Validate inputs
+    if (!filterId || typeof filterId !== 'string') {
+      throw new RAGPipelineError(
+        'Filter ID is required',
+        'INVALID_FILTER_ID',
+        { filterId }
+      );
+    }
+
     if (!documentId || typeof documentId !== 'string') {
       throw new RAGPipelineError(
         'Document ID is required',
@@ -215,57 +227,32 @@ export async function createKnowledgeFilter(
 
     const client = getOpenRAGClient(RAGPipelineError);
     
-    // Use the constant "Compare" as the filter name
-    const filterName = KNOWLEDGE_FILTER_ID;
+    // Get the filter
+    const filter = await client.knowledgeFilters.get(filterId);
     
-    // Check if "Compare" filter already exists with exact name match
-    const existingFilters = await client.knowledgeFilters.search(filterName, 10); // Get more results to find exact match
-    
-    // Find exact match (search might return partial matches)
-    const existingFilter = existingFilters?.find(f => f.name === filterName);
-    
-    if (existingFilter) {
-      console.log(`Knowledge filter "${filterName}" already exists with ID: ${existingFilter.id}`);
-      
-      // Get current data sources
-      const currentDataSources = existingFilter.queryData?.filters?.data_sources || [];
-      
-      // Add new filename if not already present
-      if (!currentDataSources.includes(filename)) {
-        console.log(`Adding filename "${filename}" to existing filter`);
-        await updateFilterWithRetry(client, existingFilter.id, [...currentDataSources, filename]);
-        console.log(`✅ Updated filter with new filename`);
-      } else {
-        console.log(`ℹ️  Filename "${filename}" already in filter`);
-      }
-      
-      return existingFilter.id;
-    }
-    
-    // Create new "Compare" knowledge filter with this document's filename
-    console.log(`Creating new "${filterName}" filter with filename: ${filename}`);
-    const result = await client.knowledgeFilters.create({
-      name: filterName,
-      description: `Filter for document comparison`,
-      queryData: {
-        limit: 5,
-        scoreThreshold: 0.5,
-        filters: {
-          data_sources: [filename] // Start with this document's filename
-        }
-      }
-    });
-    
-    if (!result.success || !result.id) {
+    if (!filter) {
       throw new RAGPipelineError(
-        'Failed to create knowledge filter',
-        'FILTER_CREATION_ERROR',
-        { filterName, result }
+        'Filter not found',
+        'FILTER_NOT_FOUND',
+        { filterId }
       );
     }
     
-    console.log(`✅ Created knowledge filter "${filterName}" with ID: ${result.id}`);
-    return result.id;
+    console.log(`Adding filename "${filename}" to filter "${filter.name}" (${filterId})`);
+    
+    // Get current data sources
+    const currentDataSources = filter.queryData?.filters?.data_sources || [];
+    
+    // Add new filename if not already present
+    if (!currentDataSources.includes(filename)) {
+      console.log(`Adding filename "${filename}" to filter`);
+      await updateFilterWithRetry(client, filterId, [...currentDataSources, filename]);
+      console.log(`✅ Updated filter with new filename`);
+    } else {
+      console.log(`ℹ️  Filename "${filename}" already in filter`);
+    }
+    
+    return filterId;
     
   } catch (error) {
     if (error instanceof RAGPipelineError) {
@@ -273,9 +260,10 @@ export async function createKnowledgeFilter(
     }
     
     throw new RAGPipelineError(
-      'Failed to create/update knowledge filter',
-      'FILTER_OPERATION_ERROR',
+      'Failed to add filename to filter',
+      'FILTER_UPDATE_ERROR',
       {
+        filterId,
         documentId,
         filename,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -542,9 +530,12 @@ export async function indexDocument(
         }
       }
     } else {
-      // No filter provided - create or find one (legacy single-file path)
-      // Use basename to match what was sent to OpenRAG during ingestion
-      filterId = await createKnowledgeFilter(documentId, path.basename(metadata.filename));
+      // No filter provided - throw error (filter is now required)
+      throw new RAGPipelineError(
+        'Knowledge filter ID is required for document indexing',
+        'FILTER_REQUIRED',
+        { documentId, filename: metadata.filename }
+      );
     }
 
     const endTime = performance.now();
@@ -617,6 +608,7 @@ export async function query(
   documentId: string,
   query: string,
   config: RAGConfig,
+  filterId?: string,
   eventCallback?: (event: ProcessingEvent) => void
 ): Promise<RAGResult> {
   console.log('=== RAG Pipeline Query Start ===');
@@ -674,25 +666,31 @@ export async function query(
     const filterLookupEventId = eventTracker.startEvent(
       ProcessingEventType.FILTER_LOOKUP,
       'Retrieve knowledge filter from OpenRAG',
-      { filterName: KNOWLEDGE_FILTER_ID }
+      { filterId }
     );
     
-    console.log('Retrieving "Compare" knowledge filter from OpenRAG...');
-    const client = getOpenRAGClient(RAGPipelineError);
-    
-    const existingFilters = await client.knowledgeFilters.search(KNOWLEDGE_FILTER_ID, 1);
-    
-    if (!existingFilters || existingFilters.length === 0) {
-      eventTracker.failEvent(filterLookupEventId, 'Knowledge filter not found');
+    if (!filterId) {
+      eventTracker.failEvent(filterLookupEventId, 'Filter ID is required');
       throw new RAGPipelineError(
-        `Knowledge filter "${KNOWLEDGE_FILTER_ID}" not found. Please ensure the document was uploaded successfully.`,
-        'FILTER_NOT_FOUND',
-        { documentId, filterName: KNOWLEDGE_FILTER_ID }
+        'Knowledge filter ID is required for RAG queries',
+        'FILTER_REQUIRED',
+        { documentId }
       );
     }
     
-    const filterId = existingFilters[0].id;
-    const filter = existingFilters[0];
+    console.log(`Retrieving knowledge filter ${filterId} from OpenRAG...`);
+    const client = getOpenRAGClient(RAGPipelineError);
+    
+    const filter = await client.knowledgeFilters.get(filterId);
+    
+    if (!filter) {
+      eventTracker.failEvent(filterLookupEventId, 'Knowledge filter not found');
+      throw new RAGPipelineError(
+        `Knowledge filter "${filterId}" not found. Please ensure the document was uploaded successfully.`,
+        'FILTER_NOT_FOUND',
+        { documentId, filterId }
+      );
+    }
     
     // Extract limit and scoreThreshold from filter configuration
     // Filter configuration takes precedence over request parameters

@@ -6,6 +6,7 @@ import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { RagUploadResult } from './RagUploadResult';
 import { HybridUploadResult } from './HybridUploadResult';
 import { StreamingProgressData } from '@/components/tabs/IngestTab';
+import { useFilter } from '@/contexts/FilterContext';
 
 interface UploadStatus {
   status: 'idle' | 'uploading' | 'processing' | 'success' | 'partial' | 'error';
@@ -66,6 +67,9 @@ export function DocumentUpload({
   onUploadStart,
   onStreamingProgressChange
 }: DocumentUploadProps) {
+  // Get current filter from context
+  const { currentFilter } = useFilter();
+  
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMode, setUploadMode] = useState<'single' | 'folder'>('single');
   const [isDragging, setIsDragging] = useState(false);
@@ -130,9 +134,20 @@ export function DocumentUpload({
         },
       });
 
+      // Check if filter is selected
+      if (!currentFilter) {
+        setUploadStatus({
+          status: 'error',
+          message: 'Please select a knowledge filter before uploading'
+        });
+        setIsUploading(false);
+        return;
+      }
+
       // Create FormData
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('filterId', currentFilter.id);
 
       // Use fetch to POST the file, then connect EventSource
       fetch('/api/rag-comparison/upload-stream', {
@@ -491,8 +506,15 @@ export function DocumentUpload({
     });
 
     return new Promise((resolve, reject) => {
+      // Check if filter is selected
+      if (!currentFilter) {
+        reject(new Error('No knowledge filter selected'));
+        return;
+      }
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('filterId', currentFilter.id);
       
       // Pass shared document ID for multi-file uploads
       if (sharedDocumentId) {

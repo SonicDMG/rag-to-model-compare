@@ -5,7 +5,7 @@
 /**
  * Available tab identifiers
  */
-export type TabId = 'ingest' | 'query' | 'performance';
+export type TabId = 'ingest' | 'query' | 'performance' | 'charts';
 
 /**
  * Tab configuration

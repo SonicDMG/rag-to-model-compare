@@ -1,17 +1,10 @@
 'use client';
 
-import { ModelConfigSection } from '@/components/processing/ModelConfigSection';
 import { DocumentUpload, UploadResultData } from '@/components/upload/DocumentUpload';
 import { RagUploadResult } from '@/components/upload/RagUploadResult';
 import { HybridUploadResult } from '@/components/upload/HybridUploadResult';
 import { DualPipelineUploadProgress, PipelineStatus } from '@/components/upload/DualPipelineUploadProgress';
 import { ProcessingEvent } from '@/types/processing-events';
-
-interface OllamaModelInfo {
-  name: string;
-  displayName: string;
-  supportsImages: boolean;
-}
 
 export interface StreamingProgressData {
   isActive: boolean;
@@ -33,12 +26,6 @@ export interface StreamingProgressData {
 }
 
 interface IngestTabProps {
-  // Model configuration
-  ollamaModel: string;
-  onOllamaModelChange: (model: string) => void;
-  isOllamaAvailable: boolean;
-  availableOllamaModels: OllamaModelInfo[];
-  
   // Upload handlers
   onUploadComplete: (documentId: string) => void;
   onUploadResult: (result: UploadResultData) => void;
@@ -51,18 +38,16 @@ interface IngestTabProps {
 }
 
 /**
- * IngestTab - Contains document upload and model configuration
- * 
+ * IngestTab - Contains document upload interface
+ *
  * Features:
- * - Model configuration section
  * - Document upload with drag & drop
  * - Upload results display (RAG + Hybrid side-by-side)
+ * - Real-time pipeline processing progress
+ *
+ * Note: Model configuration is now in the global config bar
  */
 export function IngestTab({
-  ollamaModel,
-  onOllamaModelChange,
-  isOllamaAvailable,
-  availableOllamaModels,
   onUploadComplete,
   onUploadResult,
   onUploadStart,
@@ -72,34 +57,17 @@ export function IngestTab({
 }: IngestTabProps) {
   return (
     <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      {/* Upload and Model Configuration - 3 Column Layout */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-slideUp items-stretch">
-        {/* Document Upload - Takes 2 columns */}
-        <div className="lg:col-span-2 flex w-full">
-          <div className="w-full">
-            <DocumentUpload
-              onUploadComplete={onUploadComplete}
-              onUploadResult={onUploadResult}
-              onUploadStart={onUploadStart}
-              onStreamingProgressChange={onStreamingProgressChange}
-            />
-          </div>
-        </div>
-
-        {/* Model Configuration - Takes 1 column on the right */}
-        <div className="lg:col-span-1 flex w-full">
-          <div className="w-full">
-            <ModelConfigSection
-              selectedModel={ollamaModel}
-              onModelChange={onOllamaModelChange}
-              isOllamaAvailable={isOllamaAvailable}
-              availableModels={availableOllamaModels}
-            />
-          </div>
-        </div>
+      {/* Document Upload - Full Width */}
+      <section className="animate-slideUp">
+        <DocumentUpload
+          onUploadComplete={onUploadComplete}
+          onUploadResult={onUploadResult}
+          onUploadStart={onUploadStart}
+          onStreamingProgressChange={onStreamingProgressChange}
+        />
       </section>
 
-      {/* Pipeline Processing Progress - Full Width (All 3 Columns) */}
+      {/* Pipeline Processing Progress - Full Width */}
       {/* Show pipeline progress if we have streaming progress data (active or completed) */}
       {streamingProgress && (
         <section className="animate-slideUp" style={{ animationDelay: '0.1s' }}>

@@ -136,58 +136,6 @@ async function scheduleBatchFilterUpdate(filterId: string, filename: string): Pr
   }, FILTER_UPDATE_DELAY);
 }
 
-/**
- * Ensure knowledge filter exists
- * Uses the same robust filter management as the main upload route
- */
-async function ensureKnowledgeFilter(): Promise<string> {
-  try {
-    const client = new OpenRAGClient({
-      apiKey: process.env.OPENRAG_API_KEY!,
-      baseUrl: process.env.OPENRAG_URL!,
-    });
-    
-    const filterName = 'Compare';
-    
-    // Search for existing filter with exact name match
-    console.log(`🔍 [Stream] Searching for "${filterName}" knowledge filter...`);
-    const existingFilters = await client.knowledgeFilters.search(filterName, 10);
-    
-    // Find exact match (search might return partial matches)
-    const exactMatch = existingFilters?.find((f: any) => f.name === filterName);
-    
-    if (exactMatch) {
-      console.log(`✅ [Stream] Found existing "${filterName}" filter with ID: ${exactMatch.id}`);
-      return exactMatch.id;
-    }
-    
-    // Create new filter if it doesn't exist
-    console.log(`📝 [Stream] No existing filter found, creating new "${filterName}" filter...`);
-    const result = await client.knowledgeFilters.create({
-      name: filterName,
-      description: 'Filter for document comparison',
-      queryData: {
-        filters: {
-          data_sources: [] // Start with empty array, files will add themselves
-        }
-      }
-    });
-    
-    if (!result.success || !result.id) {
-      console.error(`❌ [Stream] Filter creation failed:`, result);
-      throw new Error('Failed to create knowledge filter');
-    }
-    
-    console.log(`✅ [Stream] Created "${filterName}" filter with ID: ${result.id}`);
-    return result.id;
-    
-  } catch (error) {
-    console.error('❌ [Stream] Failed to ensure knowledge filter:', error);
-    throw new Error(
-      `Failed to ensure knowledge filter: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-}
 
 /**
  * POST /api/rag-comparison/upload-stream
@@ -204,12 +152,20 @@ export async function POST(request: NextRequest): Promise<Response> {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const providedDocumentId = formData.get('documentId') as string | null;
+    const filterId = formData.get('filterId') as string | null;
     const isMultiFileStr = formData.get('isMultiFile') as string | null;
     const isMultiFile = isMultiFileStr === 'true';
     
     if (!file) {
       return new Response(
         JSON.stringify({ success: false, error: 'No file provided' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!filterId) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Filter ID is required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -232,6 +188,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     
     console.log(`📄 Processing file: ${file.name}`);
     console.log(`📋 Document ID: ${documentId}`);
+    console.log(`🔖 Filter ID: ${filterId}`);
     console.log(`📦 Multi-file upload: ${isMultiFile}`);
     if (providedDocumentId) {
       console.log(`🔗 Using shared document ID for batch: ${documentId}`);
@@ -264,21 +221,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         const ragEventCallback = (event: any) => sendEvent(PipelineType.RAG, event);
         const directEventCallback = (event: any) => sendEvent(PipelineType.DIRECT, event);
 
-        // Ensure knowledge filter exists
-        let knowledgeFilterId: string;
-        try {
-          knowledgeFilterId = await ensureKnowledgeFilter();
-          console.log(`✅ Knowledge filter ready: ${knowledgeFilterId}`);
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Failed to create filter';
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'error',
-            pipeline: 'system',
-            error: errorMsg
-          })}\n\n`));
-          controller.close();
-          return;
-        }
+        console.log(`✅ Using knowledge filter: ${filterId}`);
 
         // Clone the file for each pipeline to ensure true independence
         // This prevents one pipeline from consuming the file stream and blocking the other
@@ -290,7 +233,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         const ragPromise = processRAGPipeline(
           ragFile,
           documentId,
-          knowledgeFilterId,
+          filterId,
           ragEventCallback
         );
 
@@ -378,7 +321,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 async function processRAGPipeline(
   file: File,
   documentId: string,
-  knowledgeFilterId: string,
+  filterId: string,
   eventCallback: (event: any) => void
 ): Promise<any> {
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.RAG);
@@ -521,7 +464,7 @@ async function processRAGPipeline(
       file,
       documentId,
       ragMetadata,
-      knowledgeFilterId,
+      filterId,
       true // skipFilterUpdate
     );
 
@@ -538,7 +481,7 @@ async function processRAGPipeline(
     // Log detailed RAG upload results
     console.log('\n[RAG Upload] Document indexed successfully:');
     console.log(`  - OpenRAG Document ID: ${documentId}`);
-    console.log(`  - Filter ID: ${ragResult.filterId || knowledgeFilterId}`);
+    console.log(`  - Filter ID: ${ragResult.filterId || filterId}`);
     console.log(`  - Chunks: ${ragResult.chunkCount}`);
     console.log(`  - Tokens: ${ragResult.tokenCount}`);
     console.log(`  - Index Time: ${ragResult.indexTime}ms`);
@@ -578,7 +521,7 @@ async function processRAGPipeline(
     // Schedule batch filter update to associate this file with the Compare filter
     // Uses debouncing to handle concurrent uploads efficiently
     const baseFilename = path.basename(file.name);
-    scheduleBatchFilterUpdate(knowledgeFilterId, baseFilename).catch(err => {
+    scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
       console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
       // Don't throw - document is already indexed and stored
     });

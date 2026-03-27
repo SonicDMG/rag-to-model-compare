@@ -50,6 +50,11 @@ const QueryRequestSchema = z.object({
   processedContent: z.string()
     .optional(),
   
+  // Knowledge filter ID for RAG queries
+  filterId: z.string()
+    .min(1, 'Filter ID is required for RAG queries')
+    .optional(),
+  
   model: z.string()
     .regex(/^[a-zA-Z0-9.-]+$/, 'Invalid model name format')
     .optional()
@@ -342,6 +347,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           sanitizedDocumentId,
           sanitizedQuery,
           ragConfig,
+          validatedData.filterId,
           createEventCallback(PipelineType.RAG)
         );
         

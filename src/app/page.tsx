@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { UploadResultData } from '@/components/upload/DocumentUpload';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { MetricsTabProvider } from '@/contexts/MetricsTabContext';
+import { FilterProvider, useFilter } from '@/contexts/FilterContext';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { TabContainer } from '@/components/tabs/TabContainer';
@@ -11,6 +12,8 @@ import { TabPanel } from '@/components/tabs/TabPanel';
 import { IngestTab, StreamingProgressData } from '@/components/tabs/IngestTab';
 import { QueryTab } from '@/components/tabs/QueryTab';
 import { PerformanceTab } from '@/components/tabs/PerformanceTab';
+import { ChartsTab } from '@/components/tabs/ChartsTab';
+import { GlobalConfigBar } from '@/components/config/GlobalConfigBar';
 import { useQueryHistory } from '@/hooks/useQueryHistory';
 
 interface OllamaModelInfo {
@@ -19,7 +22,10 @@ interface OllamaModelInfo {
   supportsImages: boolean;
 }
 
-export default function Home() {
+function HomeContent() {
+  // Filter context
+  const { currentFilter } = useFilter();
+  
   // Document state
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResultData | null>(null);
@@ -51,10 +57,13 @@ export default function Home() {
   const [directProcessingEvents, setDirectProcessingEvents] = useState<ProcessingEvent[]>([]);
   const [ollamaProcessingEvents, setOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
 
-  // Ollama configuration state
+  // Ollama configuration state (for inference)
   const [ollamaModel, setOllamaModel] = useState<string>('llama3.2');
   const [availableOllamaModels, setAvailableOllamaModels] = useState<OllamaModelInfo[]>([]);
   const [isOllamaAvailable, setIsOllamaAvailable] = useState<boolean>(false);
+  
+  // Pricing model state (for cost calculations)
+  const [pricingModel, setPricingModel] = useState<string>(DEFAULT_MODEL);
 
   // Query history hook
   const { saveQuery } = useQueryHistory();
@@ -145,6 +154,18 @@ export default function Home() {
     setDirectProcessingEvents([]);
     setOllamaProcessingEvents([]);
 
+    // Validate filter is selected
+    if (!currentFilter) {
+      setRagError('Please select a filter before querying');
+      setDirectError('Please select a filter before querying');
+      setOllamaError('Please select a filter before querying');
+      setIsQuerying(false);
+      setIsRagQuerying(false);
+      setIsDirectQuerying(false);
+      setIsOllamaQuerying(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/rag-comparison/query', {
         method: 'POST',
@@ -154,6 +175,7 @@ export default function Home() {
         body: JSON.stringify({
           query,
           documentId,
+          filterId: currentFilter.id,
           processedContent: uploadResult?.directProcessedText, // Send full processed text from frontend
           temperature,
           maxTokens,
@@ -325,34 +347,44 @@ export default function Home() {
   return (
     <MetricsTabProvider>
       <div className="min-h-screen bg-unkey-black relative overflow-hidden">
-        {/* Background Effects */}
-        <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-unkey-teal/5 rounded-full blur-3xl" />
-          <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-unkey-cyan/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-unkey-teal/3 rounded-full blur-3xl" />
-        </div>
-
-        {/* Header */}
-        <header className="relative border-b border-unkey-gray-800">
-          <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="text-center space-y-4 animate-fadeIn">
-              {/* Title with Glow Effect */}
-              <div className="relative inline-block">
-                <div className="absolute inset-0 bg-gradient-to-r from-unkey-teal/20 to-unkey-cyan/20 blur-2xl" />
-                <h1 className="relative text-5xl sm:text-6xl font-bold text-white mb-2">
-                  RAG vs Direct Context
-                </h1>
-              </div>
-              <p className="text-lg sm:text-xl text-unkey-gray-300 max-w-3xl mx-auto">
-                Compare Retrieval-Augmented Generation (RAG) with direct context window ingestion.
-                Upload a document once, ask questions to both approaches, and see which works best.
-              </p>
-            </div>
+          {/* Background Effects */}
+          <div className="fixed inset-0 pointer-events-none">
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-unkey-teal/5 rounded-full blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-unkey-cyan/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-unkey-teal/3 rounded-full blur-3xl" />
           </div>
-        </header>
 
-        {/* Tabbed Content */}
-        <TabContainer
+          {/* Header */}
+          <header className="relative border-b border-unkey-gray-800">
+            <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
+              <div className="text-center space-y-4 animate-fadeIn">
+                {/* Title with Glow Effect */}
+                <div className="relative inline-block">
+                  <div className="absolute inset-0 bg-gradient-to-r from-unkey-teal/20 to-unkey-cyan/20 blur-2xl" />
+                  <h1 className="relative text-5xl sm:text-6xl font-bold text-white mb-2">
+                    RAG vs Direct Context
+                  </h1>
+                </div>
+                <p className="text-lg sm:text-xl text-unkey-gray-300 max-w-3xl mx-auto">
+                  Compare Retrieval-Augmented Generation (RAG) with direct context window ingestion.
+                  Upload a document once, ask questions to both approaches, and see which works best.
+                </p>
+              </div>
+            </div>
+          </header>
+
+          {/* Global Configuration Bar */}
+          <GlobalConfigBar
+            ollamaModel={ollamaModel}
+            onOllamaModelChange={setOllamaModel}
+            isOllamaAvailable={isOllamaAvailable}
+            availableOllamaModels={availableOllamaModels}
+            pricingModel={pricingModel}
+            onPricingModelChange={setPricingModel}
+          />
+
+          {/* Tabbed Content */}
+          <TabContainer
           hasDocument={!!documentId}
           hasQueryResults={hasQueryResults}
           documentName={documentName}
@@ -363,10 +395,6 @@ export default function Home() {
               {/* Ingest Tab */}
               <TabPanel tabId="ingest" activeTab={activeTab}>
                 <IngestTab
-                  ollamaModel={ollamaModel}
-                  onOllamaModelChange={setOllamaModel}
-                  isOllamaAvailable={isOllamaAvailable}
-                  availableOllamaModels={availableOllamaModels}
                   onUploadComplete={handleUploadComplete}
                   onUploadResult={handleUploadResult}
                   onUploadStart={handleUploadStart}
@@ -415,6 +443,11 @@ export default function Home() {
                   isOllamaAvailable={isOllamaAvailable}
                 />
               </TabPanel>
+
+              {/* Charts Tab */}
+              <TabPanel tabId="charts" activeTab={activeTab}>
+                <ChartsTab />
+              </TabPanel>
             </>
           )}
         </TabContainer>
@@ -434,6 +467,14 @@ export default function Home() {
         </footer>
       </div>
     </MetricsTabProvider>
+  );
+}
+
+export default function Home() {
+  return (
+    <FilterProvider>
+      <HomeContent />
+    </FilterProvider>
   );
 }
 
