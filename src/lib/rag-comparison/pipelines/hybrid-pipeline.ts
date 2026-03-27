@@ -263,18 +263,28 @@ export function checkContextLimit(
   query: string,
   model: string
 ): ContextCheck {
-  const limit = getContextWindowSize(model);
+  // First try OpenAI/standard models
+  let limit = getContextWindowSize(model);
   
+  // If not found, try Ollama models (for hybrid pipeline using Ollama models)
   if (limit === 0) {
-    throw new DirectPipelineError(
-      `Unknown model: ${model}`,
-      'UNKNOWN_MODEL',
-      { model }
-    );
+    const { getOllamaModelConfig } = require('@/lib/constants/ollama-models');
+    const ollamaConfig = getOllamaModelConfig(model);
+    
+    if (ollamaConfig) {
+      limit = ollamaConfig.contextWindow;
+      console.log(`[Hybrid Pipeline] Using Ollama model config for ${model}: ${limit.toLocaleString()} tokens`);
+    } else {
+      throw new DirectPipelineError(
+        `Unknown model: ${model}. Model not found in OpenAI or Ollama configurations.`,
+        'UNKNOWN_MODEL',
+        { model }
+      );
+    }
   }
 
   // Use shared prompt builder for consistency
-  const fullContext = buildPrompt(content, query);
+  const fullContext = buildHybridPrompt(content, query);
   const totalTokens = estimateTokens(fullContext);
   const usage = (totalTokens / limit) * 100;
   const valid = validateContextSize(totalTokens, limit);
@@ -702,18 +712,30 @@ export async function query(
       console.log('[Direct Pipeline Query] No filterId provided, using defaults');
     }
 
-    // Log the full message being sent to LLM
-    console.log('[Direct Pipeline Query] Full message length:', fullMessage.length);
-    console.log('[Direct Pipeline Query] Full message preview (first 1000 chars):',
+    // Log the full message being sent to LLM with token estimation
+    const estimatedInputTokens = estimateTokens(fullMessage);
+    console.log('[Hybrid Pipeline Query] Full message length:', fullMessage.length, 'characters');
+    console.log('[Hybrid Pipeline Query] Estimated input tokens:', estimatedInputTokens.toLocaleString());
+    console.log('[Hybrid Pipeline Query] Full message preview (first 1000 chars):',
       fullMessage.substring(0, 1000));
-    console.log('[Direct Pipeline Query] Sending to LLM with model:', config.model);
+    console.log('[Hybrid Pipeline Query] Sending to OpenRAG with model:', config.model);
+    console.log('[Hybrid Pipeline Query] Filter configuration:', {
+      filterId: filterId || 'none',
+      limit: filterLimit,
+      scoreThreshold: filterScoreThreshold
+    });
 
     // Track API call
     const generationStartTime = performance.now();
     const apiCallEventId = eventTracker.startEvent(
       ProcessingEventType.API_CALL,
       'Call OpenRAG API with full document context and filter',
-      { model: config.model, filterId: filterId || 'none' }
+      {
+        model: config.model,
+        filterId: filterId || 'none',
+        estimatedInputTokens,
+        messageLength: fullMessage.length
+      }
     );
     
     let responseData: ChatResponse;
@@ -725,13 +747,19 @@ export async function query(
         scoreThreshold: filterScoreThreshold,
         filterId: filterId
       });
-      console.log('[Direct Pipeline Query] ✅ LLM response received');
+      console.log('[Hybrid Pipeline Query] ✅ OpenRAG response received');
       
       eventTracker.completeEvent(apiCallEventId, {
         responseLength: responseData.response?.length || 0
       });
     } catch (error) {
-      console.error('[Direct Pipeline Query] ❌ LLM call failed:', error);
+      console.error('[Hybrid Pipeline Query] ❌ OpenRAG call failed:', error);
+      console.error('[Hybrid Pipeline Query] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        estimatedInputTokens,
+        messageLength: fullMessage.length,
+        model: config.model
+      });
       eventTracker.failEvent(apiCallEventId, error instanceof Error ? error.message : 'Unknown error');
       throw handleOpenRAGError(error, DirectPipelineError);
     }

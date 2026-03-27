@@ -84,6 +84,43 @@ export function handleOpenRAGError(
   error: unknown,
   ErrorClass: PipelineErrorConstructor
 ): PipelineError {
+  // Check for network/fetch errors first
+  if (error instanceof Error) {
+    const errorAny = error as any;
+    
+    // Check for fetch/network failures
+    if (error.message?.includes('fetch failed') ||
+        errorAny?.code === 'ECONNREFUSED' ||
+        errorAny?.code === 'ENOTFOUND' ||
+        errorAny?.code === 'ETIMEDOUT' ||
+        errorAny?.cause?.code === 'ECONNREFUSED' ||
+        errorAny?.cause?.code === 'ENOTFOUND' ||
+        errorAny?.cause?.code === 'ETIMEDOUT') {
+      
+      const errorCode = errorAny?.code || errorAny?.cause?.code || 'NETWORK_ERROR';
+      let suggestion = 'Check that OPENRAG_URL is correct and the OpenRAG server is running';
+      
+      if (errorCode === 'ECONNREFUSED') {
+        suggestion = 'The OpenRAG server refused the connection. Ensure it is running and accessible.';
+      } else if (errorCode === 'ENOTFOUND') {
+        suggestion = 'The OpenRAG server hostname could not be resolved. Check your OPENRAG_URL configuration.';
+      } else if (errorCode === 'ETIMEDOUT') {
+        suggestion = 'The connection to OpenRAG server timed out. Check network connectivity and server status.';
+      }
+      
+      return new ErrorClass(
+        `Cannot connect to OpenRAG backend at ${process.env.OPENRAG_URL}. ${suggestion}`,
+        'NETWORK_ERROR',
+        {
+          url: process.env.OPENRAG_URL,
+          errorCode,
+          errorMessage: error.message,
+          suggestion
+        }
+      );
+    }
+  }
+  
   if (error instanceof AuthenticationError) {
     return new ErrorClass(
       'Authentication failed. Please check your OPENRAG_API_KEY.',
@@ -117,10 +154,47 @@ export function handleOpenRAGError(
   }
   
   if (error instanceof ServerError) {
+    // ServerError (HTTP 500) often indicates context window/token limit exceeded
+    // Capture detailed error information for debugging
+    const errorAny = error as any;
+    const statusCode = errorAny?.statusCode || 500;
+    const errorBody = errorAny?.body || errorAny?.response?.data || {};
+    const errorDetail = errorBody?.detail || errorBody?.error || error.message;
+    
+    // Check if this is a token/context limit error
+    const isTokenLimitError =
+      errorDetail?.toLowerCase().includes('token') ||
+      errorDetail?.toLowerCase().includes('context') ||
+      errorDetail?.toLowerCase().includes('length') ||
+      errorDetail?.toLowerCase().includes('maximum') ||
+      errorDetail?.toLowerCase().includes('limit');
+    
+    let userMessage = 'OpenRAG server error. Please try again later.';
+    let errorCode = 'SERVER_ERROR';
+    
+    if (isTokenLimitError) {
+      userMessage = 'Request exceeds model context window or token limit. Try reducing document size or using a model with larger context window.';
+      errorCode = 'TOKEN_LIMIT_ERROR';
+    }
+    
+    // Log detailed error for debugging
+    console.error('[OpenRAG ServerError Details]', {
+      statusCode,
+      message: error.message,
+      detail: errorDetail,
+      body: errorBody,
+      isTokenLimitError
+    });
+    
     return new ErrorClass(
-      'OpenRAG server error. Please try again later.',
-      'SERVER_ERROR',
-      { originalError: error.message }
+      userMessage,
+      errorCode,
+      {
+        originalError: error.message,
+        statusCode,
+        detail: errorDetail,
+        isTokenLimitError
+      }
     );
   }
   

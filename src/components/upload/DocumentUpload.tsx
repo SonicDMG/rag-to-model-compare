@@ -84,6 +84,7 @@ export function DocumentUpload({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Helper function to validate file types
   const isValidFileType = (file: File): boolean => {
@@ -100,15 +101,49 @@ export function DocumentUpload({
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Cleanup EventSource on unmount
+  // Cleanup EventSource and AbortController on unmount
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
     };
   }, []);
+
+  // Cancel upload handler
+  const handleCancelUpload = () => {
+    console.log('🛑 User cancelled upload');
+    
+    // Abort any ongoing fetch requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Close any EventSource connections
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    
+    // Reset upload state
+    setIsUploading(false);
+    setUploadStatus({
+      status: 'error',
+      message: 'Upload cancelled by user'
+    });
+    
+    // Clear streaming progress
+    setStreamingProgress(null);
+    
+    // Reset file statuses
+    setFileStatuses([]);
+  };
 
   // Notify parent of streaming progress changes
   useEffect(() => {
@@ -149,10 +184,15 @@ export function DocumentUpload({
       formData.append('file', file);
       formData.append('filterId', currentFilter.id);
 
+      // Create AbortController for this upload
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       // Use fetch to POST the file, then connect EventSource
       fetch('/api/rag-comparison/upload-stream', {
         method: 'POST',
         body: formData,
+        signal: abortController.signal,
       })
         .then(response => {
           if (!response.ok) {
@@ -368,13 +408,20 @@ export function DocumentUpload({
           processStream();
         })
         .catch(error => {
-          console.error('Upload error:', error);
-          setStreamingProgress(prev => prev ? {
-            ...prev,
-            ragProgress: { ...prev.ragProgress, status: 'error', error: error.message },
-            directProgress: { ...prev.directProgress, status: 'error', error: error.message },
-          } : prev);
-          reject(error);
+          // Check if error is due to abort
+          if (error.name === 'AbortError') {
+            console.log('Upload aborted by user');
+            setStreamingProgress(null);
+            reject(new Error('Upload cancelled'));
+          } else {
+            console.error('Upload error:', error);
+            setStreamingProgress(prev => prev ? {
+              ...prev,
+              ragProgress: { ...prev.ragProgress, status: 'error', error: error.message },
+              directProgress: { ...prev.directProgress, status: 'error', error: error.message },
+            } : prev);
+            reject(error);
+          }
         });
     });
   };
@@ -523,9 +570,11 @@ export function DocumentUpload({
       }
 
       // Use the SSE-based upload-stream endpoint
+      // Note: Multi-file uploads share the same AbortController
       fetch('/api/rag-comparison/upload-stream', {
         method: 'POST',
         body: formData,
+        signal: abortControllerRef.current?.signal,
       })
         .then(response => {
           if (!response.ok) {
@@ -975,6 +1024,9 @@ export function DocumentUpload({
     setSkippedFiles([]);
     setUploadStatus({ status: 'uploading', message: `Checking files...` });
 
+    // Create AbortController for this upload session
+    abortControllerRef.current = new AbortController();
+
     try {
       // For single file uploads, use streaming
       if (files.length === 1) {
@@ -1121,8 +1173,9 @@ export function DocumentUpload({
         message: error instanceof Error ? error.message : 'Upload failed',
       });
     } finally {
-      // Re-enable the upload button
+      // Re-enable the upload button and clean up AbortController
       setIsUploading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -1171,7 +1224,7 @@ export function DocumentUpload({
             ref={fileInputRef}
             type="file"
             accept=".txt,.md,.json,.pdf,.docx,.doc"
-            multiple={uploadMode === 'folder'}
+            multiple
             {...(uploadMode === 'folder' ? { webkitdirectory: '' } : {})}
             onChange={handleFileSelect}
             className="hidden"
@@ -1200,13 +1253,14 @@ export function DocumentUpload({
                   {files.length} file{files.length > 1 ? 's' : ''} selected
                 </span>
                 <br />
-                Click to change {uploadMode === 'folder' ? 'folder' : 'file'}
+                Click to change {uploadMode === 'folder' ? 'folder' : 'files'}
               </p>
             ) : (
               <p className="text-sm text-unkey-gray-300">
                 <span className="font-medium text-unkey-teal-500">Click to upload</span> or drag and drop
                 <br />
                 {uploadMode === 'folder' ? 'Folder with ' : ''}TXT, MD, JSON, PDF, DOCX, DOC files
+                {uploadMode === 'single' && <span className="text-unkey-gray-400"> (multi-select enabled)</span>}
               </p>
             )}
           </div>
@@ -1264,16 +1318,28 @@ export function DocumentUpload({
           </div>
         )}
 
-        {/* Upload Button */}
-        <button
-          onClick={handleUpload}
-          disabled={files.length === 0 || isUploading}
-          className="mt-6 w-full bg-white text-black py-3 px-4 rounded-unkey-md hover:bg-unkey-gray-100 disabled:bg-unkey-gray-700 disabled:text-unkey-gray-500 disabled:cursor-not-allowed transition-all duration-200 font-medium"
-        >
-          {isUploading
-            ? 'Processing...'
-            : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
-        </button>
+        {/* Upload and Cancel Buttons */}
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={handleUpload}
+            disabled={files.length === 0 || isUploading}
+            className="flex-1 bg-white text-black py-3 px-4 rounded-unkey-md hover:bg-unkey-gray-100 disabled:bg-unkey-gray-700 disabled:text-unkey-gray-500 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+          >
+            {isUploading
+              ? 'Processing...'
+              : `Upload and Process ${files.length > 0 ? `(${files.length} file${files.length > 1 ? 's' : ''})` : ''}`}
+          </button>
+          
+          {isUploading && (
+            <button
+              onClick={handleCancelUpload}
+              className="px-6 py-3 bg-red-600 text-white rounded-unkey-md hover:bg-red-700 transition-all duration-200 font-medium"
+              title="Cancel upload"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
 
         {/* Streaming Progress Display moved to IngestTab for full-width layout */}
 

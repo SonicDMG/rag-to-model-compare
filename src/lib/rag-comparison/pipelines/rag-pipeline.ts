@@ -446,11 +446,75 @@ export async function indexDocument(
     // Upload document using OpenRAG SDK
     // The SDK handles parsing, chunking, and embedding automatically
     // Extract just the filename (without directory path) for OpenRAG
-    const result = await client.documents.ingest({
-      file,
-      filename: path.basename(metadata.filename),
-      wait: true, // Wait for ingestion to complete
-    });
+    console.log(`[RAG Pipeline] Attempting to ingest document...`);
+    console.log(`[RAG Pipeline] OpenRAG URL: ${process.env.OPENRAG_URL}`);
+    console.log(`[RAG Pipeline] API Key configured: ${!!process.env.OPENRAG_API_KEY}`);
+    console.log(`[RAG Pipeline] Filename: ${path.basename(metadata.filename)}`);
+    console.log(`[RAG Pipeline] File size: ${file.size} bytes`);
+    
+    let result: any;
+    try {
+      result = await client.documents.ingest({
+        file,
+        filename: path.basename(metadata.filename),
+        wait: true, // Wait for ingestion to complete
+      });
+    } catch (ingestError: any) {
+      // Enhanced error logging for fetch failures
+      console.error('\n╔════════════════════════════════════════════════════════════╗');
+      console.error('║         OpenRAG Document Ingestion FAILED                 ║');
+      console.error('╚════════════════════════════════════════════════════════════╝');
+      console.error(`❌ Error Type: ${ingestError?.constructor?.name || 'Unknown'}`);
+      console.error(`❌ Error Message: ${ingestError?.message || 'No message'}`);
+      console.error(`❌ Error Code: ${ingestError?.code || 'No code'}`);
+      console.error(`❌ Status Code: ${ingestError?.statusCode || 'No status'}`);
+      console.error(`❌ OpenRAG URL: ${process.env.OPENRAG_URL}`);
+      console.error(`❌ API Key Present: ${!!process.env.OPENRAG_API_KEY}`);
+      console.error(`❌ Filename: ${path.basename(metadata.filename)}`);
+      console.error(`❌ File Size: ${file.size} bytes`);
+      
+      // Log full error object for debugging
+      if (ingestError?.cause) {
+        console.error(`❌ Error Cause: ${JSON.stringify(ingestError.cause, null, 2)}`);
+      }
+      if (ingestError?.stack) {
+        console.error(`❌ Stack Trace:\n${ingestError.stack}`);
+      }
+      console.error('════════════════════════════════════════════════════════════\n');
+      
+      // Check for common network errors
+      if (ingestError?.message?.includes('fetch failed') ||
+          ingestError?.code === 'ECONNREFUSED' ||
+          ingestError?.code === 'ENOTFOUND' ||
+          ingestError?.cause?.code === 'ECONNREFUSED' ||
+          ingestError?.cause?.code === 'ENOTFOUND') {
+        throw new RAGPipelineError(
+          `Cannot connect to OpenRAG backend at ${process.env.OPENRAG_URL}. Please ensure the OpenRAG server is running and accessible.`,
+          'NETWORK_ERROR',
+          {
+            documentId,
+            url: process.env.OPENRAG_URL,
+            errorCode: ingestError?.code || ingestError?.cause?.code,
+            errorMessage: ingestError?.message,
+            suggestion: 'Check that OPENRAG_URL is correct and the OpenRAG server is running'
+          }
+        );
+      }
+      
+      // Re-throw with enhanced context
+      throw new RAGPipelineError(
+        `Document ingestion failed: ${ingestError?.message || 'Unknown error'}`,
+        'INGESTION_ERROR',
+        {
+          documentId,
+          filename: path.basename(metadata.filename),
+          errorType: ingestError?.constructor?.name,
+          errorCode: ingestError?.code,
+          statusCode: ingestError?.statusCode,
+          originalError: ingestError?.message
+        }
+      );
+    }
 
     // Check if ingestion was successful
     // Result is IngestTaskStatus when wait=true

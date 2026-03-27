@@ -18,8 +18,9 @@ import { OpenRAGClient } from 'openrag-sdk';
 
 /**
  * Maximum duration for this API route in seconds
+ * Increased to 15 minutes to support large files and slow processing
  */
-export const maxDuration = 300; // 5 minutes for large file uploads
+export const maxDuration = 900; // 15 minutes for large file uploads
 
 /**
  * File validation schema
@@ -460,22 +461,44 @@ async function processRAGPipeline(
       strategy: 'fixed'
     };
 
-    const ragResult = await ragIndexDocument(
-      file,
-      documentId,
-      ragMetadata,
-      filterId,
-      true // skipFilterUpdate
-    );
+    let ragResult;
+    try {
+      ragResult = await ragIndexDocument(
+        file,
+        documentId,
+        ragMetadata,
+        filterId,
+        true // skipFilterUpdate
+      );
 
-    tracker.completeEvent(indexingId, {
-      chunkCount: ragResult.chunkCount,
-      tokenCount: ragResult.tokenCount,
-      indexTime: ragResult.indexTime
-    });
+      tracker.completeEvent(indexingId, {
+        chunkCount: ragResult.chunkCount,
+        tokenCount: ragResult.tokenCount,
+        indexTime: ragResult.indexTime
+      });
 
-    if (!ragResult.success) {
-      throw new Error(ragResult.error || 'RAG indexing failed');
+      if (!ragResult.success) {
+        throw new Error(ragResult.error || 'RAG indexing failed');
+      }
+    } catch (indexError: any) {
+      // Enhanced error logging for indexing failures
+      console.error('\n╔════════════════════════════════════════════════════════════╗');
+      console.error('║         RAG INDEXING ERROR IN UPLOAD ROUTE                ║');
+      console.error('╚════════════════════════════════════════════════════════════╝');
+      console.error(`❌ Error Type: ${indexError?.constructor?.name || 'Unknown'}`);
+      console.error(`❌ Error Message: ${indexError?.message || 'No message'}`);
+      console.error(`❌ Error Code: ${indexError?.code || 'No code'}`);
+      console.error(`❌ Document ID: ${documentId}`);
+      console.error(`❌ Filter ID: ${filterId}`);
+      console.error(`❌ Filename: ${file.name}`);
+      
+      if (indexError?.details) {
+        console.error(`❌ Error Details: ${JSON.stringify(indexError.details, null, 2)}`);
+      }
+      console.error('════════════════════════════════════════════════════════════\n');
+      
+      tracker.failEvent(indexingId, indexError?.message || 'Indexing failed');
+      throw indexError;
     }
 
     // Log detailed RAG upload results
