@@ -15,6 +15,7 @@ import { ChartsTab } from '@/components/tabs/ChartsTab';
 import { GlobalConfigBar } from '@/components/config/GlobalConfigBar';
 import { useQueryHistory } from '@/hooks/useQueryHistory';
 import { DEFAULT_MODEL } from '@/lib/constants/models';
+import { recalculateBothMetrics } from '@/lib/rag-comparison/metrics/metrics-recalculator';
 
 interface OllamaModelInfo {
   name: string;
@@ -93,6 +94,30 @@ function HomeContent() {
     
     checkOllama();
   }, []);
+
+  // Recalculate metrics when pricing model changes
+  useEffect(() => {
+    // Only recalculate if we have existing results and the model actually changed
+    if (ragResult && directResult) {
+      const currentRagModel = ragResult.metrics.breakdown?.metadata.model;
+      const currentDirectModel = directResult.metrics.breakdown?.metadata.model;
+      
+      // Check if model changed from what's in the results
+      if (currentRagModel !== pricingModel || currentDirectModel !== pricingModel) {
+        console.log(`Recalculating metrics for pricing model: ${pricingModel}`);
+        
+        const { rag: updatedRag, direct: updatedDirect } = recalculateBothMetrics(
+          ragResult,
+          directResult,
+          pricingModel,
+          pricingModel
+        );
+        
+        setRagResult(updatedRag);
+        setDirectResult(updatedDirect);
+      }
+    }
+  }, [pricingModel]); // Only depend on pricingModel to avoid infinite loops
 
   const handleUploadComplete = (docId: string) => {
     setDocumentId(docId);
