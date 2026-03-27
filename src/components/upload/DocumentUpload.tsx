@@ -489,6 +489,8 @@ export function DocumentUpload({
   const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
+    setFileStatuses([]);
+    setIsUploading(false);
     
     const items = Array.from(e.dataTransfer.items);
     const collectedFiles: File[] = [];
@@ -524,6 +526,8 @@ export function DocumentUpload({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileStatuses([]);
+    setIsUploading(false);
     const selectedFiles = e.target.files;
     if (selectedFiles && selectedFiles.length > 0) {
       const fileArray = Array.from(selectedFiles).filter(isValidFileType);
@@ -1199,6 +1203,8 @@ export function DocumentUpload({
                 setUploadMode(e.target.checked ? 'folder' : 'single');
                 setFiles([]);
                 setUploadStatus({ status: 'idle' });
+                setIsUploading(false);
+                setFileStatuses([]);
               }}
               className="w-4 h-4 text-unkey-teal-500 bg-unkey-gray-850 border-unkey-gray-600 rounded focus:ring-unkey-teal-500 focus:ring-2"
             />
