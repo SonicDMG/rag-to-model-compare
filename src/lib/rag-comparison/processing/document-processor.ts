@@ -182,11 +182,14 @@ export async function validateDocument(file: File): Promise<void> {
   }
 
   // Check for path traversal attempts in filename
-  if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+  // Extract basename in case full path is provided
+  const basename = file.name.split(/[/\\]/).pop() || file.name;
+
+  if (basename.includes('..')) {
     throw new DocumentProcessingError(
       'Invalid filename: contains path traversal characters',
       'INVALID_FILENAME',
-      { filename: file.name }
+      { filename: file.name, basename }
     );
   }
 }

@@ -430,15 +430,9 @@ export async function indexDocument(
       );
     }
 
-    // Parse the document to get actual content for accurate token counting
-    // This ensures we report the correct token count to the user
-    // Note: OpenRAG SDK will also parse it internally, but we need the count for metrics
-    const { parseDocument } = await import('../processing/document-processor');
-    const parseResult = await parseDocument(file);
-    const tokenCount = estimateTokens(parseResult.content);
-    
-    console.log(`[RAG Pipeline] Accurate token count: ${tokenCount.toLocaleString()} tokens`);
-    console.log(`[RAG Pipeline] Content length: ${parseResult.content.length.toLocaleString()} characters`);
+    // Token count will be retrieved from OpenRAG's response after ingestion
+    // OpenRAG SDK handles all document parsing internally
+    const tokenCount = 0; // Placeholder - will be updated from ingestion result
 
     // Get OpenRAG client
     const client = getOpenRAGClient(RAGPipelineError);

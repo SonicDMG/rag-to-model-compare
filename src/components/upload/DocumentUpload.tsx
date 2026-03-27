@@ -78,6 +78,7 @@ export function DocumentUpload({
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
+  const [concurrency, setConcurrency] = useState<1 | 2 | 3 | 4>(4);
   
   // Streaming upload state - now managed by parent
   const [streamingProgress, setStreamingProgress] = useState<StreamingProgressData | null>(null);
@@ -824,7 +825,7 @@ export function DocumentUpload({
   };
 
   // Upload files in parallel with concurrency limit
-  const uploadFilesInParallel = async (files: File[], concurrency: number = 4, filesToSkipRAG: string[] = []) => {
+  const uploadFilesInParallel = async (files: File[], concurrencyLimit: number = concurrency, filesToSkipRAG: string[] = []) => {
     const results: any[] = [];
     let successCount = 0;
     let partialCount = 0;
@@ -853,9 +854,9 @@ export function DocumentUpload({
       },
     });
 
-    // Process files in batches of 'concurrency'
-    for (let i = 0; i < files.length; i += concurrency) {
-      const batch = files.slice(i, i + concurrency);
+    // Process files in batches of 'concurrencyLimit'
+    for (let i = 0; i < files.length; i += concurrencyLimit) {
+      const batch = files.slice(i, i + concurrencyLimit);
 
       // Update progress to show current batch
       setStreamingProgress(prev => prev ? {
@@ -1073,7 +1074,7 @@ export function DocumentUpload({
         firstSuccessfulDocumentId,
         firstSuccessfulResult,
         aggregatedResult
-      } = await uploadFilesInParallel(files, 4, filesToSkipRAG);
+      } = await uploadFilesInParallel(files, concurrency, filesToSkipRAG);
 
       // Determine overall status
       const skippedRAGCount = filesToSkipRAG.length;
@@ -1314,6 +1315,29 @@ export function DocumentUpload({
             </label>
             <p className="text-xs text-unkey-gray-400 mt-1 ml-6">
               If unchecked, files with existing names will be skipped
+            </p>
+          </div>
+        )}
+
+        {/* Concurrency Control */}
+        {files.length > 1 && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-unkey-gray-200 mb-2">
+              Process documents:
+            </label>
+            <select
+              value={concurrency}
+              onChange={(e) => setConcurrency(Number(e.target.value) as 1 | 2 | 3 | 4)}
+              disabled={isUploading}
+              className="w-full px-3 py-2 bg-unkey-gray-850 border border-unkey-gray-600 rounded-unkey-md text-unkey-gray-200 focus:outline-none focus:ring-2 focus:ring-unkey-teal-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value={1}>1 at a time (sequential)</option>
+              <option value={2}>2 at a time</option>
+              <option value={3}>3 at a time</option>
+              <option value={4}>4 at a time (default)</option>
+            </select>
+            <p className="text-xs text-unkey-gray-400 mt-1">
+              Higher concurrency processes files faster but uses more system resources
             </p>
           </div>
         )}
