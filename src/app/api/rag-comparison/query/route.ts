@@ -50,9 +50,8 @@ const QueryRequestSchema = z.object({
   processedContent: z.string()
     .optional(),
   
-  // Knowledge filter ID for RAG queries
+  // Knowledge filter ID for RAG queries (optional - if not provided, RAG will query all documents)
   filterId: z.string()
-    .min(1, 'Filter ID is required for RAG queries')
     .optional(),
   
   model: z.string()

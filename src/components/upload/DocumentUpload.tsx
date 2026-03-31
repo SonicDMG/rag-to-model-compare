@@ -171,20 +171,13 @@ export function DocumentUpload({
         },
       });
 
-      // Check if filter is selected
-      if (!currentFilter) {
-        setUploadStatus({
-          status: 'error',
-          message: 'Please select a knowledge filter before uploading'
-        });
-        setIsUploading(false);
-        return;
-      }
-
       // Create FormData
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('filterId', currentFilter.id);
+      // Only append filterId if a filter is selected (filters are now optional)
+      if (currentFilter) {
+        formData.append('filterId', currentFilter.id);
+      }
 
       // Create AbortController for this upload
       const abortController = new AbortController();

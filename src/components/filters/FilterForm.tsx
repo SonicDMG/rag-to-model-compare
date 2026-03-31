@@ -1,11 +1,11 @@
-'use client';
-
 /**
  * FilterForm Component
  *
  * Form for creating or editing knowledge filter configuration.
  * Validates input and provides user-friendly error messages.
  */
+
+'use client';
 
 import { useState, useEffect } from 'react';
 import type { FilterConfig, FilterFormData } from '@/types/filter-management';

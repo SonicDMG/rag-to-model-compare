@@ -713,44 +713,43 @@ export async function query(
     const sanitizedQuery = sanitizeInput(query);
     console.log('Sanitized query:', sanitizedQuery);
 
-    // Track filter lookup
+    // Track filter lookup (optional - if no filter, query all documents)
     const filterLookupEventId = eventTracker.startEvent(
       ProcessingEventType.FILTER_LOOKUP,
-      'Retrieve knowledge filter from OpenRAG',
-      { filterId }
+      filterId ? 'Retrieve knowledge filter from OpenRAG' : 'No filter selected - will query all documents',
+      { filterId: filterId || 'none' }
     );
     
-    if (!filterId) {
-      eventTracker.failEvent(filterLookupEventId, 'Filter ID is required');
-      throw new RAGPipelineError(
-        'Knowledge filter ID is required for RAG queries',
-        'FILTER_REQUIRED',
-        { documentId }
-      );
-    }
-    
-    console.log(`Retrieving knowledge filter ${filterId} from OpenRAG...`);
     const client = getOpenRAGClient(RAGPipelineError);
+    let filter = null;
+    let filterLimit = config.topK;
+    let filterScoreThreshold = 0.5;
     
-    const filter = await client.knowledgeFilters.get(filterId);
-    
-    if (!filter) {
-      eventTracker.failEvent(filterLookupEventId, 'Knowledge filter not found');
-      throw new RAGPipelineError(
-        `Knowledge filter "${filterId}" not found. Please ensure the document was uploaded successfully.`,
-        'FILTER_NOT_FOUND',
-        { documentId, filterId }
-      );
+    if (filterId) {
+      console.log(`Retrieving knowledge filter ${filterId} from OpenRAG...`);
+      filter = await client.knowledgeFilters.get(filterId);
+      
+      if (!filter) {
+        eventTracker.failEvent(filterLookupEventId, 'Knowledge filter not found');
+        throw new RAGPipelineError(
+          `Knowledge filter "${filterId}" not found. Please ensure the document was uploaded successfully.`,
+          'FILTER_NOT_FOUND',
+          { documentId, filterId }
+        );
+      }
+      
+      // Extract limit and scoreThreshold from filter configuration
+      // Filter configuration takes precedence over request parameters
+      filterLimit = filter.queryData?.limit ?? config.topK;
+      filterScoreThreshold = filter.queryData?.scoreThreshold ?? 0.5;
+      
+      console.log('Using knowledge filter ID:', filterId);
+      console.log('Filter data sources:', filter.queryData?.filters?.data_sources);
+    } else {
+      console.log('No filter selected - querying all documents');
     }
     
-    // Extract limit and scoreThreshold from filter configuration
-    // Filter configuration takes precedence over request parameters
-    const filterLimit = filter.queryData?.limit ?? config.topK;
-    const filterScoreThreshold = filter.queryData?.scoreThreshold ?? 0.5;
-    
-    eventTracker.completeEvent(filterLookupEventId, { filterId });
-    console.log('Using knowledge filter ID:', filterId);
-    console.log('Filter data sources:', filter.queryData?.filters?.data_sources);
+    eventTracker.completeEvent(filterLookupEventId, { filterId: filterId || 'none' });
     console.log('Filter limit (from config):', filterLimit);
     console.log('Filter scoreThreshold (from config):', filterScoreThreshold);
 
@@ -772,15 +771,20 @@ export async function query(
     // Execute RAG query using OpenRAG SDK chat method
     // This single API call performs both vector search/retrieval AND generation
     // Use limit and scoreThreshold from filter configuration
-    const chatRequest = {
+    const chatRequest: any = {
       message: sanitizedQuery,
       limit: filterLimit,
       scoreThreshold: filterScoreThreshold,
       stream: false as const,
-      filterId: filterId,
     };
+    
+    // Only include filterId if one is provided
+    if (filterId) {
+      chatRequest.filterId = filterId;
+    }
+    
     console.log('Chat request:', JSON.stringify(chatRequest, null, 2));
-    console.log('Calling client.chat.create() with knowledge filter...');
+    console.log(filterId ? 'Calling client.chat.create() with knowledge filter...' : 'Calling client.chat.create() without filter (all documents)...');
     
     const response = await client.chat.create(chatRequest);
     

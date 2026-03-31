@@ -153,20 +153,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const providedDocumentId = formData.get('documentId') as string | null;
-    const filterId = formData.get('filterId') as string | null;
+    const filterId = formData.get('filterId') as string | null; // Optional - filters are now optional
     const isMultiFileStr = formData.get('isMultiFile') as string | null;
     const isMultiFile = isMultiFileStr === 'true';
     
     if (!file) {
       return new Response(
         JSON.stringify({ success: false, error: 'No file provided' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    if (!filterId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Filter ID is required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -322,7 +315,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 async function processRAGPipeline(
   file: File,
   documentId: string,
-  filterId: string,
+  filterId: string | null,
   eventCallback: (event: any) => void
 ): Promise<any> {
   const tracker = new ProcessingEventTracker(eventCallback, PipelineType.RAG);
@@ -425,11 +418,14 @@ async function processRAGPipeline(
       
       // Schedule batch filter update to associate this existing file with the Compare filter
       // This ensures existing files are included in the filter just like newly uploaded files
-      const baseFilename = path.basename(file.name);
-      scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
-        console.error(`[RAG] ⚠️  Failed to schedule filter update for existing file:`, err);
-        // Don't throw - file already exists and is indexed
-      });
+      // Only update filter if one is selected
+      if (filterId) {
+        const baseFilename = path.basename(file.name);
+        scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
+          console.error(`[RAG] ⚠️  Failed to schedule filter update for existing file:`, err);
+          // Don't throw - file already exists and is indexed
+        });
+      }
       
       return {
         success: true,
@@ -475,7 +471,7 @@ async function processRAGPipeline(
         file,
         documentId,
         ragMetadata,
-        filterId,
+        filterId || undefined, // Convert null to undefined for optional parameter
         true // skipFilterUpdate
       );
 
@@ -551,11 +547,14 @@ async function processRAGPipeline(
 
     // Schedule batch filter update to associate this file with the Compare filter
     // Uses debouncing to handle concurrent uploads efficiently
-    const baseFilename = path.basename(file.name);
-    scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
-      console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
-      // Don't throw - document is already indexed and stored
-    });
+    // Only update filter if one is selected
+    if (filterId) {
+      const baseFilename = path.basename(file.name);
+      scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
+        console.error(`[RAG] ⚠️  Failed to schedule filter update:`, err);
+        // Don't throw - document is already indexed and stored
+      });
+    }
 
     return {
       success: true,

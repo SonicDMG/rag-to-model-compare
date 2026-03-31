@@ -179,18 +179,6 @@ function HomeContent() {
     setDirectProcessingEvents([]);
     setOllamaProcessingEvents([]);
 
-    // Validate filter is selected
-    if (!currentFilter) {
-      setRagError('Please select a filter before querying');
-      setDirectError('Please select a filter before querying');
-      setOllamaError('Please select a filter before querying');
-      setIsQuerying(false);
-      setIsRagQuerying(false);
-      setIsDirectQuerying(false);
-      setIsOllamaQuerying(false);
-      return;
-    }
-
     try {
       const response = await fetch('/api/rag-comparison/query', {
         method: 'POST',
@@ -200,7 +188,7 @@ function HomeContent() {
         body: JSON.stringify({
           query,
           documentId,
-          filterId: currentFilter.id,
+          ...(currentFilter && { filterId: currentFilter.id }), // Only include filterId if a filter is selected
           processedContent: uploadResult?.directProcessedText, // Send full processed text from frontend
           temperature,
           maxTokens,
