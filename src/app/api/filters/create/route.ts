@@ -21,9 +21,9 @@ import type { CreateFilterRequest, CreateFilterResponse, FilterConfig } from '@/
 export async function POST(request: NextRequest) {
   try {
     const body: CreateFilterRequest = await request.json();
-    const { name, description, limit, scoreThreshold, color } = body;
+    const { name, description, limit, scoreThreshold, color, icon } = body;
     
-    console.log('[Filters API] Creating new filter:', { name, limit, scoreThreshold, color });
+    console.log('[Filters API] Creating new filter:', { name, limit, scoreThreshold, color, icon });
     
     // Validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
         limit,
         scoreThreshold,
         color: color || 'teal', // Default to teal if not provided
+        icon: icon, // Optional icon
         filters: {
           data_sources: [], // Start empty
         },
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
         limit: createdFilter.queryData?.limit ?? limit,
         scoreThreshold: createdFilter.queryData?.scoreThreshold ?? scoreThreshold,
         color: createdFilter.queryData?.color ?? color ?? 'teal',
+        icon: createdFilter.queryData?.icon ?? icon,
         filters: {
           data_sources: createdFilter.queryData?.filters?.data_sources || [],
         },

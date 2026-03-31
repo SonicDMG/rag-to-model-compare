@@ -38,6 +38,7 @@ export async function GET() {
         limit: filter.queryData?.limit ?? 5,
         scoreThreshold: filter.queryData?.scoreThreshold ?? 0.5,
         color: filter.queryData?.color ?? 'teal',
+        icon: filter.queryData?.icon,
         filters: {
           data_sources: filter.queryData?.filters?.data_sources || [],
         },

@@ -1,13 +1,119 @@
 /**
  * FilterSelector Component
- * 
+ *
  * Tag/badge-based selector for choosing the active knowledge filter.
- * Uses OpenRAG's color scheme for visual consistency.
+ * Uses OpenRAG's color scheme and icon set for visual consistency.
  */
 
 'use client';
 
 import { useFilter } from '@/contexts/FilterContext';
+import * as LucideIcons from 'lucide-react';
+import { LucideIcon } from 'lucide-react';
+
+/**
+ * Map icon names to Lucide React components
+ * Matches the icon set used in OpenRAG UI
+ */
+const ICON_MAP: Record<string, LucideIcon> = {
+  // Common icons from OpenRAG UI
+  'filter': LucideIcons.Filter,
+  'scroll': LucideIcons.ScrollText,
+  'book': LucideIcons.Book,
+  'book-open': LucideIcons.BookOpen,
+  'file': LucideIcons.File,
+  'file-text': LucideIcons.FileText,
+  'folder': LucideIcons.Folder,
+  'folder-open': LucideIcons.FolderOpen,
+  'search': LucideIcons.Search,
+  'database': LucideIcons.Database,
+  'layers': LucideIcons.Layers,
+  'archive': LucideIcons.Archive,
+  'inbox': LucideIcons.Inbox,
+  'package': LucideIcons.Package,
+  'briefcase': LucideIcons.Briefcase,
+  'clipboard': LucideIcons.Clipboard,
+  'tag': LucideIcons.Tag,
+  'bookmark': LucideIcons.Bookmark,
+  'star': LucideIcons.Star,
+  'flag': LucideIcons.Flag,
+  'target': LucideIcons.Target,
+  'zap': LucideIcons.Zap,
+  'sparkles': LucideIcons.Sparkles,
+  'rocket': LucideIcons.Rocket,
+  'flame': LucideIcons.Flame,
+  'lightbulb': LucideIcons.Lightbulb,
+  'key': LucideIcons.Key,
+  'lock': LucideIcons.Lock,
+  'unlock': LucideIcons.Unlock,
+  'shield': LucideIcons.Shield,
+  'award': LucideIcons.Award,
+  'trophy': LucideIcons.Trophy,
+  'crown': LucideIcons.Crown,
+  'gem': LucideIcons.Gem,
+  'diamond': LucideIcons.Diamond,
+  'heart': LucideIcons.Heart,
+  'bell': LucideIcons.Bell,
+  'message': LucideIcons.MessageSquare,
+  'mail': LucideIcons.Mail,
+  'phone': LucideIcons.Phone,
+  'globe': LucideIcons.Globe,
+  'map': LucideIcons.Map,
+  'compass': LucideIcons.Compass,
+  'navigation': LucideIcons.Navigation,
+  'home': LucideIcons.Home,
+  'building': LucideIcons.Building,
+  'store': LucideIcons.Store,
+  'shopping-cart': LucideIcons.ShoppingCart,
+  'shopping-bag': LucideIcons.ShoppingBag,
+  'credit-card': LucideIcons.CreditCard,
+  'wallet': LucideIcons.Wallet,
+  'dollar': LucideIcons.DollarSign,
+  'chart': LucideIcons.BarChart,
+  'trending-up': LucideIcons.TrendingUp,
+  'activity': LucideIcons.Activity,
+  'pie-chart': LucideIcons.PieChart,
+  'settings': LucideIcons.Settings,
+  'tool': LucideIcons.Wrench,
+  'wrench': LucideIcons.Wrench,
+  'hammer': LucideIcons.Hammer,
+  'code': LucideIcons.Code,
+  'terminal': LucideIcons.Terminal,
+  'cpu': LucideIcons.Cpu,
+  'server': LucideIcons.Server,
+  'cloud': LucideIcons.Cloud,
+  'wifi': LucideIcons.Wifi,
+  'link': LucideIcons.Link,
+  'paperclip': LucideIcons.Paperclip,
+  'image': LucideIcons.Image,
+  'video': LucideIcons.Video,
+  'music': LucideIcons.Music,
+  'mic': LucideIcons.Mic,
+  'camera': LucideIcons.Camera,
+  'printer': LucideIcons.Printer,
+  'download': LucideIcons.Download,
+  'upload': LucideIcons.Upload,
+  'share': LucideIcons.Share2,
+  'external-link': LucideIcons.ExternalLink,
+  'check': LucideIcons.Check,
+  'x': LucideIcons.X,
+  'plus': LucideIcons.Plus,
+  'minus': LucideIcons.Minus,
+  'info': LucideIcons.Info,
+  'alert': LucideIcons.AlertCircle,
+  'help': LucideIcons.HelpCircle,
+  'question': LucideIcons.HelpCircle,
+};
+
+/**
+ * Get the Lucide icon component for a given icon name
+ * Returns a default icon if the name is not found
+ */
+function getIconComponent(iconName?: string): LucideIcon {
+  if (!iconName) return LucideIcons.Circle;
+  const normalizedName = iconName.trim().toLowerCase();
+  return ICON_MAP[normalizedName] || LucideIcons.Circle;
+}
 
 interface FilterSelectorProps {
   /** Whether the selector is disabled */
@@ -19,7 +125,7 @@ interface FilterSelectorProps {
 export function FilterSelector({ disabled = false, onManageFilters }: FilterSelectorProps) {
   const { currentFilter, availableFilters, isLoading, error, selectFilter } = useFilter();
 
-  const handleFilterClick = (filterId: string) => {
+  const handleFilterClick = (filterId: string | null) => {
     if (!disabled && !isLoading) {
       selectFilter(filterId);
     }
@@ -179,54 +285,128 @@ export function FilterSelector({ disabled = false, onManageFilters }: FilterSele
 
       {/* Filter Tags */}
       {!isLoading && !error && availableFilters.length > 0 && (
-        <div className="flex flex-wrap gap-2 p-4 bg-unkey-gray-800/50 border border-unkey-gray-700 rounded-lg min-h-[80px]">
-          {availableFilters.map((filter) => {
-            const isSelected = currentFilter?.id === filter.id;
-            
-            return (
-              <button
-                key={filter.id}
-                onClick={() => handleFilterClick(filter.id)}
-                disabled={disabled || isLoading}
-                title={filter.description}
-                className={`
-                  px-3 py-1.5 rounded-full text-sm font-medium
-                  border-2 transition-all duration-200
-                  cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
-                  ${getColorClasses(filter.queryData?.color, isSelected)}
-                  ${isSelected ? 'shadow-md' : ''}
-                  focus:outline-none focus:ring-2 focus:ring-unkey-teal focus:ring-offset-2 focus:ring-offset-unkey-gray-900
-                `}
-              >
-                <span className="flex items-center gap-1.5">
-                  {/* Checkmark icon for selected filter */}
-                  {isSelected && (
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                  {filter.name}
-                </span>
-              </button>
-            );
-          })}
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 p-4 bg-unkey-gray-800/50 border border-unkey-gray-700 rounded-lg min-h-[80px]">
+            {/* No Filter Option */}
+            <button
+              onClick={() => handleFilterClick(null)}
+              disabled={disabled || isLoading}
+              title="Proceed without a filter - retrieves from all documents"
+              className={`
+                px-3 py-1.5 rounded-full text-sm font-medium
+                border-2 transition-all duration-200
+                cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                ${currentFilter === null
+                  ? 'bg-unkey-gray-600 text-white border-unkey-gray-500 hover:bg-unkey-gray-700 shadow-md'
+                  : 'bg-unkey-gray-700/50 text-unkey-gray-300 border-unkey-gray-600 hover:bg-unkey-gray-700 hover:border-unkey-gray-500'
+                }
+                focus:outline-none focus:ring-2 focus:ring-unkey-teal focus:ring-offset-2 focus:ring-offset-unkey-gray-900
+              `}
+            >
+              <span className="flex items-center gap-1.5">
+                {currentFilter === null && (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                )}
+                No Filter
+              </span>
+            </button>
+
+            {/* Filter Options */}
+            {availableFilters.map((filter) => {
+              const isSelected = currentFilter?.id === filter.id;
+              const hasIcon = filter.queryData?.icon && filter.queryData.icon.trim().length > 0;
+              
+              return (
+                <button
+                  key={filter.id}
+                  onClick={() => handleFilterClick(filter.id)}
+                  disabled={disabled || isLoading}
+                  title={filter.description}
+                  className={`
+                    px-3 py-1.5 rounded-full text-sm font-medium
+                    border-2 transition-all duration-200
+                    cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                    ${getColorClasses(filter.queryData?.color, isSelected)}
+                    ${isSelected ? 'shadow-md' : ''}
+                    focus:outline-none focus:ring-2 focus:ring-unkey-teal focus:ring-offset-2 focus:ring-offset-unkey-gray-900
+                  `}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {/* Icon or checkmark for selected filter */}
+                    {hasIcon ? (
+                      (() => {
+                        const IconComponent = getIconComponent(filter.queryData.icon);
+                        return <IconComponent className="w-4 h-4" aria-label="filter icon" />;
+                      })()
+                    ) : isSelected ? (
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    ) : null}
+                    {filter.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Filter Properties Display */}
+          {currentFilter && (
+            <div className="p-3 bg-unkey-gray-800/30 border border-unkey-gray-700/50 rounded-lg">
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-unkey-teal flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1 space-y-1">
+                  <p className="text-xs font-medium text-unkey-gray-300">
+                    {currentFilter.name} Settings:
+                  </p>
+                  <div className="flex flex-wrap gap-3 text-xs text-unkey-gray-400">
+                    <span>
+                      <span className="text-unkey-gray-500">Limit:</span> {currentFilter.queryData.limit} chunks
+                    </span>
+                    <span>
+                      <span className="text-unkey-gray-500">Score Threshold:</span> {currentFilter.queryData.scoreThreshold}
+                    </span>
+                    {currentFilter.queryData.filters?.data_sources && currentFilter.queryData.filters.data_sources.length > 0 && (
+                      <span>
+                        <span className="text-unkey-gray-500">Sources:</span> {currentFilter.queryData.filters.data_sources.length} document(s)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Helper Text */}
       {!isLoading && !error && availableFilters.length > 0 && (
         <p className="text-xs text-unkey-gray-400">
-          Click a filter to select it. Hover for descriptions.
+          Select "No Filter" to retrieve from all documents, or choose a specific filter to scope retrieval.
         </p>
       )}
     </div>

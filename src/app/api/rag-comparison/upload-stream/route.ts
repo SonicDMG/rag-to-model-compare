@@ -423,6 +423,14 @@ async function processRAGPipeline(
         })
       });
       
+      // Schedule batch filter update to associate this existing file with the Compare filter
+      // This ensures existing files are included in the filter just like newly uploaded files
+      const baseFilename = path.basename(file.name);
+      scheduleBatchFilterUpdate(filterId, baseFilename).catch(err => {
+        console.error(`[RAG] ⚠️  Failed to schedule filter update for existing file:`, err);
+        // Don't throw - file already exists and is indexed
+      });
+      
       return {
         success: true,
         skipped: true,

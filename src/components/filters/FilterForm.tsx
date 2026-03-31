@@ -1,14 +1,16 @@
+'use client';
+
 /**
  * FilterForm Component
- * 
+ *
  * Form for creating or editing knowledge filter configuration.
  * Validates input and provides user-friendly error messages.
  */
 
-'use client';
-
 import { useState, useEffect } from 'react';
 import type { FilterConfig, FilterFormData } from '@/types/filter-management';
+import * as LucideIcons from 'lucide-react';
+import { LucideIcon } from 'lucide-react';
 
 interface FilterFormProps {
   /** Existing filter to edit (null for create) */
@@ -35,6 +37,46 @@ const COLOR_OPTIONS = [
   { value: 'orange', label: 'Orange', bgClass: 'bg-orange-600', borderClass: 'border-orange-600' },
 ];
 
+// Popular icon options matching OpenRAG UI
+const ICON_OPTIONS: Array<{ name: string; icon: LucideIcon; label: string }> = [
+  { name: 'filter', icon: LucideIcons.Filter, label: 'Filter' },
+  { name: 'scroll', icon: LucideIcons.ScrollText, label: 'Scroll' },
+  { name: 'book', icon: LucideIcons.Book, label: 'Book' },
+  { name: 'file-text', icon: LucideIcons.FileText, label: 'Document' },
+  { name: 'folder', icon: LucideIcons.Folder, label: 'Folder' },
+  { name: 'database', icon: LucideIcons.Database, label: 'Database' },
+  { name: 'layers', icon: LucideIcons.Layers, label: 'Layers' },
+  { name: 'archive', icon: LucideIcons.Archive, label: 'Archive' },
+  { name: 'inbox', icon: LucideIcons.Inbox, label: 'Inbox' },
+  { name: 'package', icon: LucideIcons.Package, label: 'Package' },
+  { name: 'briefcase', icon: LucideIcons.Briefcase, label: 'Briefcase' },
+  { name: 'tag', icon: LucideIcons.Tag, label: 'Tag' },
+  { name: 'bookmark', icon: LucideIcons.Bookmark, label: 'Bookmark' },
+  { name: 'star', icon: LucideIcons.Star, label: 'Star' },
+  { name: 'flag', icon: LucideIcons.Flag, label: 'Flag' },
+  { name: 'target', icon: LucideIcons.Target, label: 'Target' },
+  { name: 'zap', icon: LucideIcons.Zap, label: 'Zap' },
+  { name: 'rocket', icon: LucideIcons.Rocket, label: 'Rocket' },
+  { name: 'lightbulb', icon: LucideIcons.Lightbulb, label: 'Lightbulb' },
+  { name: 'key', icon: LucideIcons.Key, label: 'Key' },
+  { name: 'shield', icon: LucideIcons.Shield, label: 'Shield' },
+  { name: 'award', icon: LucideIcons.Award, label: 'Award' },
+  { name: 'gem', icon: LucideIcons.Gem, label: 'Gem' },
+  { name: 'heart', icon: LucideIcons.Heart, label: 'Heart' },
+  { name: 'bell', icon: LucideIcons.Bell, label: 'Bell' },
+  { name: 'message', icon: LucideIcons.MessageSquare, label: 'Message' },
+  { name: 'globe', icon: LucideIcons.Globe, label: 'Globe' },
+  { name: 'home', icon: LucideIcons.Home, label: 'Home' },
+  { name: 'building', icon: LucideIcons.Building, label: 'Building' },
+  { name: 'shopping-cart', icon: LucideIcons.ShoppingCart, label: 'Cart' },
+  { name: 'chart', icon: LucideIcons.BarChart, label: 'Chart' },
+  { name: 'trending-up', icon: LucideIcons.TrendingUp, label: 'Trending' },
+  { name: 'settings', icon: LucideIcons.Settings, label: 'Settings' },
+  { name: 'code', icon: LucideIcons.Code, label: 'Code' },
+  { name: 'terminal', icon: LucideIcons.Terminal, label: 'Terminal' },
+  { name: 'server', icon: LucideIcons.Server, label: 'Server' },
+];
+
 export function FilterForm({ filter, onSubmit, onCancel, isSubmitting = false }: FilterFormProps) {
   const [formData, setFormData] = useState<FilterFormData>({
     name: filter?.name || '',
@@ -42,6 +84,7 @@ export function FilterForm({ filter, onSubmit, onCancel, isSubmitting = false }:
     limit: filter?.queryData.limit || 5,
     scoreThreshold: filter?.queryData.scoreThreshold || 0.5,
     color: filter?.queryData?.color || 'teal',
+    icon: filter?.queryData?.icon || '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof FilterFormData, string>>>({});
@@ -55,6 +98,7 @@ export function FilterForm({ filter, onSubmit, onCancel, isSubmitting = false }:
         limit: filter.queryData.limit,
         scoreThreshold: filter.queryData.scoreThreshold,
         color: filter.queryData?.color || 'teal',
+        icon: filter.queryData?.icon || '',
       });
     }
   }, [filter]);
@@ -201,6 +245,42 @@ export function FilterForm({ filter, onSubmit, onCancel, isSubmitting = false }:
         {errors.scoreThreshold && (
           <p className="mt-1 text-sm text-red-400">{errors.scoreThreshold}</p>
         )}
+      </div>
+
+      {/* Icon Picker */}
+      <div>
+        <label className="block text-sm font-medium text-unkey-gray-300 mb-2">
+          Filter Icon <span className="text-xs text-unkey-gray-500">(optional)</span>
+        </label>
+        <div className="grid grid-cols-6 gap-2">
+          {ICON_OPTIONS.map((option) => {
+            const IconComponent = option.icon;
+            const isSelected = formData.icon === option.name;
+            return (
+              <button
+                key={option.name}
+                type="button"
+                onClick={() => handleChange('icon', option.name)}
+                disabled={isSubmitting}
+                className={`
+                  relative h-12 rounded-lg border-2 transition-all flex items-center justify-center
+                  ${isSelected
+                    ? 'border-unkey-teal bg-unkey-teal/10 ring-2 ring-offset-2 ring-offset-unkey-gray-900 ring-unkey-teal'
+                    : 'border-unkey-gray-700 hover:border-unkey-gray-600 hover:bg-unkey-gray-800'
+                  }
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  focus:outline-none focus:ring-2 focus:ring-unkey-teal focus:ring-offset-2 focus:ring-offset-unkey-gray-900
+                `}
+                title={option.label}
+              >
+                <IconComponent className={`w-5 h-5 ${isSelected ? 'text-unkey-teal' : 'text-unkey-gray-400'}`} />
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-unkey-gray-500">
+          Choose an icon to visually identify this filter
+        </p>
       </div>
 
       {/* Color Picker */}

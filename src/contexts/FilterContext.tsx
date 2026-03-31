@@ -40,14 +40,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
         console.log(`[FilterContext] Loaded ${data.filters.length} filters`);
         setAvailableFilters(data.filters);
         
-        // If no current filter selected, try to select "Compare" or first available
-        if (!currentFilter && data.filters.length > 0) {
-          const compareFilter = data.filters.find((f: FilterConfig) => f.name === 'Compare');
-          const filterToSelect = compareFilter || data.filters[0];
-          setCurrentFilter(filterToSelect);
-          localStorage.setItem('selectedFilterId', filterToSelect.id);
-          console.log(`[FilterContext] Auto-selected filter: ${filterToSelect.name}`);
-        }
+        // Don't auto-select a filter - let user choose or proceed without one
+        console.log('[FilterContext] Filters loaded, no auto-selection');
       } else {
         setError(data.error || 'Failed to load filters');
         console.error('[FilterContext] Failed to load filters:', data.error);
@@ -98,7 +92,14 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   /**
    * Select a filter by ID
    */
-  const selectFilter = useCallback(async (filterId: string) => {
+  const selectFilter = useCallback(async (filterId: string | null) => {
+    if (filterId === null) {
+      console.log('[FilterContext] Cleared filter selection');
+      setCurrentFilter(null);
+      localStorage.removeItem('selectedFilterId');
+      return;
+    }
+    
     const filter = availableFilters.find(f => f.id === filterId);
     if (filter) {
       console.log(`[FilterContext] Selected filter: ${filter.name}`);

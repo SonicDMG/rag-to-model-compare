@@ -21,7 +21,7 @@ import type { UpdateFilterRequest, UpdateFilterResponse, FilterConfig } from '@/
 export async function PUT(request: NextRequest) {
   try {
     const body: UpdateFilterRequest = await request.json();
-    const { filterId, name, description, limit, scoreThreshold, color, dataSources } = body;
+    const { filterId, name, description, limit, scoreThreshold, color, icon, dataSources } = body;
     
     console.log('[Filters API] Updating filter:', filterId);
     
@@ -83,11 +83,12 @@ export async function PUT(request: NextRequest) {
     }
     
     // Update queryData if any query-related fields are provided
-    if (limit !== undefined || scoreThreshold !== undefined || color !== undefined || dataSources !== undefined) {
+    if (limit !== undefined || scoreThreshold !== undefined || color !== undefined || icon !== undefined || dataSources !== undefined) {
       updatePayload.queryData = {
         limit: limit ?? currentFilter.queryData?.limit ?? 5,
         scoreThreshold: scoreThreshold ?? currentFilter.queryData?.scoreThreshold ?? 0.5,
         color: color ?? currentFilter.queryData?.color ?? 'teal',
+        icon: icon ?? currentFilter.queryData?.icon,
         filters: {
           data_sources: dataSources ?? currentFilter.queryData?.filters?.data_sources ?? [],
         },
@@ -117,6 +118,7 @@ export async function PUT(request: NextRequest) {
         limit: updatedFilter.queryData?.limit ?? 5,
         scoreThreshold: updatedFilter.queryData?.scoreThreshold ?? 0.5,
         color: updatedFilter.queryData?.color ?? 'teal',
+        icon: updatedFilter.queryData?.icon,
         filters: {
           data_sources: updatedFilter.queryData?.filters?.data_sources || [],
         },

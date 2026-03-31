@@ -26,6 +26,8 @@ export interface FilterConfig {
     scoreThreshold: number;
     /** Filter color for visual identification */
     color?: string;
+    /** Filter icon (emoji or icon identifier) */
+    icon?: string;
     /** Filters object */
     filters: {
       /** Array of document filenames to filter by */
@@ -70,6 +72,8 @@ export interface FilterFormData {
   scoreThreshold: number;
   /** Filter color for visual identification (default: 'teal') */
   color?: string;
+  /** Filter icon (emoji or icon identifier) */
+  icon?: string;
 }
 
 /**
@@ -103,8 +107,8 @@ export interface FilterContextState {
   isLoading: boolean;
   /** Error message if any */
   error: string | null;
-  /** Select a filter by ID */
-  selectFilter: (filterId: string) => Promise<void>;
+  /** Select a filter by ID, or null to clear selection */
+  selectFilter: (filterId: string | null) => Promise<void>;
   /** Refresh filters list from OpenRAG */
   refreshFilters: () => Promise<void>;
   /** Create a new filter */
@@ -124,6 +128,7 @@ export interface CreateFilterRequest {
   limit: number;
   scoreThreshold: number;
   color?: string;
+  icon?: string;
 }
 
 /**
@@ -161,6 +166,7 @@ export interface UpdateFilterRequest {
   limit?: number;
   scoreThreshold?: number;
   color?: string;
+  icon?: string;
   dataSources?: string[];
 }
 
