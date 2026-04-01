@@ -7,7 +7,7 @@ import { OllamaResult } from '@/types/ollama';
 
 const STORAGE_KEY = 'queryHistory';
 const COUNTERS_KEY = 'queryCounters';
-const MAX_HISTORY_ITEMS = 10;
+const MAX_HISTORY_ITEMS = 1000;
 
 /**
  * Cumulative query counters that persist across all time
@@ -25,7 +25,7 @@ export interface QueryCounters {
  * Features:
  * - Save query results to localStorage
  * - Retrieve query history with reactive state
- * - Limit to last 10 queries
+ * - Limit to last 1000 queries
  * - Generate unique IDs
  * - Automatically re-renders components when history changes
  */

@@ -5,18 +5,22 @@
 
 'use client';
 
+import { useState } from 'react';
 import { useQueryHistory } from '@/hooks/useQueryHistory';
 import { aggregateChartData } from '@/lib/utils/chart-aggregator';
 import { TimingComparisonChart } from '@/components/charts/TimingComparisonChart';
 import { TokenComparisonChart } from '@/components/charts/TokenComparisonChart';
 import { CostComparisonChart } from '@/components/charts/CostComparisonChart';
 
+type ChartRange = 'last10' | 'all';
+
 /**
  * Charts tab component
  *
  * Features:
  * - Loads query history from localStorage with reactive updates
- * - Aggregates performance metrics
+ * - Allows selection between "Last 10" or "All" queries for chart display
+ * - Aggregates performance metrics based on selected range
  * - Displays timing, token, and cost comparison charts
  * - Shows helpful message when no data is available
  * - Responsive grid layout
@@ -24,8 +28,12 @@ import { CostComparisonChart } from '@/components/charts/CostComparisonChart';
  */
 export function ChartsTab() {
   const { history, isLoading, getCounters } = useQueryHistory();
-  const chartData = aggregateChartData(history);
   const counters = getCounters();
+  const [chartRange, setChartRange] = useState<ChartRange>('all');
+
+  // Filter history based on selected range
+  const filteredHistory = chartRange === 'last10' ? history.slice(0, 10) : history;
+  const chartData = aggregateChartData(filteredHistory);
 
   // Show loading state briefly on initial mount
   if (isLoading) {
@@ -59,7 +67,7 @@ export function ChartsTab() {
               No Query History Yet
             </h3>
             <p className="text-unkey-gray-300 mb-6">
-              Execute some queries to see performance charts and comparisons. Your last 10 queries will be stored and visualized here.
+              Execute some queries to see performance charts and comparisons. Up to 1000 queries are stored and can be visualized here.
             </p>
             <div className="bg-unkey-teal/10 border border-unkey-teal/30 rounded-lg p-4 text-sm text-left">
               <p className="font-semibold text-unkey-teal mb-2">What you'll see:</p>
@@ -80,10 +88,30 @@ export function ChartsTab() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-white mb-2">Performance Charts</h2>
-        <p className="text-unkey-gray-300">
-          {counters.totalQueries} total {counters.totalQueries === 1 ? 'query' : 'queries'} executed • Charts based on last {chartData.totalQueries} {chartData.totalQueries === 1 ? 'query' : 'queries'}
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">Performance Charts</h2>
+            <p className="text-unkey-gray-300">
+              {counters.totalQueries} total {counters.totalQueries === 1 ? 'query' : 'queries'} executed • Charts based on {chartRange === 'all' ? 'all' : 'last 10'} {chartData.totalQueries} {chartData.totalQueries === 1 ? 'query' : 'queries'}
+            </p>
+          </div>
+          
+          {/* Chart Range Selector */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="chartRange" className="text-sm font-medium text-unkey-gray-300 whitespace-nowrap">
+              Show:
+            </label>
+            <select
+              id="chartRange"
+              value={chartRange}
+              onChange={(e) => setChartRange(e.target.value as ChartRange)}
+              className="px-3 py-2 bg-unkey-gray-850 border border-unkey-gray-700 rounded-md text-white text-sm focus:ring-2 focus:ring-unkey-teal focus:border-unkey-teal transition-colors"
+            >
+              <option value="all">All Queries</option>
+              <option value="last10">Last 10 Queries</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -139,8 +167,8 @@ export function ChartsTab() {
             <h4 className="text-sm font-semibold text-white mb-1">About These Charts</h4>
             <p className="text-xs text-unkey-gray-300 leading-relaxed">
               <strong>Total Counters:</strong> Show cumulative queries executed across all time ({counters.totalQueries} total).
-              {' '}<strong>Charts:</strong> Display aggregated metrics from your last {chartData.totalQueries} {chartData.totalQueries === 1 ? 'query' : 'queries'} only.
-              {' '}Only the 10 most recent queries are stored in browser localStorage for chart visualization - older queries are automatically removed when new ones are added, but the total counters continue to increment.
+              {' '}<strong>Charts:</strong> Display aggregated metrics from {chartRange === 'all' ? `all ${chartData.totalQueries}` : `the last ${Math.min(10, chartData.totalQueries)}`} {chartData.totalQueries === 1 ? 'query' : 'queries'}.
+              {' '}<strong>Storage:</strong> Up to 1000 queries are stored in browser localStorage. Use the "Show" selector above to toggle between viewing all stored queries or just the last 10.
               {' '}RAG timing includes both retrieval and generation phases shown as stacked bars.
               {chartData.ollama && ' Ollama runs locally and has no API costs.'}
             </p>

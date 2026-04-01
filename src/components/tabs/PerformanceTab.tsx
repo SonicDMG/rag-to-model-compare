@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+type HistoryRange = 'last10' | 'all';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { OllamaResult } from '@/types/ollama';
 import { QueryHistoryItem } from '@/types/tabs';
@@ -34,9 +36,9 @@ interface PerformanceTabProps {
 
 /**
  * PerformanceTab - Detailed metrics and query history
- * 
+ *
  * Features:
- * - Query history selector (last 10 queries)
+ * - Query history selector with range filter (last 10 or all queries)
  * - Comparison overview cards
  * - Detailed metrics breakdowns
  * - Winner indicators
@@ -52,6 +54,7 @@ export function PerformanceTab({
   // isOllamaAvailable is available but not currently used in this component
 }: PerformanceTabProps) {
   const [queryHistory, setQueryHistory] = useState<QueryHistoryItem[]>([]);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('all');
   const [selectedHistoryId, setSelectedHistoryId] = useState<string>('current');
   const [displayedResults, setDisplayedResults] = useState({
     rag: ragResult,
@@ -157,15 +160,41 @@ export function PerformanceTab({
     }).format(date);
   };
 
+  // Filter history based on selected range
+  const filteredHistory = historyRange === 'last10' ? queryHistory.slice(0, 10) : queryHistory;
+
   return (
     <MetricsTabProvider>
       <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         {/* Query History Selector */}
         {queryHistory.length > 0 && (
           <div className="bg-unkey-gray-900 rounded-unkey-lg shadow-unkey-card border border-unkey-gray-700 p-6">
-            <label htmlFor="queryHistory" className="block text-sm font-medium text-unkey-gray-200 mb-3">
-              Query History
-            </label>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-3">
+              <label htmlFor="queryHistory" className="block text-sm font-medium text-unkey-gray-200">
+                Query History
+              </label>
+              
+              {/* History Range Selector */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="historyRange" className="text-sm font-medium text-unkey-gray-300 whitespace-nowrap">
+                  Show:
+                </label>
+                <select
+                  id="historyRange"
+                  value={historyRange}
+                  onChange={(e) => {
+                    setHistoryRange(e.target.value as HistoryRange);
+                    // Reset to current query when changing range
+                    setSelectedHistoryId('current');
+                  }}
+                  className="px-3 py-2 bg-unkey-gray-850 border border-unkey-gray-700 rounded-md text-white text-sm focus:ring-2 focus:ring-unkey-teal focus:border-unkey-teal transition-colors"
+                >
+                  <option value="all">All Queries</option>
+                  <option value="last10">Last 10 Queries</option>
+                </select>
+              </div>
+            </div>
+            
             <select
               id="queryHistory"
               value={selectedHistoryId}
@@ -173,13 +202,17 @@ export function PerformanceTab({
               className="w-full px-4 py-2 bg-unkey-gray-850 border border-unkey-gray-700 rounded-unkey-md text-white focus:ring-2 focus:ring-unkey-teal-500 focus:border-unkey-teal-500"
             >
               <option value="current">Current Query</option>
-              {queryHistory.map((item) => (
+              {filteredHistory.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.query.substring(0, 60)}
                   {item.query.length > 60 ? '...' : ''} - {formatDate(item.timestamp)}
                 </option>
               ))}
             </select>
+            
+            <p className="mt-2 text-xs text-unkey-gray-400">
+              Showing {filteredHistory.length} of {queryHistory.length} stored {queryHistory.length === 1 ? 'query' : 'queries'}
+            </p>
           </div>
         )}
 
