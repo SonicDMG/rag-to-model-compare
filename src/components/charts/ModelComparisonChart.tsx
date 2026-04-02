@@ -12,7 +12,7 @@ import {
   getMaxMetricValue,
   ModelAggregationResult,
 } from '@/lib/utils/model-aggregator';
-import { formatTime, formatTokens, formatCost } from '@/lib/utils/formatters';
+import { formatTime, formatTokens } from '@/lib/utils/formatters';
 
 /**
  * Props for ModelComparisonChart component
@@ -251,7 +251,6 @@ export function ModelComparisonChart({
   // Get sorted model names for each metric
   const modelsByTime = getSortedModelNames(aggregation, 'avgTime', 'desc');
   const modelsByTokens = getSortedModelNames(aggregation, 'avgTokens', 'desc');
-  const modelsByCost = getSortedModelNames(aggregation, 'avgCost', 'desc');
   const modelsByUsage = getSortedModelNames(aggregation, 'queryCount', 'desc');
 
   return (
@@ -284,16 +283,6 @@ export function ModelComparisonChart({
         aggregation={aggregation}
         metricKey="avgTokens"
         formatter={formatTokens}
-      />
-
-      {/* Cost Section */}
-      <MetricSection
-        title="Average Cost"
-        subtitle="Average cost per query per model (lower is better)"
-        modelNames={modelsByCost}
-        aggregation={aggregation}
-        metricKey="avgCost"
-        formatter={formatCost}
       />
 
       {/* Usage Section */}

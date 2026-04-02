@@ -6,6 +6,7 @@
 import { QueryHistoryItem } from '@/types/tabs';
 import { RAGResult, DirectResult } from '@/types/rag-comparison';
 import { OllamaResult } from '@/types/ollama';
+import { SUPPORTED_MODELS } from '@/lib/constants/models';
 
 /**
  * Aggregated metrics for a single model across all pipelines
@@ -50,10 +51,24 @@ interface ModelUsage {
 }
 
 /**
+ * Check if a model is a pricing model (OpenAI API model)
+ * Pricing models should be excluded from the Model Comparison chart
+ * as they are not local inference models
+ */
+function isPricingModel(modelName: string): boolean {
+  return modelName in SUPPORTED_MODELS;
+}
+
+/**
  * Extract model usage from RAG result
  */
 function extractRAGModelUsage(result: RAGResult): ModelUsage | null {
   if (!result || !result.model || !result.metrics) {
+    return null;
+  }
+
+  // Skip pricing models (OpenAI API models)
+  if (isPricingModel(result.model)) {
     return null;
   }
 
@@ -71,6 +86,11 @@ function extractRAGModelUsage(result: RAGResult): ModelUsage | null {
  */
 function extractDirectModelUsage(result: DirectResult): ModelUsage | null {
   if (!result || !result.model || !result.metrics) {
+    return null;
+  }
+
+  // Skip pricing models (OpenAI API models)
+  if (isPricingModel(result.model)) {
     return null;
   }
 
