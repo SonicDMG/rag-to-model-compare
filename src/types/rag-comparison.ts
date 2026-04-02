@@ -206,6 +206,10 @@ export interface RAGResult {
   answer: string;
   /** Source chunks used to generate the answer */
   sources: Chunk[];
+  /** Inference model used for generation */
+  model: string;
+  /** Embedding model used for retrieval (optional) */
+  embeddingModel?: string;
   /** Performance and cost metrics */
   metrics: {
     /** Time taken for retrieval in milliseconds */
@@ -231,6 +235,8 @@ export interface RAGResult {
 export interface DirectResult {
   /** Generated answer from the model */
   answer: string;
+  /** Inference model used for generation */
+  model: string;
   /** Performance and cost metrics */
   metrics: {
     /** Time taken for generation in milliseconds */

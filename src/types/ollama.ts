@@ -15,6 +15,8 @@ export interface OllamaConfig {
 
 export interface OllamaResult {
   answer: string;
+  /** Inference model used for generation */
+  model: string;
   metrics: {
     generationTime: number;
     tokens: number;

@@ -11,6 +11,7 @@ import { aggregateChartData } from '@/lib/utils/chart-aggregator';
 import { TimingComparisonChart } from '@/components/charts/TimingComparisonChart';
 import { TokenComparisonChart } from '@/components/charts/TokenComparisonChart';
 import { CostComparisonChart } from '@/components/charts/CostComparisonChart';
+import { ModelComparisonChart } from '@/components/charts/ModelComparisonChart';
 
 type ChartRange = 'last10' | 'all';
 
@@ -156,6 +157,11 @@ export function ChartsTab() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <TokenComparisonChart data={chartData} />
           <CostComparisonChart data={chartData} />
+        </div>
+
+        {/* Model Comparison Chart - Full Width */}
+        <div className="w-full">
+          <ModelComparisonChart queryHistory={filteredHistory} minQueries={1} />
         </div>
       </div>
 

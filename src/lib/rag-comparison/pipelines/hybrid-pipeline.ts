@@ -817,6 +817,7 @@ export async function query(
 
     return {
       answer,
+      model: config.model,
       metrics: {
         generationTime: metrics.generationTime,
         tokens: metrics.totalTokens,

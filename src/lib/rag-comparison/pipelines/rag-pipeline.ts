@@ -926,6 +926,8 @@ export async function query(
     const result = {
       answer,
       sources: sourceChunks,
+      model: config.model,
+      embeddingModel: undefined, // Embedding model not currently tracked in RAGConfig
       metrics: {
         retrievalTime: metrics.retrievalTime,
         generationTime: metrics.generationTime,
