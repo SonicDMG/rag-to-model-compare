@@ -106,7 +106,7 @@ export function PerformanceTab({
   const getComparisonMetrics = () => {
     if (!displayedResults.rag || !displayedResults.direct) return null;
 
-    const ragTime = displayedResults.rag.metrics.retrievalTime + displayedResults.rag.metrics.generationTime;
+    const ragTime = displayedResults.rag.metrics.breakdown?.timing.totalTime ?? displayedResults.rag.metrics.retrievalTime;
     const directTime = displayedResults.direct.metrics.generationTime;
     const ollamaTime = displayedResults.ollama?.metrics.generationTime || 0;
 

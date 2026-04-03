@@ -565,7 +565,9 @@ export function compare(
   }
   
   // Calculate total times
-  const ragTotalTime = ragResult.metrics.retrievalTime + ragResult.metrics.generationTime;
+  // For RAG: use the actual total time from the breakdown if available, otherwise fall back to retrievalTime
+  // The retrievalTime in RAG already represents the total end-to-end time (retrieval + generation)
+  const ragTotalTime = ragResult.metrics.breakdown?.timing.totalTime ?? ragResult.metrics.retrievalTime;
   const directTotalTime = directResult.metrics.generationTime;
   
   // Perform individual comparisons
@@ -671,25 +673,31 @@ export function compare(
  *
  * @param retrievalTime - Time taken for retrieval in milliseconds (optional, RAG only)
  * @param generationTime - Time taken for generation in milliseconds
+ * @param actualTotalTime - Actual total time in milliseconds (optional, for RAG where total is measured directly)
  * @returns Timing breakdown with percentages
  *
  * @example
  * ```typescript
- * // For RAG
- * const timing = calculateTimingBreakdown(500, 1500);
- * console.log(timing.retrievalPercent); // 25
- * console.log(timing.generationPercent); // 75
+ * // For RAG (with actual total time from pipeline)
+ * const timing = calculateTimingBreakdown(5040, 3020, 8070);
+ * console.log(timing.totalTime); // 8070 (actual measured time)
+ * console.log(timing.retrievalPercent); // 62.5
+ * console.log(timing.generationPercent); // 37.5
  *
- * // For Direct
+ * // For Direct (generation time only)
  * const timing = calculateTimingBreakdown(undefined, 1500);
  * console.log(timing.generationPercent); // 100
+ * console.log(timing.totalTime); // 1500
  * ```
  */
 export function calculateTimingBreakdown(
   retrievalTime: number | undefined,
-  generationTime: number
+  generationTime: number,
+  actualTotalTime?: number
 ): import('@/types/rag-comparison').TimingBreakdown {
-  const totalTime = (retrievalTime || 0) + generationTime;
+  // For RAG: use actualTotalTime if provided (the measured end-to-end time)
+  // For Direct: totalTime equals generationTime (no retrieval phase)
+  const totalTime = actualTotalTime ?? (retrievalTime || 0) + generationTime;
   
   // Avoid division by zero
   if (totalTime === 0) {

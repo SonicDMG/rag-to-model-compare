@@ -201,7 +201,7 @@ export function RagSection({
                   ${ragResult.metrics.cost.toFixed(4)}
                 </p>
                 <p className="text-xs text-unkey-gray-500 mt-1">
-                  Total: {(ragResult.metrics.retrievalTime + ragResult.metrics.generationTime).toFixed(0)}ms
+                  Total: {(ragResult.metrics.breakdown?.timing.totalTime ?? ragResult.metrics.retrievalTime).toFixed(0)}ms
                 </p>
               </div>
             </div>

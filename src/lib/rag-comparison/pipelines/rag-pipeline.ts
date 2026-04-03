@@ -889,7 +889,9 @@ export async function query(
     );
     console.log('Metrics calculated:', JSON.stringify(metrics, null, 2));
 
-    const timingBreakdown = calculateTimingBreakdown(retrievalTime, generationTime);
+    // Pass retrievalTime as actualTotalTime since it represents the complete RAG query time
+    // The generationTime is just an estimate extracted from the total, not additive
+    const timingBreakdown = calculateTimingBreakdown(retrievalTime, generationTime, retrievalTime);
     const tokenBreakdown = calculateTokenBreakdown(
       systemPromptTokens,
       queryTokens,

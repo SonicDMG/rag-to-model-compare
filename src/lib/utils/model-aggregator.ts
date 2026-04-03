@@ -72,9 +72,13 @@ function extractRAGModelUsage(result: RAGResult): ModelUsage | null {
     return null;
   }
 
+  // Use actual measured total time from breakdown if available, otherwise fall back to retrievalTime
+  // This matches the logic in metrics-calculator.ts and chart-aggregator.ts for consistency
+  const totalTime = result.metrics.breakdown?.timing.totalTime ?? result.metrics.retrievalTime;
+
   return {
     model: result.model,
-    time: result.metrics.retrievalTime + result.metrics.generationTime,
+    time: totalTime,
     tokens: result.metrics.tokens,
     cost: result.metrics.cost,
     contextUsage: result.metrics.contextWindowUsage ?? 0,

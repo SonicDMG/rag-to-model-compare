@@ -19,19 +19,19 @@ export interface TimingComparisonChartProps {
  */
 const COLORS = {
   rag: '#3B82F6',        // Blue
-  ragRetrieval: '#60A5FA', // Light blue for retrieval portion
   direct: '#10B981',     // Green
   hybrid: '#8B5CF6',     // Purple
   ollama: '#F59E0B',     // Orange
 };
 
 /**
- * Timing comparison chart with RAG breakdown
- * 
+ * Timing comparison chart showing total response times
+ *
  * Features:
  * - Shows average response times
- * - RAG uses stacked bars (retrieval + generation)
- * - Direct/Hybrid/Ollama show single bars
+ * - All approaches use single bars for total time
+ * - Direct/Hybrid/Ollama show generation time
+ * - RAG shows actual measured total time (not additive)
  * - Responsive design
  */
 export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
@@ -39,20 +39,14 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
   const timingData: Array<{
     label: string;
     totalTime: number;
-    retrievalTime?: number;
-    generationTime?: number;
     color: string;
-    retrievalColor?: string;
   }> = [];
 
   if (data.rag) {
     timingData.push({
       label: 'RAG',
       totalTime: data.rag.avgTime,
-      retrievalTime: data.rag.avgRetrievalTime,
-      generationTime: data.rag.avgGenerationTime,
       color: COLORS.rag,
-      retrievalColor: COLORS.ragRetrieval,
     });
   }
 
@@ -102,14 +96,6 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
           const percentage = (item.totalTime / maxTime) * 100;
           const displayValue = formatTime(item.totalTime);
 
-          // For RAG, calculate stacked bar percentages
-          const retrievalPercentage = item.retrievalTime
-            ? (item.retrievalTime / maxTime) * 100
-            : 0;
-          const generationPercentage = item.generationTime
-            ? (item.generationTime / maxTime) * 100
-            : 0;
-
           return (
             <div key={index} className="flex items-center gap-4">
               {/* Label */}
@@ -121,57 +107,15 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
               <div className="flex-1 relative overflow-visible">
                 {/* Background track */}
                 <div className="w-full bg-unkey-gray-800 rounded-full overflow-hidden" style={{ height: `${barHeight}px` }}>
-                  {/* Stacked bars for RAG */}
-                  {item.retrievalTime && item.generationTime ? (
-                    <div className="h-full flex">
-                      {/* Retrieval portion */}
-                      <div
-                        className="h-full flex items-center justify-center transition-all duration-500 ease-out"
-                        style={{
-                          width: `${retrievalPercentage}%`,
-                          backgroundColor: item.retrievalColor,
-                          minWidth: retrievalPercentage > 0 ? '30px' : '0',
-                        }}
-                      >
-                        {retrievalPercentage > 15 && (
-                          <span className="text-xs font-semibold text-white whitespace-nowrap">
-                            {formatTime(item.retrievalTime)}
-                          </span>
-                        )}
-                      </div>
-                      {/* Generation portion */}
-                      <div
-                        className="h-full flex items-center justify-center transition-all duration-500 ease-out"
-                        style={{
-                          width: `${generationPercentage}%`,
-                          backgroundColor: item.color,
-                          minWidth: generationPercentage > 0 ? '30px' : '0',
-                        }}
-                      >
-                        {generationPercentage > 15 && (
-                          <span className="text-xs font-semibold text-white whitespace-nowrap">
-                            {formatTime(item.generationTime)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    /* Single bar for Direct/Ollama */
-                    <div
-                      className="h-full rounded-full transition-all duration-500 ease-out flex items-center justify-end pr-3"
-                      style={{
-                        width: `${percentage}%`,
-                        backgroundColor: item.color,
-                        minWidth: percentage > 0 ? '40px' : '0',
-                      }}
-                    >
-                      {percentage > 20 && (
-                        <span className="text-xs font-semibold text-white whitespace-nowrap">
-                          {displayValue}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {/* Single bar for all approaches */}
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${percentage}%`,
+                      backgroundColor: item.color,
+                      minWidth: percentage > 0 ? '40px' : '0',
+                    }}
+                  />
                 </div>
 
                 {/* Total time label - positioned to avoid overflow */}
@@ -206,16 +150,10 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
       <div className="mt-6 pt-4 border-t border-unkey-gray-700">
         <div className="flex flex-wrap gap-4 justify-center text-xs">
           {data.rag && (
-            <>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.ragRetrieval }} />
-                <span className="text-unkey-gray-300">RAG Retrieval</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.rag }} />
-                <span className="text-unkey-gray-300">RAG Generation</span>
-              </div>
-            </>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.rag }} />
+              <span className="text-unkey-gray-300">RAG</span>
+            </div>
           )}
           {data.direct && (
             <div className="flex items-center gap-2">
@@ -231,15 +169,6 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
           )}
         </div>
       </div>
-
-      {/* Additional stats */}
-      {data.rag && (
-        <div className="mt-4 pt-4 border-t border-unkey-gray-700">
-          <div className="text-xs text-unkey-gray-300 text-center">
-            RAG Breakdown: {data.rag.retrievalPercent.toFixed(1)}% retrieval, {data.rag.generationPercent.toFixed(1)}% generation
-          </div>
-        </div>
-      )}
     </div>
   );
 }

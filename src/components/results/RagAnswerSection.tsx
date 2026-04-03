@@ -83,7 +83,7 @@ export function RagAnswerSection({
             {/* Quick Metrics */}
             <div className="flex gap-4 text-sm text-unkey-gray-400">
               <span>
-                ⚡ {((ragResult.metrics.retrievalTime + ragResult.metrics.generationTime) / 1000).toFixed(2)}s
+                ⚡ {((ragResult.metrics.breakdown?.timing.totalTime ?? ragResult.metrics.retrievalTime) / 1000).toFixed(2)}s
               </span>
               <span>
                 🎯 {ragResult.metrics.tokens.toLocaleString()} tokens

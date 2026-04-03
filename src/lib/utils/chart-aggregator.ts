@@ -73,7 +73,9 @@ function aggregateRAGMetrics(items: QueryHistoryItem[]): RAGMetrics | null {
 
   if (ragResults.length === 0) return null;
 
-  const times = ragResults.map(r => r.metrics.retrievalTime + r.metrics.generationTime);
+  // Use actual measured total time from breakdown if available, otherwise fall back to retrievalTime
+  // This matches the logic in metrics-calculator.ts for consistency
+  const times = ragResults.map(r => r.metrics.breakdown?.timing.totalTime ?? r.metrics.retrievalTime);
   const retrievalTimes = ragResults.map(r => r.metrics.retrievalTime);
   const generationTimes = ragResults.map(r => r.metrics.generationTime);
   const tokens = ragResults.map(r => r.metrics.tokens);
