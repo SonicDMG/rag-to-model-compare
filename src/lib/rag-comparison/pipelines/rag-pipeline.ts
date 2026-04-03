@@ -158,8 +158,15 @@ async function updateFilterWithRetry(
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Fetch current filter to preserve existing queryData
+      const currentFilter = await client.knowledgeFilters.get(filterId);
+      
       await client.knowledgeFilters.update(filterId, {
         queryData: {
+          limit: currentFilter.queryData?.limit ?? 5,
+          scoreThreshold: currentFilter.queryData?.scoreThreshold ?? 0.5,
+          color: currentFilter.queryData?.color,
+          icon: currentFilter.queryData?.icon,
           filters: {
             data_sources: dataSources
           }

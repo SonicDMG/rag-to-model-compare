@@ -83,11 +83,12 @@ export async function PUT(request: NextRequest) {
     }
     
     // Update queryData if any query-related fields are provided
+    // Preserve exact values without applying defaults
     if (limit !== undefined || scoreThreshold !== undefined || color !== undefined || icon !== undefined || dataSources !== undefined) {
       updatePayload.queryData = {
-        limit: limit ?? currentFilter.queryData?.limit ?? 5,
-        scoreThreshold: scoreThreshold ?? currentFilter.queryData?.scoreThreshold ?? 0.5,
-        color: color ?? currentFilter.queryData?.color ?? 'teal',
+        limit: limit ?? currentFilter.queryData?.limit,
+        scoreThreshold: scoreThreshold ?? currentFilter.queryData?.scoreThreshold,
+        color: color ?? currentFilter.queryData?.color,
         icon: icon ?? currentFilter.queryData?.icon,
         filters: {
           data_sources: dataSources ?? currentFilter.queryData?.filters?.data_sources ?? [],
@@ -110,6 +111,7 @@ export async function PUT(request: NextRequest) {
     }
     
     // Map to our FilterConfig type
+    // Preserve exact values from OpenRAG, with defaults for required fields
     const filter: FilterConfig = {
       id: updatedFilter.id,
       name: updatedFilter.name,
@@ -117,7 +119,7 @@ export async function PUT(request: NextRequest) {
       queryData: {
         limit: updatedFilter.queryData?.limit ?? 5,
         scoreThreshold: updatedFilter.queryData?.scoreThreshold ?? 0.5,
-        color: updatedFilter.queryData?.color ?? 'teal',
+        color: updatedFilter.queryData?.color,
         icon: updatedFilter.queryData?.icon,
         filters: {
           data_sources: updatedFilter.queryData?.filters?.data_sources || [],

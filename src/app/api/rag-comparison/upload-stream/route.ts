@@ -119,9 +119,13 @@ async function scheduleBatchFilterUpdate(filterId: string, filename: string): Pr
         console.log(`📎 [Stream] Adding: [${filenamesToUpdate.join(', ')}]`);
         console.log(`📎 [Stream] Final data_sources: [${allDataSources.join(', ')}]`);
         
-        // Single atomic update with all filenames
+        // Single atomic update with all filenames - preserve existing queryData fields
         await client.knowledgeFilters.update(filterId, {
           queryData: {
+            limit: filterResponse.queryData?.limit ?? 5,
+            scoreThreshold: filterResponse.queryData?.scoreThreshold ?? 0.5,
+            color: filterResponse.queryData?.color,
+            icon: filterResponse.queryData?.icon,
             filters: {
               data_sources: allDataSources
             }

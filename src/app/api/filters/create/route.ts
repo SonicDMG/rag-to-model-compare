@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       queryData: {
         limit,
         scoreThreshold,
-        color: color || 'teal', // Default to teal if not provided
+        color: color || 'zinc', // Default to zinc if not provided
         icon: icon, // Optional icon
         filters: {
           data_sources: [], // Start empty
@@ -89,15 +89,16 @@ export async function POST(request: NextRequest) {
     }
     
     // Map to our FilterConfig type
+    // Preserve exact values from OpenRAG, with defaults for required fields
     const filter: FilterConfig = {
       id: createdFilter.id,
       name: createdFilter.name,
       description: createdFilter.description,
       queryData: {
-        limit: createdFilter.queryData?.limit ?? limit,
-        scoreThreshold: createdFilter.queryData?.scoreThreshold ?? scoreThreshold,
-        color: createdFilter.queryData?.color ?? color ?? 'teal',
-        icon: createdFilter.queryData?.icon ?? icon,
+        limit: createdFilter.queryData?.limit ?? 5,
+        scoreThreshold: createdFilter.queryData?.scoreThreshold ?? 0.5,
+        color: createdFilter.queryData?.color,
+        icon: createdFilter.queryData?.icon,
         filters: {
           data_sources: createdFilter.queryData?.filters?.data_sources || [],
         },
