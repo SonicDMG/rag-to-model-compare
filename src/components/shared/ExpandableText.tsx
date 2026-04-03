@@ -41,7 +41,7 @@ export function ExpandableText({
     : text;
 
   return (
-    <div className={`flex flex-col flex-shrink-0 ${className}`}>
+    <div className={`flex flex-col flex-shrink-0 ${className}`} style={{ minHeight: '220px' }}>
       <div
         ref={contentRef}
         className="text-unkey-gray-300 whitespace-pre-wrap leading-relaxed"
