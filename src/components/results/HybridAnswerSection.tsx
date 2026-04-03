@@ -11,6 +11,7 @@ interface HybridAnswerSectionProps {
   isQuerying: boolean;
   error: string | null;
   processingEvents?: ProcessingEvent[];
+  selectedModel?: string;
 }
 
 /**
@@ -21,6 +22,7 @@ export function HybridAnswerSection({
   isQuerying,
   error,
   processingEvents,
+  selectedModel,
 }: HybridAnswerSectionProps) {
   return (
     <div className="space-y-6">
@@ -101,7 +103,7 @@ export function HybridAnswerSection({
             <div className="flex items-center gap-2 text-sm text-unkey-gray-400">
               <span>Model:</span>
               <span className="text-white font-semibold">
-                {directResult.model}
+                {selectedModel || 'Unknown'}
               </span>
               <span className="ml-4">Context Window Usage:</span>
               <span className="text-white font-semibold">

@@ -213,6 +213,7 @@ export function QueryTab({
             isQuerying={isRagQuerying || false}
             error={ragError || null}
             processingEvents={ragProcessingEvents}
+            selectedModel={ollamaModel}
           />
           
           {/* Hybrid Answer Section */}
@@ -221,6 +222,7 @@ export function QueryTab({
             isQuerying={isDirectQuerying || false}
             error={directError || null}
             processingEvents={directProcessingEvents}
+            selectedModel={ollamaModel}
           />
           
           {/* Direct (Ollama) Answer Section */}

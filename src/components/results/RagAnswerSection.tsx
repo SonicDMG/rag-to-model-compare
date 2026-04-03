@@ -11,6 +11,7 @@ interface RagAnswerSectionProps {
   isQuerying: boolean;
   error: string | null;
   processingEvents?: ProcessingEvent[];
+  selectedModel?: string;
 }
 
 /**
@@ -21,6 +22,7 @@ export function RagAnswerSection({
   isQuerying,
   error,
   processingEvents,
+  selectedModel,
 }: RagAnswerSectionProps) {
   return (
     <div className="space-y-6">
@@ -123,7 +125,7 @@ export function RagAnswerSection({
             <div className="flex items-center gap-2 text-sm text-unkey-gray-400">
               <span>Model:</span>
               <span className="text-white font-semibold">
-                {ragResult.model}
+                {selectedModel || 'Unknown'}
               </span>
               {ragResult.metrics.contextWindowUsage !== undefined && (
                 <>
