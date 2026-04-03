@@ -69,36 +69,43 @@ export function MetricsBreakdownPanel({
       {isExpanded && (
         <div id="metrics-breakdown-content" className="border-t border-unkey-gray-700">
           {/* Metadata Notice */}
-          {breakdown.metadata.notes && breakdown.metadata.notes.length > 0 && (
-            <div className="px-6 py-3 bg-blue/10 border-b border-blue/20">
-              <div className="flex items-start gap-2">
-                <svg
-                  className="w-5 h-5 text-blue flex-shrink-0 mt-0.5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-white mb-1">
-                    Important Notes
-                  </h4>
-                  <ul className="text-xs text-unkey-gray-300 space-y-1">
-                    {breakdown.metadata.notes.map((note, index) => (
-                      <li key={index} className="flex items-start gap-1">
-                        <span>•</span>
-                        <span>{note}</span>
-                      </li>
-                    ))}
-                  </ul>
+          {(() => {
+            // Filter out the recalculation note
+            const filteredNotes = breakdown.metadata.notes?.filter(
+              note => !note.includes('Metrics recalculated for model change')
+            ) || [];
+            
+            return filteredNotes.length > 0 && (
+              <div className="px-6 py-3 bg-blue/10 border-b border-blue/20">
+                <div className="flex items-start gap-2">
+                  <svg
+                    className="w-5 h-5 text-blue flex-shrink-0 mt-0.5"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-white mb-1">
+                      Important Notes
+                    </h4>
+                    <ul className="text-xs text-unkey-gray-300 space-y-1">
+                      {filteredNotes.map((note, index) => (
+                        <li key={index} className="flex items-start gap-1">
+                          <span>•</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Tab Navigation */}
           <div className="px-6 pt-4">
@@ -167,18 +174,6 @@ export function MetricsBreakdownPanel({
                 />
               </div>
             )}
-          </div>
-
-          {/* Footer with Metadata */}
-          <div className="px-6 py-3 bg-unkey-gray-850 border-t border-unkey-gray-700">
-            <div className="flex items-center justify-between text-xs text-unkey-gray-400">
-              <span>
-                Model: <span className="font-semibold text-unkey-gray-200">{breakdown.metadata.model}</span>
-              </span>
-              <span>
-                Calculated: {new Date(breakdown.metadata.timestamp).toLocaleString()}
-              </span>
-            </div>
           </div>
         </div>
       )}

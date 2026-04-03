@@ -76,6 +76,7 @@ export function ComparisonResults({
             documentTokens={documentTokens}
             processedContent={processedContent}
             processingEvents={ragProcessingEvents.length > 0 ? ragProcessingEvents : ragResult?.processingEvents}
+            inferenceModel={ollamaModel}
           />
           
           {/* Hybrid Section - Shows Direct pipeline results (type: 'direct' from backend) */}
@@ -86,6 +87,7 @@ export function ComparisonResults({
             documentTokens={documentTokens}
             processedContent={processedContent}
             processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
+            inferenceModel={ollamaModel}
           />
           
           {/* Direct Section (Ollama) - Shows Ollama pipeline results (type: 'ollama' from backend) */}

@@ -118,17 +118,23 @@ export function RagAnswerSection({
             </div>
           )}
 
-          {/* Context Window Usage */}
-          {ragResult.metrics.contextWindowUsage !== undefined && (
-            <div className="mt-4 pt-4 border-t border-unkey-gray-700">
-              <div className="flex items-center gap-2 text-sm text-unkey-gray-400">
-                <span>Context Window Usage:</span>
-                <span className="text-white font-semibold">
-                  {ragResult.metrics.contextWindowUsage.toFixed(1)}%
-                </span>
-              </div>
+          {/* Model Info */}
+          <div className="mt-4 pt-4 border-t border-unkey-gray-700">
+            <div className="flex items-center gap-2 text-sm text-unkey-gray-400">
+              <span>Model:</span>
+              <span className="text-white font-semibold">
+                {ragResult.model}
+              </span>
+              {ragResult.metrics.contextWindowUsage !== undefined && (
+                <>
+                  <span className="ml-4">Context Window Usage:</span>
+                  <span className="text-white font-semibold">
+                    {ragResult.metrics.contextWindowUsage.toFixed(1)}%
+                  </span>
+                </>
+              )}
             </div>
-          )}
+          </div>
 
         </div>
       )}

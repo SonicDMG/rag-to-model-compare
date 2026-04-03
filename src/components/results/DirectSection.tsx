@@ -233,12 +233,12 @@ export function DirectSection({
             <h3 className="text-xl font-bold text-white mb-4">Performance Metrics</h3>
             
             {/* Model Information */}
-            {ollamaResult.metrics.breakdown?.metadata?.model && (
+            {selectedModel && (
               <div className="mb-6 pb-6 border-b border-unkey-gray-700">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Model Configuration</h4>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {ollamaResult.metrics.breakdown.metadata.model}
+                    {selectedModel}
                   </span>
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400">
                     Local
@@ -285,26 +285,6 @@ export function DirectSection({
                   No API costs - runs entirely on your machine
                 </p>
               </div>
-
-              {/* Context Window Usage */}
-              {ollamaResult.metrics.contextWindowUsage !== undefined && (
-                <div className="bg-purple-500/10 rounded-unkey-lg p-4 border border-purple-500/20 md:col-span-2">
-                  <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Context Window Usage</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <div className="w-full bg-unkey-gray-800 rounded-full h-2">
-                        <div
-                          className="bg-purple-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.min(ollamaResult.metrics.contextWindowUsage * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold text-purple-400">
-                      {(ollamaResult.metrics.contextWindowUsage * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 

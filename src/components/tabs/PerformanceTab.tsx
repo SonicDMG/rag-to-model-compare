@@ -330,6 +330,7 @@ export function PerformanceTab({
               processingEvents={displayedResults.rag?.processingEvents}
               hideAnswer={true}
               hideTimeline={true}
+              inferenceModel={ollamaModel}
             />
             
             <HybridSection
@@ -341,6 +342,7 @@ export function PerformanceTab({
               processingEvents={displayedResults.direct?.processingEvents}
               hideAnswer={true}
               hideTimeline={true}
+              inferenceModel={ollamaModel}
             />
             
             <DirectSection

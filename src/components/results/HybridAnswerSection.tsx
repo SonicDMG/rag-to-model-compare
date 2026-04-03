@@ -96,10 +96,14 @@ export function HybridAnswerSection({
           
           <ExpandableText text={directResult.answer} characterLimit={500} />
 
-          {/* Context Window Usage */}
+          {/* Model Info */}
           <div className="mt-4 pt-4 border-t border-unkey-gray-700">
             <div className="flex items-center gap-2 text-sm text-unkey-gray-400">
-              <span>Context Window Usage:</span>
+              <span>Model:</span>
+              <span className="text-white font-semibold">
+                {directResult.model}
+              </span>
+              <span className="ml-4">Context Window Usage:</span>
               <span className="text-white font-semibold">
                 {directResult.metrics.contextWindowUsage.toFixed(1)}%
               </span>

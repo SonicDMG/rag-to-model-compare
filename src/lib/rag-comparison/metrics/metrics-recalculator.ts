@@ -57,11 +57,10 @@ export function recalculateRagMetrics(
       model: newModel,
       timestamp: new Date(),
       notes: [
-        // Filter out any existing recalculation notes to prevent duplicates
+        // Filter out any existing recalculation notes
         ...(breakdown.metadata.notes || []).filter(
           note => !note.includes('Metrics recalculated for model change')
-        ),
-        'Metrics recalculated for model change (no re-query performed)'
+        )
       ]
     }
   };
@@ -122,11 +121,10 @@ export function recalculateDirectMetrics(
       model: newModel,
       timestamp: new Date(),
       notes: [
-        // Filter out any existing recalculation notes to prevent duplicates
+        // Filter out any existing recalculation notes
         ...(breakdown.metadata.notes || []).filter(
           note => !note.includes('Metrics recalculated for model change')
-        ),
-        'Metrics recalculated for model change (no re-query performed)'
+        )
       ]
     }
   };

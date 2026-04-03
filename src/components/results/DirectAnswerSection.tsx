@@ -105,10 +105,6 @@ export function DirectAnswerSection({
               <span className="text-white font-semibold">
                 {selectedModel || 'Unknown'}
               </span>
-              <span className="ml-4">Context Window Usage:</span>
-              <span className="text-white font-semibold">
-                {ollamaResult.metrics.contextWindowUsage?.toFixed(1) || 'N/A'}%
-              </span>
             </div>
           </div>
 

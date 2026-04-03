@@ -5,7 +5,6 @@ import { RAGResult } from '@/types/rag-comparison';
 import { ProcessingEvent, PipelineType } from '@/types/processing-events';
 import { ExpandableText } from '../shared/ExpandableText';
 import { MetricsBreakdownPanel } from './MetricsBreakdownPanel';
-import { ModelInfoBadge } from '../shared/ModelInfoBadge';
 import { ProcessingTimeline } from '../processing/ProcessingTimeline';
 
 interface RagSectionProps {
@@ -17,6 +16,7 @@ interface RagSectionProps {
   processedContent?: string;
   hideAnswer?: boolean;
   hideTimeline?: boolean;
+  inferenceModel?: string;
 }
 
 export function RagSection({
@@ -27,7 +27,8 @@ export function RagSection({
   processingEvents,
   processedContent,
   hideAnswer = false,
-  hideTimeline = false
+  hideTimeline = false,
+  inferenceModel
 }: RagSectionProps) {
   const [showProcessedText, setShowProcessedText] = useState(false);
 
@@ -161,13 +162,17 @@ export function RagSection({
             <h3 className="text-xl font-bold text-white mb-4">Performance Metrics</h3>
             
             {/* Model Information */}
-            {ragResult.metrics.breakdown?.metadata.model && (
+            {inferenceModel && (
               <div className="mb-6 pb-6 border-b border-unkey-gray-700">
                 <h4 className="text-sm font-medium text-unkey-gray-400 mb-2">Model Configuration</h4>
-                <ModelInfoBadge
-                  modelId={ragResult.metrics.breakdown.metadata.model}
-                  variant="success"
-                />
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-success/20 text-success border border-success/30">
+                    {inferenceModel}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
+                    Local
+                  </span>
+                </div>
               </div>
             )}
             

@@ -163,10 +163,10 @@ async function updateFilterWithRetry(
       
       await client.knowledgeFilters.update(filterId, {
         queryData: {
-          limit: currentFilter.queryData?.limit ?? 5,
-          scoreThreshold: currentFilter.queryData?.scoreThreshold ?? 0.5,
-          color: currentFilter.queryData?.color,
-          icon: currentFilter.queryData?.icon,
+          limit: currentFilter?.queryData?.limit ?? 5,
+          scoreThreshold: currentFilter?.queryData?.scoreThreshold ?? 0.5,
+          color: currentFilter?.queryData?.color,
+          icon: currentFilter?.queryData?.icon,
           filters: {
             data_sources: dataSources
           }

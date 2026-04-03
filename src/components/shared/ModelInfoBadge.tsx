@@ -39,7 +39,7 @@ export function ModelInfoBadge({ modelId, variant = 'primary', className = '' }:
           Provider: {providerName}
         </Badge>
         <Badge variant={variant} size="sm">
-          Model: {modelConfig.name}
+          Model: {modelId}
         </Badge>
       </div>
 
