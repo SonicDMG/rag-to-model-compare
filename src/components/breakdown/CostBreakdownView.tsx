@@ -1,6 +1,6 @@
 import { CostBreakdown } from '@/types/rag-comparison';
 import { formatCost } from '@/lib/utils/formatters';
-import { getPricingMetadata, getEffectivePricing, LONG_CONTEXT_THRESHOLD } from '@/lib/constants/models';
+import { getPricingMetadata, getEffectivePricing, getContextWindowSize, LONG_CONTEXT_THRESHOLD } from '@/lib/constants/models';
 
 interface CostBreakdownViewProps {
   cost: CostBreakdown;
@@ -37,6 +37,33 @@ export function CostBreakdownView({ cost, tokens, modelId }: CostBreakdownViewPr
 
   return (
     <div className="space-y-4">
+      {/* Pricing Model Note */}
+      {pricingMetadata && modelId && (
+        <div className="bg-blue/10 rounded-unkey-md p-3 border border-blue/30">
+          <div className="flex items-start gap-2">
+            <svg className="w-4 h-4 text-blue flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <p className="text-xs text-blue-200">
+              <strong>Pricing Model:</strong> Costs calculated using{' '}
+              <span className="font-semibold text-white">
+                {modelId} ({getContextWindowSize(modelId).toLocaleString()} token context)
+              </span>
+              {effectivePricing && (
+                <span>
+                  {' '}at{' '}
+                  <span className={isLongContext ? 'text-orange-300 font-semibold' : 'text-unkey-teal-300 font-semibold'}>
+                    {isLongContext ? 'long context' : 'short context'}
+                  </span>
+                  {' '}rates
+                  {' '}(${effectivePricing.input.toFixed(2)}/1M input, ${effectivePricing.output.toFixed(2)}/1M output)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Total Cost */}
       <div className="bg-unkey-gray-850 rounded-unkey-lg p-4 border border-unkey-gray-700 shadow-unkey-card">
         <div className="flex items-center justify-between mb-2">
