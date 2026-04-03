@@ -86,9 +86,9 @@ function extractRAGModelUsage(result: RAGResult): ModelUsage | null {
 }
 
 /**
- * Extract model usage from Direct result
+ * Extract model usage from Hybrid result
  */
-function extractDirectModelUsage(result: DirectResult): ModelUsage | null {
+function extractHybridModelUsage(result: DirectResult): ModelUsage | null {
   if (!result || !result.model || !result.metrics) {
     return null;
   }
@@ -108,9 +108,9 @@ function extractDirectModelUsage(result: DirectResult): ModelUsage | null {
 }
 
 /**
- * Extract model usage from Ollama result
+ * Extract model usage from Direct result (via Ollama)
  */
-function extractOllamaModelUsage(result: OllamaResult): ModelUsage | null {
+function extractDirectModelUsage(result: OllamaResult): ModelUsage | null {
   if (!result || !result.model || !result.metrics) {
     return null;
   }
@@ -126,9 +126,9 @@ function extractOllamaModelUsage(result: OllamaResult): ModelUsage | null {
 
 /**
  * Aggregate query results by inference model
- * 
+ *
  * Groups all query results by the model used, calculating aggregate metrics
- * for each model across all pipelines (RAG, Direct, Hybrid, Ollama).
+ * for each model across all pipelines (RAG, Hybrid, Direct).
  * 
  * If the same model is used in multiple pipelines for a single query,
  * each usage is counted separately in the aggregation.
@@ -165,23 +165,23 @@ export function aggregateByModel(history: QueryHistoryItem[]): ModelAggregationR
       modelUsages[ragUsage.model].push(ragUsage);
     }
 
-    // Extract Direct model usage
-    const directUsage = extractDirectModelUsage(item.directResult as DirectResult);
-    if (directUsage) {
-      if (!modelUsages[directUsage.model]) {
-        modelUsages[directUsage.model] = [];
+    // Extract Hybrid model usage
+    const hybridUsage = extractHybridModelUsage(item.hybridResult as DirectResult);
+    if (hybridUsage) {
+      if (!modelUsages[hybridUsage.model]) {
+        modelUsages[hybridUsage.model] = [];
       }
-      modelUsages[directUsage.model].push(directUsage);
+      modelUsages[hybridUsage.model].push(hybridUsage);
     }
 
-    // Extract Ollama model usage (if present)
-    if (item.ollamaResult) {
-      const ollamaUsage = extractOllamaModelUsage(item.ollamaResult as OllamaResult);
-      if (ollamaUsage) {
-        if (!modelUsages[ollamaUsage.model]) {
-          modelUsages[ollamaUsage.model] = [];
+    // Extract Direct model usage (via Ollama, if present)
+    if (item.directResult) {
+      const directUsage = extractDirectModelUsage(item.directResult as OllamaResult);
+      if (directUsage) {
+        if (!modelUsages[directUsage.model]) {
+          modelUsages[directUsage.model] = [];
         }
-        modelUsages[ollamaUsage.model].push(ollamaUsage);
+        modelUsages[directUsage.model].push(directUsage);
       }
     }
   }

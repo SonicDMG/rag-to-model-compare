@@ -49,10 +49,10 @@ export interface QueryHistoryItem {
   timestamp: Date;
   /** RAG pipeline result */
   ragResult: any; // Using any to avoid circular dependencies
-  /** Direct pipeline result */
-  directResult: any;
-  /** Ollama pipeline result (optional) */
-  ollamaResult?: any;
+  /** Hybrid pipeline result (uses direct context with RAG data when needed) */
+  hybridResult: any;
+  /** Direct pipeline result (via Ollama) */
+  directResult?: any;
 }
 
 /**

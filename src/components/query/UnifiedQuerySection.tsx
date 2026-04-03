@@ -21,22 +21,22 @@ interface UnifiedQuerySectionProps {
   ragResult?: RAGResult | null;
   isRagQuerying?: boolean;
   ragError?: string | null;
-  directResult?: DirectResult | null;
-  isDirectQuerying?: boolean;
-  directError?: string | null;
+  hybridResult?: DirectResult | null;
+  isHybridQuerying?: boolean;
+  hybridError?: string | null;
   documentTokens?: number;
   processedContent?: string;
   // Ollama props from parent
   ollamaModel?: string;
   availableOllamaModels?: OllamaModelInfo[];
   isOllamaAvailable?: boolean;
-  ollamaResult?: OllamaResult | null;
-  isOllamaQuerying?: boolean;
-  ollamaError?: string | null;
+  directResult?: OllamaResult | null;
+  isDirectQuerying?: boolean;
+  directError?: string | null;
   // Processing events for real-time timeline updates
   ragProcessingEvents?: ProcessingEvent[];
+  hybridProcessingEvents?: ProcessingEvent[];
   directProcessingEvents?: ProcessingEvent[];
-  ollamaProcessingEvents?: ProcessingEvent[];
 }
 
 export function UnifiedQuerySection({
@@ -46,20 +46,20 @@ export function UnifiedQuerySection({
   ragResult,
   isRagQuerying,
   ragError,
-  directResult,
-  isDirectQuerying,
-  directError,
+  hybridResult,
+  isHybridQuerying,
+  hybridError,
   documentTokens,
   processedContent,
   ollamaModel = 'llama3.2',
   availableOllamaModels = [],
   isOllamaAvailable = false,
-  ollamaResult = null,
-  isOllamaQuerying = false,
-  ollamaError = null,
+  directResult = null,
+  isDirectQuerying = false,
+  directError = null,
   ragProcessingEvents = [],
-  directProcessingEvents = [],
-  ollamaProcessingEvents = []
+  hybridProcessingEvents = [],
+  directProcessingEvents = []
 }: UnifiedQuerySectionProps) {
   const [query, setQuery] = useState('');
   const [temperature, setTemperature] = useState(0.7);
@@ -77,7 +77,7 @@ export function UnifiedQuerySection({
   };
 
   const isDisabled = !documentId || isLoading;
-  const showResults = ragResult || directResult || ollamaResult || isRagQuerying || isDirectQuerying || isOllamaQuerying;
+  const showResults = ragResult || hybridResult || directResult || isRagQuerying || isHybridQuerying || isDirectQuerying;
 
   return (
     <div className="w-full space-y-6">
@@ -199,12 +199,12 @@ export function UnifiedQuerySection({
           ragResult={ragResult || null}
           isRagQuerying={isRagQuerying || false}
           ragError={ragError || null}
-          directResult={directResult || null}
-          isDirectQuerying={isDirectQuerying || false}
-          directError={directError || null}
-          ollamaResult={ollamaResult}
-          isOllamaQuerying={isOllamaQuerying}
-          ollamaError={ollamaError}
+          hybridResult={hybridResult || null}
+          isHybridQuerying={isHybridQuerying || false}
+          hybridError={hybridError || null}
+          directResult={directResult}
+          isDirectQuerying={isDirectQuerying}
+          directError={directError}
           ollamaModel={ollamaModel}
           availableOllamaModels={availableOllamaModels}
           onOllamaModelChange={undefined}
@@ -212,8 +212,8 @@ export function UnifiedQuerySection({
           documentTokens={documentTokens}
           processedContent={processedContent}
           ragProcessingEvents={ragProcessingEvents}
+          hybridProcessingEvents={hybridProcessingEvents}
           directProcessingEvents={directProcessingEvents}
-          ollamaProcessingEvents={ollamaProcessingEvents}
         />
       )}
     </div>

@@ -31,20 +31,20 @@ interface QueryTabProps {
   ragError?: string | null;
   ragProcessingEvents?: ProcessingEvent[];
   
-  // Direct results
-  directResult?: DirectResult | null;
-  isDirectQuerying?: boolean;
-  directError?: string | null;
-  directProcessingEvents?: ProcessingEvent[];
+  // Hybrid results (uses direct context with RAG data when needed)
+  hybridResult?: DirectResult | null;
+  isHybridQuerying?: boolean;
+  hybridError?: string | null;
+  hybridProcessingEvents?: ProcessingEvent[];
   
-  // Ollama results
+  // Direct results (via Ollama)
   ollamaModel?: string;
   availableOllamaModels?: OllamaModelInfo[];
   isOllamaAvailable?: boolean;
-  ollamaResult?: OllamaResult | null;
-  isOllamaQuerying?: boolean;
-  ollamaError?: string | null;
-  ollamaProcessingEvents?: ProcessingEvent[];
+  directResult?: OllamaResult | null;
+  isDirectQuerying?: boolean;
+  directError?: string | null;
+  directProcessingEvents?: ProcessingEvent[];
 }
 
 /**
@@ -65,16 +65,16 @@ export function QueryTab({
   isRagQuerying,
   ragError,
   ragProcessingEvents = [],
-  directResult,
-  isDirectQuerying,
-  directError,
-  directProcessingEvents = [],
+  hybridResult,
+  isHybridQuerying,
+  hybridError,
+  hybridProcessingEvents = [],
   ollamaModel = 'llama3.2',
   // availableOllamaModels and isOllamaAvailable are available but not currently used in this component
-  ollamaResult = null,
-  isOllamaQuerying = false,
-  ollamaError = null,
-  ollamaProcessingEvents = []
+  directResult = null,
+  isDirectQuerying = false,
+  directError = null,
+  directProcessingEvents = []
 }: QueryTabProps) {
   const [query, setQuery] = useState('');
   const [temperature, setTemperature] = useState(0.7);
@@ -90,7 +90,7 @@ export function QueryTab({
   };
 
   const isDisabled = !documentId || isLoading;
-  const showResults = ragResult || directResult || ollamaResult || isRagQuerying || isDirectQuerying || isOllamaQuerying;
+  const showResults = ragResult || hybridResult || directResult || isRagQuerying || isHybridQuerying || isDirectQuerying;
 
   return (
     <div className="max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6">
@@ -218,19 +218,19 @@ export function QueryTab({
           
           {/* Hybrid Answer Section */}
           <HybridAnswerSection
-            directResult={directResult || null}
-            isQuerying={isDirectQuerying || false}
-            error={directError || null}
-            processingEvents={directProcessingEvents}
+            directResult={hybridResult || null}
+            isQuerying={isHybridQuerying || false}
+            error={hybridError || null}
+            processingEvents={hybridProcessingEvents}
             selectedModel={ollamaModel}
           />
           
           {/* Direct (Ollama) Answer Section */}
           <DirectAnswerSection
-            ollamaResult={ollamaResult}
-            isQuerying={isOllamaQuerying}
-            error={ollamaError}
-            processingEvents={ollamaProcessingEvents}
+            ollamaResult={directResult}
+            isQuerying={isDirectQuerying}
+            error={directError}
+            processingEvents={directProcessingEvents}
             selectedModel={ollamaModel}
           />
         </div>

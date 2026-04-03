@@ -21,8 +21,8 @@ interface OllamaModelInfo {
 interface PerformanceTabProps {
   // Current results
   ragResult?: RAGResult | null;
-  directResult?: DirectResult | null;
-  ollamaResult?: OllamaResult | null;
+  hybridResult?: DirectResult | null;
+  directResult?: OllamaResult | null;
   
   // Document info
   documentTokens?: number;
@@ -45,8 +45,8 @@ interface PerformanceTabProps {
  */
 export function PerformanceTab({
   ragResult,
+  hybridResult,
   directResult,
-  ollamaResult,
   documentTokens,
   processedContent,
   ollamaModel,
@@ -58,8 +58,8 @@ export function PerformanceTab({
   const [selectedHistoryId, setSelectedHistoryId] = useState<string>('current');
   const [displayedResults, setDisplayedResults] = useState({
     rag: ragResult,
+    hybrid: hybridResult,
     direct: directResult,
-    ollama: ollamaResult,
   });
 
   // Load query history from localStorage
@@ -85,65 +85,65 @@ export function PerformanceTab({
     if (selectedHistoryId === 'current') {
       setDisplayedResults({
         rag: ragResult,
+        hybrid: hybridResult,
         direct: directResult,
-        ollama: ollamaResult,
       });
     } else {
       const historyItem = queryHistory.find((item) => item.id === selectedHistoryId);
       if (historyItem) {
         setDisplayedResults({
           rag: historyItem.ragResult,
+          hybrid: historyItem.hybridResult,
           direct: historyItem.directResult,
-          ollama: historyItem.ollamaResult,
         });
       }
     }
-  }, [selectedHistoryId, ragResult, directResult, ollamaResult, queryHistory]);
+  }, [selectedHistoryId, ragResult, hybridResult, directResult, queryHistory]);
 
-  const hasResults = displayedResults.rag || displayedResults.direct || displayedResults.ollama;
+  const hasResults = displayedResults.rag || displayedResults.hybrid || displayedResults.direct;
 
   // Calculate comparison metrics
   const getComparisonMetrics = () => {
-    if (!displayedResults.rag || !displayedResults.direct) return null;
+    if (!displayedResults.rag || !displayedResults.hybrid) return null;
 
     const ragTime = displayedResults.rag.metrics.breakdown?.timing.totalTime ?? displayedResults.rag.metrics.retrievalTime;
-    const directTime = displayedResults.direct.metrics.generationTime;
-    const ollamaTime = displayedResults.ollama?.metrics.generationTime || 0;
+    const hybridTime = displayedResults.hybrid.metrics.generationTime;
+    const directTime = displayedResults.direct?.metrics.generationTime || 0;
 
     const ragTokens = displayedResults.rag.metrics.tokens;
-    const directTokens = displayedResults.direct.metrics.tokens;
-    const ollamaTokens = displayedResults.ollama?.metrics.tokens || 0;
+    const hybridTokens = displayedResults.hybrid.metrics.tokens;
+    const directTokens = displayedResults.direct?.metrics.tokens || 0;
 
     const ragCost = displayedResults.rag.metrics.cost;
-    const directCost = displayedResults.direct.metrics.cost;
-    const ollamaCost = 0; // Always free
+    const hybridCost = displayedResults.hybrid.metrics.cost;
+    const directCost = 0; // Always free (Ollama)
 
     return {
       speed: {
-        fastest: ollamaTime > 0 && ollamaTime < ragTime && ollamaTime < directTime 
-          ? 'ollama' 
-          : ragTime < directTime 
-          ? 'rag' 
-          : 'direct',
+        fastest: directTime > 0 && directTime < ragTime && directTime < hybridTime
+          ? 'direct'
+          : ragTime < hybridTime
+          ? 'rag'
+          : 'hybrid',
         ragTime,
+        hybridTime,
         directTime,
-        ollamaTime,
       },
       tokens: {
-        lowest: ollamaTokens > 0 && ollamaTokens < ragTokens && ollamaTokens < directTokens
-          ? 'ollama'
-          : ragTokens < directTokens
+        lowest: directTokens > 0 && directTokens < ragTokens && directTokens < hybridTokens
+          ? 'direct'
+          : ragTokens < hybridTokens
           ? 'rag'
-          : 'direct',
+          : 'hybrid',
         ragTokens,
+        hybridTokens,
         directTokens,
-        ollamaTokens,
       },
       cost: {
-        cheapest: ollamaCost === 0 ? 'ollama' : ragCost < directCost ? 'rag' : 'direct',
+        cheapest: directCost === 0 ? 'direct' : ragCost < hybridCost ? 'rag' : 'hybrid',
         ragCost,
+        hybridCost,
         directCost,
-        ollamaCost,
       },
     };
   };
@@ -232,14 +232,14 @@ export function PerformanceTab({
                   <span>RAG:</span>
                   <span>{formatTime(metrics.speed.ragTime)}</span>
                 </div>
-                <div className={`flex justify-between items-center ${metrics.speed.fastest === 'direct' ? 'text-blue-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                <div className={`flex justify-between items-center ${metrics.speed.fastest === 'hybrid' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
                   <span>Hybrid:</span>
-                  <span>{formatTime(metrics.speed.directTime)}</span>
+                  <span>{formatTime(metrics.speed.hybridTime)}</span>
                 </div>
-                {metrics.speed.ollamaTime > 0 && (
-                  <div className={`flex justify-between items-center ${metrics.speed.fastest === 'ollama' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                {metrics.speed.directTime > 0 && (
+                  <div className={`flex justify-between items-center ${metrics.speed.fastest === 'direct' ? 'text-orange-400 font-semibold' : 'text-unkey-gray-300'}`}>
                     <span>Direct:</span>
-                    <span>{formatTime(metrics.speed.ollamaTime)}</span>
+                    <span>{formatTime(metrics.speed.directTime)}</span>
                   </div>
                 )}
               </div>
@@ -265,14 +265,14 @@ export function PerformanceTab({
                   <span>RAG:</span>
                   <span>{metrics.tokens.ragTokens.toLocaleString()}</span>
                 </div>
-                <div className={`flex justify-between items-center ${metrics.tokens.lowest === 'direct' ? 'text-blue-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                <div className={`flex justify-between items-center ${metrics.tokens.lowest === 'hybrid' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
                   <span>Hybrid:</span>
-                  <span>{metrics.tokens.directTokens.toLocaleString()}</span>
+                  <span>{metrics.tokens.hybridTokens.toLocaleString()}</span>
                 </div>
-                {metrics.tokens.ollamaTokens > 0 && (
-                  <div className={`flex justify-between items-center ${metrics.tokens.lowest === 'ollama' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                {metrics.tokens.directTokens > 0 && (
+                  <div className={`flex justify-between items-center ${metrics.tokens.lowest === 'direct' ? 'text-orange-400 font-semibold' : 'text-unkey-gray-300'}`}>
                     <span>Direct:</span>
-                    <span>{metrics.tokens.ollamaTokens.toLocaleString()}</span>
+                    <span>{metrics.tokens.directTokens.toLocaleString()}</span>
                   </div>
                 )}
               </div>
@@ -298,13 +298,13 @@ export function PerformanceTab({
                   <span>RAG:</span>
                   <span>{formatCost(metrics.cost.ragCost)}</span>
                 </div>
-                <div className={`flex justify-between items-center ${metrics.cost.cheapest === 'direct' ? 'text-blue-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                <div className={`flex justify-between items-center ${metrics.cost.cheapest === 'hybrid' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
                   <span>Hybrid:</span>
-                  <span>{formatCost(metrics.cost.directCost)}</span>
+                  <span>{formatCost(metrics.cost.hybridCost)}</span>
                 </div>
-                <div className={`flex justify-between items-center ${metrics.cost.cheapest === 'ollama' ? 'text-purple-400 font-semibold' : 'text-unkey-gray-300'}`}>
+                <div className={`flex justify-between items-center ${metrics.cost.cheapest === 'direct' ? 'text-orange-400 font-semibold' : 'text-unkey-gray-300'}`}>
                   <span>Direct:</span>
-                  <span>{formatCost(metrics.cost.ollamaCost)}</span>
+                  <span>{formatCost(metrics.cost.directCost)}</span>
                 </div>
               </div>
               {metrics.cost.cheapest && (
@@ -334,26 +334,26 @@ export function PerformanceTab({
             />
             
             <HybridSection
-              directResult={displayedResults.direct || null}
+              directResult={displayedResults.hybrid || null}
               isQuerying={false}
               error={null}
               documentTokens={documentTokens}
               processedContent={processedContent}
-              processingEvents={displayedResults.direct?.processingEvents}
+              processingEvents={displayedResults.hybrid?.processingEvents}
               hideAnswer={true}
               hideTimeline={true}
               inferenceModel={ollamaModel}
             />
             
             <DirectSection
-              ollamaResult={displayedResults.ollama || null}
+              ollamaResult={displayedResults.direct || null}
               isQuerying={false}
               error={null}
               documentTokens={documentTokens}
               processedContent={processedContent}
               selectedModel={ollamaModel}
               availableModels={availableOllamaModels}
-              processingEvents={displayedResults.ollama?.processingEvents}
+              processingEvents={displayedResults.direct?.processingEvents}
               hideAnswer={true}
               hideTimeline={true}
             />

@@ -14,15 +14,15 @@ interface ComparisonResultsProps {
   isRagQuerying: boolean;
   ragError: string | null;
   
-  // Direct props
-  directResult: DirectResult | null;
+  // Hybrid props (uses direct context with RAG data when needed)
+  hybridResult: DirectResult | null;
+  isHybridQuerying: boolean;
+  hybridError: string | null;
+  
+  // Direct props (via Ollama)
+  directResult: OllamaResult | null;
   isDirectQuerying: boolean;
   directError: string | null;
-  
-  // Ollama props
-  ollamaResult: OllamaResult | null;
-  isOllamaQuerying: boolean;
-  ollamaError: string | null;
   ollamaModel?: string;
   availableOllamaModels?: Array<{
     name: string;
@@ -38,20 +38,20 @@ interface ComparisonResultsProps {
   
   // Real-time processing events
   ragProcessingEvents?: ProcessingEvent[];
+  hybridProcessingEvents?: ProcessingEvent[];
   directProcessingEvents?: ProcessingEvent[];
-  ollamaProcessingEvents?: ProcessingEvent[];
 }
 
 export function ComparisonResults({
   ragResult,
   isRagQuerying,
   ragError,
+  hybridResult,
+  isHybridQuerying,
+  hybridError,
   directResult,
   isDirectQuerying,
   directError,
-  ollamaResult,
-  isOllamaQuerying,
-  ollamaError,
   ollamaModel,
   availableOllamaModels,
   onOllamaModelChange,
@@ -59,8 +59,8 @@ export function ComparisonResults({
   documentTokens,
   processedContent,
   ragProcessingEvents = [],
-  directProcessingEvents = [],
-  ollamaProcessingEvents = []
+  hybridProcessingEvents = [],
+  directProcessingEvents = []
 }: ComparisonResultsProps) {
   
   return (
@@ -79,29 +79,29 @@ export function ComparisonResults({
             inferenceModel={ollamaModel}
           />
           
-          {/* Hybrid Section - Shows Direct pipeline results (type: 'direct' from backend) */}
+          {/* Hybrid Section - Shows Hybrid pipeline results (type: 'direct' from backend) */}
           <HybridSection
-            directResult={directResult}
-            isQuerying={isDirectQuerying}
-            error={directError}
+            directResult={hybridResult}
+            isQuerying={isHybridQuerying}
+            error={hybridError}
             documentTokens={documentTokens}
             processedContent={processedContent}
-            processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
+            processingEvents={hybridProcessingEvents.length > 0 ? hybridProcessingEvents : hybridResult?.processingEvents}
             inferenceModel={ollamaModel}
           />
           
-          {/* Direct Section (Ollama) - Shows Ollama pipeline results (type: 'ollama' from backend) */}
+          {/* Direct Section - Shows Direct pipeline results via Ollama (type: 'ollama' from backend) */}
           <DirectSection
-            ollamaResult={ollamaResult}
-            isQuerying={isOllamaQuerying}
-            error={ollamaError}
+            ollamaResult={directResult}
+            isQuerying={isDirectQuerying}
+            error={directError}
             documentTokens={documentTokens}
             processedContent={processedContent}
             selectedModel={ollamaModel}
             availableModels={availableOllamaModels}
             onModelChange={onOllamaModelChange}
             isOllamaAvailable={isOllamaAvailable}
-            processingEvents={ollamaProcessingEvents.length > 0 ? ollamaProcessingEvents : ollamaResult?.processingEvents}
+            processingEvents={directProcessingEvents.length > 0 ? directProcessingEvents : directResult?.processingEvents}
           />
         </div>
       </div>

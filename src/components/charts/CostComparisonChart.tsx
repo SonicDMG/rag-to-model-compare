@@ -19,9 +19,8 @@ export interface CostComparisonChartProps {
  */
 const COLORS = {
   rag: '#3B82F6',      // Blue
-  direct: '#10B981',   // Green
-  hybrid: '#8B5CF6',   // Purple
-  ollama: '#F59E0B',   // Orange
+  hybrid: '#10B981',   // Green
+  direct: '#F59E0B',   // Orange
 };
 
 /**
@@ -56,6 +55,17 @@ export function CostComparisonChart({ data }: CostComparisonChartProps) {
     });
   }
 
+  if (data.hybrid) {
+    costData.push({
+      label: 'Hybrid',
+      avgCost: data.hybrid.avgCost,
+      totalCost: data.hybrid.totalCost,
+      color: COLORS.hybrid,
+      queryCount: data.hybrid.queryCount,
+      isFree: false,
+    });
+  }
+
   if (data.direct) {
     costData.push({
       label: 'Direct',
@@ -63,17 +73,6 @@ export function CostComparisonChart({ data }: CostComparisonChartProps) {
       totalCost: data.direct.totalCost,
       color: COLORS.direct,
       queryCount: data.direct.queryCount,
-      isFree: false,
-    });
-  }
-
-  if (data.ollama) {
-    costData.push({
-      label: 'Ollama',
-      avgCost: data.ollama.avgCost,
-      totalCost: data.ollama.totalCost,
-      color: COLORS.ollama,
-      queryCount: data.ollama.queryCount,
       isFree: true,
     });
   }
@@ -291,11 +290,11 @@ export function CostComparisonChart({ data }: CostComparisonChartProps) {
         </div>
       </div>
 
-      {/* Cost savings note if Ollama is present */}
-      {data.ollama && paidCosts.length > 0 && (
+      {/* Cost savings note if Direct (Ollama) is present */}
+      {data.direct && paidCosts.length > 0 && (
         <div className="mt-4 pt-4 border-t border-unkey-gray-700">
           <div className="text-xs text-unkey-gray-300 text-center">
-            💡 Ollama runs locally and has no API costs
+            💡 Direct approach runs locally via Ollama and has no API costs
           </div>
         </div>
       )}

@@ -15,8 +15,8 @@ const MAX_HISTORY_ITEMS = 1000;
 export interface QueryCounters {
   totalQueries: number;
   ragQueries: number;
+  hybridQueries: number;
   directQueries: number;
-  ollamaQueries: number;
 }
 
 /**
@@ -43,11 +43,32 @@ export function useQueryHistory() {
       if (!stored) return [];
 
       const parsed = JSON.parse(stored);
-      // Convert timestamp strings back to Date objects
-      return parsed.map((item: any) => ({
-        ...item,
-        timestamp: new Date(item.timestamp),
-      }));
+      // Convert timestamp strings back to Date objects and migrate old field names
+      return parsed.map((item: any) => {
+        // Migration: Handle old field names from before refactoring
+        // Old schema: ragResult, directResult (was hybrid), ollamaResult (was direct)
+        // New schema: ragResult, hybridResult (is hybrid), directResult (is direct)
+        
+        // Detect old data by presence of ollamaResult field
+        const isOldData = 'ollamaResult' in item && !('hybridResult' in item);
+        
+        if (isOldData) {
+          console.log('[Migration] Detected old data format, migrating field names');
+          return {
+            ...item,
+            hybridResult: item.directResult, // Old directResult becomes new hybridResult
+            directResult: item.ollamaResult, // Old ollamaResult becomes new directResult
+            ollamaResult: undefined, // Remove old field
+            timestamp: new Date(item.timestamp),
+          };
+        }
+        
+        // New data format, just convert timestamp
+        return {
+          ...item,
+          timestamp: new Date(item.timestamp),
+        };
+      });
     } catch (error) {
       console.error('Failed to load query history:', error);
       return [];
@@ -63,8 +84,8 @@ export function useQueryHistory() {
       return {
         totalQueries: 0,
         ragQueries: 0,
+        hybridQueries: 0,
         directQueries: 0,
-        ollamaQueries: 0,
       };
     }
 
@@ -74,8 +95,8 @@ export function useQueryHistory() {
         return {
           totalQueries: 0,
           ragQueries: 0,
+          hybridQueries: 0,
           directQueries: 0,
-          ollamaQueries: 0,
         };
       }
       return JSON.parse(stored);
@@ -84,8 +105,8 @@ export function useQueryHistory() {
       return {
         totalQueries: 0,
         ragQueries: 0,
+        hybridQueries: 0,
         directQueries: 0,
-        ollamaQueries: 0,
       };
     }
   }, []);
@@ -128,8 +149,8 @@ export function useQueryHistory() {
         const initialCounters: QueryCounters = {
           totalQueries: 0,
           ragQueries: 0,
+          hybridQueries: 0,
           directQueries: 0,
-          ollamaQueries: 0,
         };
         saveCounters(initialCounters);
         return;
@@ -137,18 +158,18 @@ export function useQueryHistory() {
 
       // Count queries from existing history
       let ragCount = 0;
+      let hybridCount = 0;
       let directCount = 0;
-      let ollamaCount = 0;
 
       existingHistory.forEach((item) => {
         if (item.ragResult !== null && item.ragResult !== undefined) {
           ragCount += 1;
         }
+        if (item.hybridResult !== null && item.hybridResult !== undefined) {
+          hybridCount += 1;
+        }
         if (item.directResult !== null && item.directResult !== undefined) {
           directCount += 1;
-        }
-        if (item.ollamaResult !== null && item.ollamaResult !== undefined) {
-          ollamaCount += 1;
         }
       });
 
@@ -156,8 +177,8 @@ export function useQueryHistory() {
       const initialCounters: QueryCounters = {
         totalQueries: existingHistory.length,
         ragQueries: ragCount,
+        hybridQueries: hybridCount,
         directQueries: directCount,
-        ollamaQueries: ollamaCount,
       };
 
       saveCounters(initialCounters);
@@ -173,8 +194,8 @@ export function useQueryHistory() {
   const incrementCounters = useCallback(
     (
       ragResult: RAGResult | null,
-      directResult: DirectResult | null,
-      ollamaResult?: OllamaResult | null
+      hybridResult: DirectResult | null,
+      directResult?: OllamaResult | null
     ) => {
       const counters = loadCounters();
       
@@ -184,12 +205,12 @@ export function useQueryHistory() {
         counters.ragQueries += 1;
       }
       
-      if (directResult) {
-        counters.directQueries += 1;
+      if (hybridResult) {
+        counters.hybridQueries += 1;
       }
       
-      if (ollamaResult) {
-        counters.ollamaQueries += 1;
+      if (directResult) {
+        counters.directQueries += 1;
       }
       
       saveCounters(counters);
@@ -250,8 +271,8 @@ export function useQueryHistory() {
     (
       query: string,
       ragResult: RAGResult | null,
-      directResult: DirectResult | null,
-      ollamaResult?: OllamaResult | null
+      hybridResult: DirectResult | null,
+      directResult?: OllamaResult | null
     ) => {
       try {
         const currentHistory = loadHistory();
@@ -261,8 +282,8 @@ export function useQueryHistory() {
           query,
           timestamp: new Date(),
           ragResult,
-          directResult,
-          ollamaResult: ollamaResult || undefined,
+          hybridResult,
+          directResult: directResult || undefined,
         };
 
         // Add to beginning of array and limit to MAX_HISTORY_ITEMS
@@ -271,7 +292,7 @@ export function useQueryHistory() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
         
         // Increment cumulative counters
-        incrementCounters(ragResult, directResult, ollamaResult);
+        incrementCounters(ragResult, hybridResult, directResult);
         
         // Dispatch custom event to notify other components in the same tab
         window.dispatchEvent(new Event('queryHistoryUpdated'));
@@ -325,8 +346,8 @@ export function useQueryHistory() {
       const resetCounters: QueryCounters = {
         totalQueries: 0,
         ragQueries: 0,
+        hybridQueries: 0,
         directQueries: 0,
-        ollamaQueries: 0,
       };
       saveCounters(resetCounters);
       // Dispatch custom event to notify other components

@@ -19,9 +19,8 @@ export interface TokenComparisonChartProps {
  */
 const COLORS = {
   rag: '#3B82F6',      // Blue
-  direct: '#10B981',   // Green
-  hybrid: '#8B5CF6',   // Purple
-  ollama: '#F59E0B',   // Orange
+  hybrid: '#10B981',   // Green
+  direct: '#F59E0B',   // Orange
 };
 
 /**
@@ -53,6 +52,16 @@ export function TokenComparisonChart({ data }: TokenComparisonChartProps) {
     });
   }
 
+  if (data.hybrid) {
+    tokenData.push({
+      label: 'Hybrid',
+      avgTokens: data.hybrid.avgTokens,
+      totalTokens: data.hybrid.totalTokens,
+      color: COLORS.hybrid,
+      queryCount: data.hybrid.queryCount,
+    });
+  }
+
   if (data.direct) {
     tokenData.push({
       label: 'Direct',
@@ -60,16 +69,6 @@ export function TokenComparisonChart({ data }: TokenComparisonChartProps) {
       totalTokens: data.direct.totalTokens,
       color: COLORS.direct,
       queryCount: data.direct.queryCount,
-    });
-  }
-
-  if (data.ollama) {
-    tokenData.push({
-      label: 'Ollama',
-      avgTokens: data.ollama.avgTokens,
-      totalTokens: data.ollama.totalTokens,
-      color: COLORS.ollama,
-      queryCount: data.ollama.queryCount,
     });
   }
 

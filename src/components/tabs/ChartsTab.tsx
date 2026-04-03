@@ -73,7 +73,7 @@ export function ChartsTab() {
             <div className="bg-unkey-teal/10 border border-unkey-teal/30 rounded-lg p-4 text-sm text-left">
               <p className="font-semibold text-unkey-teal mb-2">What you'll see:</p>
               <ul className="space-y-1 text-unkey-gray-300">
-                <li>• Response time comparisons (RAG vs Direct vs Ollama)</li>
+                <li>• Response time comparisons (RAG vs Hybrid vs Direct)</li>
                 <li>• Token usage analysis (average and total)</li>
                 <li>• Cost breakdowns and accumulated expenses</li>
                 <li>• RAG retrieval vs generation time breakdown</li>
@@ -126,21 +126,21 @@ export function ChartsTab() {
             </div>
           </div>
         )}
-        {chartData.direct && (
+        {chartData.hybrid && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-            <div className="text-sm font-medium text-green-400 mb-1">{counters.directQueries} Total Direct {counters.directQueries === 1 ? 'Query' : 'Queries'}</div>
-            <div className="text-2xl font-bold text-green-300">{counters.directQueries}</div>
+            <div className="text-sm font-medium text-green-400 mb-1">{counters.hybridQueries} Total Hybrid {counters.hybridQueries === 1 ? 'Query' : 'Queries'}</div>
+            <div className="text-2xl font-bold text-green-300">{counters.hybridQueries}</div>
             <div className="text-xs text-green-400 mt-1">
-              Avg (last {chartData.direct.queryCount}): {chartData.direct.avgTime.toFixed(0)}ms
+              Avg (last {chartData.hybrid.queryCount}): {chartData.hybrid.avgTime.toFixed(0)}ms
             </div>
           </div>
         )}
-        {chartData.ollama && (
+        {chartData.direct && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
-            <div className="text-sm font-medium text-orange-400 mb-1">{counters.ollamaQueries} Total Ollama {counters.ollamaQueries === 1 ? 'Query' : 'Queries'}</div>
-            <div className="text-2xl font-bold text-orange-300">{counters.ollamaQueries}</div>
+            <div className="text-sm font-medium text-orange-400 mb-1">{counters.directQueries} Total Direct {counters.directQueries === 1 ? 'Query' : 'Queries'}</div>
+            <div className="text-2xl font-bold text-orange-300">{counters.directQueries}</div>
             <div className="text-xs text-orange-400 mt-1">
-              Avg (last {chartData.ollama.queryCount}): {chartData.ollama.avgTime.toFixed(0)}ms
+              Avg (last {chartData.direct.queryCount}): {chartData.direct.avgTime.toFixed(0)}ms
             </div>
           </div>
         )}
@@ -176,7 +176,7 @@ export function ChartsTab() {
               {' '}<strong>Charts:</strong> Display aggregated metrics from {chartRange === 'all' ? `all ${chartData.totalQueries}` : `the last ${Math.min(10, chartData.totalQueries)}`} {chartData.totalQueries === 1 ? 'query' : 'queries'}.
               {' '}<strong>Storage:</strong> Up to 1000 queries are stored in browser localStorage. Use the "Show" selector above to toggle between viewing all stored queries or just the last 10.
               {' '}RAG timing includes both retrieval and generation phases shown as stacked bars.
-              {chartData.ollama && ' Ollama runs locally and has no API costs.'}
+              {chartData.direct && ' Direct approach runs locally via Ollama and has no API costs.'}
             </p>
           </div>
         </div>

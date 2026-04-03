@@ -19,9 +19,8 @@ export interface TimingComparisonChartProps {
  */
 const COLORS = {
   rag: '#3B82F6',        // Blue
-  direct: '#10B981',     // Green
-  hybrid: '#8B5CF6',     // Purple
-  ollama: '#F59E0B',     // Orange
+  hybrid: '#10B981',     // Green
+  direct: '#F59E0B',     // Orange
 };
 
 /**
@@ -50,19 +49,19 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
     });
   }
 
+  if (data.hybrid) {
+    timingData.push({
+      label: 'Hybrid',
+      totalTime: data.hybrid.avgTime,
+      color: COLORS.hybrid,
+    });
+  }
+
   if (data.direct) {
     timingData.push({
       label: 'Direct',
       totalTime: data.direct.avgTime,
       color: COLORS.direct,
-    });
-  }
-
-  if (data.ollama) {
-    timingData.push({
-      label: 'Ollama',
-      totalTime: data.ollama.avgTime,
-      color: COLORS.ollama,
     });
   }
 
@@ -155,16 +154,16 @@ export function TimingComparisonChart({ data }: TimingComparisonChartProps) {
               <span className="text-unkey-gray-300">RAG</span>
             </div>
           )}
+          {data.hybrid && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.hybrid }} />
+              <span className="text-unkey-gray-300">Hybrid</span>
+            </div>
+          )}
           {data.direct && (
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.direct }} />
               <span className="text-unkey-gray-300">Direct</span>
-            </div>
-          )}
-          {data.ollama && (
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.ollama }} />
-              <span className="text-unkey-gray-300">Ollama</span>
             </div>
           )}
         </div>

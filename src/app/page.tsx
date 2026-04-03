@@ -43,20 +43,20 @@ function HomeContent() {
   const [ragError, setRagError] = useState<string | null>(null);
   const [isRagQuerying, setIsRagQuerying] = useState(false);
   
-  // Direct state
-  const [directResult, setDirectResult] = useState<DirectResult | null>(null);
+  // Hybrid state (uses direct context with RAG data when needed)
+  const [hybridResult, setHybridResult] = useState<DirectResult | null>(null);
+  const [hybridError, setHybridError] = useState<string | null>(null);
+  const [isHybridQuerying, setIsHybridQuerying] = useState(false);
+
+  // Direct state (via Ollama)
+  const [directResult, setDirectResult] = useState<any>(null);
   const [directError, setDirectError] = useState<string | null>(null);
   const [isDirectQuerying, setIsDirectQuerying] = useState(false);
 
-  // Ollama state
-  const [ollamaResult, setOllamaResult] = useState<any>(null);
-  const [ollamaError, setOllamaError] = useState<string | null>(null);
-  const [isOllamaQuerying, setIsOllamaQuerying] = useState(false);
-
   // Processing events state for real-time timeline updates
   const [ragProcessingEvents, setRagProcessingEvents] = useState<ProcessingEvent[]>([]);
+  const [hybridProcessingEvents, setHybridProcessingEvents] = useState<ProcessingEvent[]>([]);
   const [directProcessingEvents, setDirectProcessingEvents] = useState<ProcessingEvent[]>([]);
-  const [ollamaProcessingEvents, setOllamaProcessingEvents] = useState<ProcessingEvent[]>([]);
 
   // Ollama configuration state (for inference)
   const [ollamaModel, setOllamaModel] = useState<string>('llama3.2');
@@ -98,23 +98,23 @@ function HomeContent() {
   // Recalculate metrics when pricing model changes
   useEffect(() => {
     // Only recalculate if we have existing results and the model actually changed
-    if (ragResult && directResult) {
+    if (ragResult && hybridResult) {
       const currentRagModel = ragResult.metrics.breakdown?.metadata.model;
-      const currentDirectModel = directResult.metrics.breakdown?.metadata.model;
+      const currentHybridModel = hybridResult.metrics.breakdown?.metadata.model;
       
       // Check if model changed from what's in the results
-      if (currentRagModel !== pricingModel || currentDirectModel !== pricingModel) {
+      if (currentRagModel !== pricingModel || currentHybridModel !== pricingModel) {
         console.log(`Recalculating metrics for pricing model: ${pricingModel}`);
         
-        const { rag: updatedRag, direct: updatedDirect } = recalculateBothMetrics(
+        const { rag: updatedRag, direct: updatedHybrid } = recalculateBothMetrics(
           ragResult,
-          directResult,
+          hybridResult,
           pricingModel,
           pricingModel
         );
         
         setRagResult(updatedRag);
-        setDirectResult(updatedDirect);
+        setHybridResult(updatedHybrid);
       }
     }
   }, [pricingModel]); // Only depend on pricingModel to avoid infinite loops
@@ -137,18 +137,18 @@ function HomeContent() {
     
     // Clear all query results
     setRagResult(null);
+    setHybridResult(null);
     setDirectResult(null);
-    setOllamaResult(null);
     
     // Clear errors
     setRagError(null);
+    setHybridError(null);
     setDirectError(null);
-    setOllamaError(null);
     
     // Clear processing events
     setRagProcessingEvents([]);
+    setHybridProcessingEvents([]);
     setDirectProcessingEvents([]);
-    setOllamaProcessingEvents([]);
     
     // Reset query count
     setQueryCount(0);
@@ -165,19 +165,19 @@ function HomeContent() {
     // Reset state for all pipelines
     setIsQuerying(true);
     setIsRagQuerying(true);
+    setIsHybridQuerying(true);
     setIsDirectQuerying(true);
-    setIsOllamaQuerying(true);
     setRagError(null);
+    setHybridError(null);
     setDirectError(null);
-    setOllamaError(null);
     setRagResult(null);
+    setHybridResult(null);
     setDirectResult(null);
-    setOllamaResult(null);
     
     // Reset processing events for real-time updates
     setRagProcessingEvents([]);
+    setHybridProcessingEvents([]);
     setDirectProcessingEvents([]);
-    setOllamaProcessingEvents([]);
 
     try {
       const response = await fetch('/api/rag-comparison/query', {
@@ -214,8 +214,8 @@ function HomeContent() {
 
       let buffer = '';
       let finalRagResult: RAGResult | null = null;
-      let finalDirectResult: DirectResult | null = null;
-      let finalOllamaResult: any = null;
+      let finalHybridResult: DirectResult | null = null;
+      let finalDirectResult: any = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -256,7 +256,7 @@ function HomeContent() {
                   return [...prev, event];
                 });
               } else if (pipeline === PipelineType.DIRECT) {
-                setDirectProcessingEvents(prev => {
+                setHybridProcessingEvents(prev => {
                   const existingIndex = prev.findIndex(e => e.id === event.id);
                   if (existingIndex >= 0) {
                     const updated = [...prev];
@@ -266,7 +266,7 @@ function HomeContent() {
                   return [...prev, event];
                 });
               } else if (pipeline === PipelineType.OLLAMA) {
-                setOllamaProcessingEvents(prev => {
+                setDirectProcessingEvents(prev => {
                   const existingIndex = prev.findIndex(e => e.id === event.id);
                   if (existingIndex >= 0) {
                     const updated = [...prev];
@@ -291,6 +291,17 @@ function HomeContent() {
               }
             } else if (data.type === 'direct') {
               if (data.success) {
+                console.log('✅ Hybrid result received and rendering');
+                setHybridResult(data.data);
+                finalHybridResult = data.data;
+                setIsHybridQuerying(false);
+              } else {
+                console.error('❌ Hybrid error received:', data.error);
+                setHybridError(data.error);
+                setIsHybridQuerying(false);
+              }
+            } else if (data.type === 'ollama') {
+              if (data.success) {
                 console.log('✅ Direct result received and rendering');
                 setDirectResult(data.data);
                 finalDirectResult = data.data;
@@ -300,24 +311,13 @@ function HomeContent() {
                 setDirectError(data.error);
                 setIsDirectQuerying(false);
               }
-            } else if (data.type === 'ollama') {
-              if (data.success) {
-                console.log('✅ Ollama result received and rendering');
-                setOllamaResult(data.data);
-                finalOllamaResult = data.data;
-                setIsOllamaQuerying(false);
-              } else {
-                console.error('❌ Ollama error received:', data.error);
-                setOllamaError(data.error);
-                setIsOllamaQuerying(false);
-              }
             } else if (data.type === 'complete') {
               console.log('✅ Stream complete');
               setIsQuerying(false);
               
               // Save to query history
-              if (finalRagResult || finalDirectResult) {
-                saveQuery(query, finalRagResult, finalDirectResult, finalOllamaResult);
+              if (finalRagResult || finalHybridResult) {
+                saveQuery(query, finalRagResult, finalHybridResult, finalDirectResult);
                 setQueryCount(prev => prev + 1);
               }
             }
@@ -330,8 +330,8 @@ function HomeContent() {
       // Ensure loading states are cleared
       setIsQuerying(false);
       setIsRagQuerying(false);
+      setIsHybridQuerying(false);
       setIsDirectQuerying(false);
-      setIsOllamaQuerying(false);
 
     } catch (err) {
       console.error('Query error:', err);
@@ -339,18 +339,18 @@ function HomeContent() {
       
       // Set error for all pipelines if the request itself failed
       setRagError(errorMessage);
+      setHybridError(errorMessage);
       setDirectError(errorMessage);
-      setOllamaError(errorMessage);
       
       setIsQuerying(false);
       setIsRagQuerying(false);
+      setIsHybridQuerying(false);
       setIsDirectQuerying(false);
-      setIsOllamaQuerying(false);
     }
   };
 
   // Determine if we have query results for Performance tab
-  const hasQueryResults = !!(ragResult || directResult || ollamaResult);
+  const hasQueryResults = !!(ragResult || hybridResult || directResult);
 
   // Get document name for badge
   const documentName = uploadResult?.ragStatus === 'success' || uploadResult?.directStatus === 'success'
@@ -429,17 +429,17 @@ function HomeContent() {
                   isRagQuerying={isRagQuerying}
                   ragError={ragError}
                   ragProcessingEvents={ragProcessingEvents}
+                  hybridResult={hybridResult}
+                  isHybridQuerying={isHybridQuerying}
+                  hybridError={hybridError}
+                  hybridProcessingEvents={hybridProcessingEvents}
+                  ollamaModel={ollamaModel}
+                  availableOllamaModels={availableOllamaModels}
+                  isOllamaAvailable={isOllamaAvailable}
                   directResult={directResult}
                   isDirectQuerying={isDirectQuerying}
                   directError={directError}
                   directProcessingEvents={directProcessingEvents}
-                  ollamaModel={ollamaModel}
-                  availableOllamaModels={availableOllamaModels}
-                  isOllamaAvailable={isOllamaAvailable}
-                  ollamaResult={ollamaResult}
-                  isOllamaQuerying={isOllamaQuerying}
-                  ollamaError={ollamaError}
-                  ollamaProcessingEvents={ollamaProcessingEvents}
                 />
               </TabPanel>
 
@@ -447,8 +447,8 @@ function HomeContent() {
               <TabPanel tabId="performance" activeTab={activeTab}>
                 <PerformanceTab
                   ragResult={ragResult}
+                  hybridResult={hybridResult}
                   directResult={directResult}
-                  ollamaResult={ollamaResult}
                   documentTokens={uploadResult?.ragTokens}
                   processedContent={uploadResult?.directProcessedText}
                   ollamaModel={ollamaModel}
