@@ -45,7 +45,7 @@ function validateFile(file: File): void {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const messages = error.errors.map(e => e.message).join(', ');
+      const messages = error.issues.map(e => e.message).join(', ');
       throw new Error(`File validation failed: ${messages}`);
     }
     throw error;

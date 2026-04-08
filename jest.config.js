@@ -15,6 +15,15 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: {
+        rootDir: '.',
+        moduleResolution: 'bundler',
+        ignoreDeprecations: '6.0',
+      },
+    }],
+  },
 };
 
 // Made with Bob

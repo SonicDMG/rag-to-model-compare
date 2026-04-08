@@ -516,7 +516,7 @@ export function DocumentUpload({
     } else {
       setUploadStatus({
         status: 'error',
-        message: 'No valid files found. Please upload supported file types (TXT, MD, JSON, PDF, DOCX, DOC)'
+        message: 'No valid files found. Please upload supported file types (TXT, MD, PDF, DOCX, DOC)'
       });
     }
   };
@@ -533,7 +533,7 @@ export function DocumentUpload({
       } else {
         setUploadStatus({
           status: 'error',
-          message: 'No valid files selected. Please upload supported file types (TXT, MD, JSON, PDF, DOCX, DOC)'
+          message: 'No valid files selected. Please upload supported file types (TXT, MD, PDF, DOCX, DOC)'
         });
       }
     }
@@ -1228,7 +1228,7 @@ export function DocumentUpload({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.json,.pdf,.docx,.doc"
+            accept=".txt,.md,.pdf,.docx,.doc"
             multiple
             {...(uploadMode === 'folder' ? { webkitdirectory: '' } : {})}
             onChange={handleFileSelect}
@@ -1264,7 +1264,7 @@ export function DocumentUpload({
               <p className="text-sm text-unkey-gray-300">
                 <span className="font-medium text-unkey-teal-500">Click to upload</span> or drag and drop
                 <br />
-                {uploadMode === 'folder' ? 'Folder with ' : ''}TXT, MD, JSON, PDF, DOCX, DOC files
+                {uploadMode === 'folder' ? 'Folder with ' : ''}TXT, MD, PDF, DOCX, DOC files
                 {uploadMode === 'single' && <span className="text-unkey-gray-400"> (multi-select enabled)</span>}
               </p>
             )}

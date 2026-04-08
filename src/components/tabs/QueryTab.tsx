@@ -52,7 +52,6 @@ interface QueryTabProps {
  * 
  * Features:
  * - Sticky query form at top
- * - Advanced settings (temperature, max tokens)
  * - Three-column results layout (RAG, Hybrid, Direct)
  * - Real-time processing updates
  */
@@ -77,9 +76,9 @@ export function QueryTab({
   directProcessingEvents = []
 }: QueryTabProps) {
   const [query, setQuery] = useState('');
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxTokens, setMaxTokens] = useState(1000);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Fixed default values (advanced settings removed as untested)
+  const temperature = 0.7;
+  const maxTokens = 1000;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,67 +115,6 @@ export function QueryTab({
               />
             </div>
 
-            {/* Advanced Settings Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-sm text-unkey-teal hover:text-unkey-cyan transition-colors flex items-center gap-2"
-            >
-              <svg
-                className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              Advanced Settings
-            </button>
-
-            {/* Advanced Settings Panel */}
-            {showAdvanced && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-unkey-gray-850 rounded-unkey-md border border-unkey-gray-700">
-                <div>
-                  <label htmlFor="temperature" className="block text-sm font-medium text-unkey-gray-200 mb-2">
-                    Temperature: {temperature}
-                  </label>
-                  <input
-                    type="range"
-                    id="temperature"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={temperature}
-                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    disabled={isDisabled}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-unkey-gray-400 mt-1">
-                    Lower = more focused, Higher = more creative
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="maxTokens" className="block text-sm font-medium text-unkey-gray-200 mb-2">
-                    Max Tokens: {maxTokens}
-                  </label>
-                  <input
-                    type="range"
-                    id="maxTokens"
-                    min="100"
-                    max="4000"
-                    step="100"
-                    value={maxTokens}
-                    onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                    disabled={isDisabled}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-unkey-gray-400 mt-1">
-                    Maximum length of generated response
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Submit Button */}
             <button

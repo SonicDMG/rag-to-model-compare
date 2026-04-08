@@ -149,7 +149,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     } catch (error) {
       console.error('Validation error:', error);
       if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+        const errorMessages = error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
         return NextResponse.json(
           {
             success: false,
@@ -171,6 +171,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const {
       documentId,
       query,
+      filterId: requestFilterId,
       model,
       temperature,
       maxTokens,
@@ -185,10 +186,12 @@ export async function POST(request: NextRequest): Promise<Response> {
     const sanitizedQuery = sanitizeInput(query);
     const sanitizedModel = sanitizeInput(model);
     const sanitizedOllamaModel = ollamaModel ? sanitizeInput(ollamaModel) : undefined;
+    const sanitizedFilterId = requestFilterId ? sanitizeInput(requestFilterId) : undefined;
     
     console.log('Sanitized inputs:', {
       documentId: sanitizedDocumentId,
       query: sanitizedQuery.substring(0, 100) + '...',
+      filterId: sanitizedFilterId,
       model: sanitizedModel,
       temperature,
       maxTokens,
@@ -200,7 +203,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     // Use processedContent from frontend if provided, otherwise retrieve from storage
     let documentContent: string | undefined;
-    let filterId: string | undefined;
+    // Use the filterId from the request if provided, otherwise try to get from storage
+    let filterId: string | undefined = sanitizedFilterId;
     let storedDoc = getDocument(sanitizedDocumentId); // Always try to get from storage for metadata/filterId
     
     if (body.processedContent && body.processedContent.trim().length > 0) {
@@ -234,8 +238,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         console.log('[Direct Query Debug] ⚠️  No document separators found - may be single file or legacy format');
       }
       
-      // Get filterId from storage if available
-      if (storedDoc) {
+      // If no filterId in request, try to get from storage
+      if (!filterId && storedDoc) {
         filterId = storedDoc.filterId;
         console.log('[Direct Query Debug] Retrieved filterId from storage:', filterId);
       }
@@ -259,7 +263,10 @@ export async function POST(request: NextRequest): Promise<Response> {
         });
         
         documentContent = storedDoc.content;
-        filterId = storedDoc.filterId;
+        // If no filterId in request, use the one from storage
+        if (!filterId) {
+          filterId = storedDoc.filterId;
+        }
         
         // Enhanced logging for multi-file uploads
         console.log('[Direct Query Debug] Content source: Storage');
@@ -293,6 +300,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       temperature,
     };
     console.log('RAG config:', JSON.stringify(ragConfig, null, 2));
+    console.log('Filter ID for RAG query:', filterId || 'none (will query all documents)');
 
     // Build Direct configuration
     const directConfig: DirectConfig = {
@@ -346,7 +354,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           sanitizedDocumentId,
           sanitizedQuery,
           ragConfig,
-          validatedData.filterId,
+          filterId, // Use the resolved filterId
           createEventCallback(PipelineType.RAG)
         );
         
