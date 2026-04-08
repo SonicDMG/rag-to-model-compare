@@ -62,7 +62,7 @@ export function UploadResultBase({
   const successBgAlt = pipelineType === 'rag' ? 'bg-success/20 border-success/30' : 'bg-blue/20 border-blue/30';
 
   // Header text based on pipeline type
-  const headerText = pipelineType === 'rag' ? 'RAG Approach Results' : 'Hybrid Approach Results';
+  const headerText = pipelineType === 'rag' ? 'RAG Approach Results' : 'Direct Context Approach Results';
   
   // Skipped message based on pipeline type
   const skippedMessage = pipelineType === 'rag' ? 'File Already Indexed - Skipped' : 'File Already Processed - Skipped';
